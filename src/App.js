@@ -37,7 +37,6 @@ async function supabaseRequest(path, options = {}) {
 function MapView({ stations, onSelectStation }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
-
   useEffect(() => {
     if (!window.L || mapInstance.current) return;
     const map = window.L.map(mapRef.current).setView([6.2, -0.8], 8);
@@ -55,7 +54,6 @@ function MapView({ stations, onSelectStation }) {
     });
     mapInstance.current = map;
   }, [stations]);
-
   return <div ref={mapRef} id="map" />;
 }
 
@@ -89,16 +87,6 @@ export default function App() {
     }
   }, [tab, user]);
 
-  const handleSignup = async () => {
-    setError("");
-    const data = await supabaseRequest("/auth/v1/signup", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
-    if (data.user) { setUser(data.user); setScreen("home"); }
-    else setError(data.msg || "Signup failed. Try a stronger password.");
-  };
-
   const handleLogin = async () => {
     setError("");
     const data = await supabaseRequest("/auth/v1/token?grant_type=password", {
@@ -106,13 +94,23 @@ export default function App() {
       body: JSON.stringify({ email, password }),
     });
     if (data.user) { setUser(data.user); setScreen("home"); }
-    else setError("Invalid email or password. Try signing up.");
+    else setError("Invalid email or password.");
+  };
+
+  const handleSignup = async () => {
+    setError("");
+    const data = await supabaseRequest("/auth/v1/signup", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+    if (data.user) { setUser(data.user); setScreen("home"); }
+    else setError("Signup failed. Use a stronger password.");
   };
 
   const prices = { Car: 165, Scooter: 12, Tricycle: 23 };
 
-  const saveToHistory = async (station, v, amount) => {
-    await fetch(`${SUPABASE_URL}/rest/v1/history`, {
+  const saveToHistory = function(station, v, amount) {
+    fetch(`${SUPABASE_URL}/rest/v1/history`, {
       method: "POST",
       headers: {
         apikey: SUPABASE_KEY,
@@ -124,42 +122,38 @@ export default function App() {
         user_id: user.id,
         station: station.name,
         vehicle: v,
-        amount,
+        amount: amount,
         date: new Date().toLocaleDateString("en-GH"),
       }),
     });
   };
 
-  const handlePay = () => {
+  const handlePay = function() {
     if (!vehicle || !user) return;
+    if (!window.PaystackPop) {
+      alert("Payment system not loaded. Please refresh and try again.");
+      return;
+    }
     setPaying(true);
-    try {
-      const handler = window.PaystackPop.setup({
-        key: PAYSTACK_KEY,
-        email: user.email,
-        amount: prices[vehicle] * 100,
-        currency: "GHS",
-        ref: "ECO" + Date.now(),
-        channels: ["mobile_money", "card"],
-        metadata: {
-          custom_fields: [
-            { display_name: "Station", value: selected.name },
-            { display_name: "Vehicle", value: vehicle },
-          ]
-        },
-        callback: function (response)  {
-          setPaying(false);
-          await saveToHistory(selected, vehicle, prices[vehicle]);
-          alert("✅ Payment successful!\nRef: " + response.reference);
-          setSelected(null);
-      setSelected(null);
-      setVehicle(null);
-    },
-    onClose: function() {
-      setPaying(false);
-    },
-  }).openIframe();
-};
+    var handler = window.PaystackPop.setup({
+      key: PAYSTACK_KEY,
+      email: user.email,
+      amount: prices[vehicle] * 100,
+      currency: "GHS",
+      ref: "ECO" + Date.now(),
+      channels: ["mobile_money", "card"],
+      callback: function(response) {
+        setPaying(false);
+        saveToHistory(selected, vehicle, prices[vehicle]);
+        alert("Payment successful! Ref: " + response.reference);
+        setSelected(null);
+        setVehicle(null);
+      },
+      onClose: function() {
+        setPaying(false);
+      },
+    });
+    handler.openIframe();
   };
 
   const inputStyle = {
@@ -255,7 +249,6 @@ export default function App() {
               <span style={{ color: teal, fontSize: 13 }}>☀️ {selected.solar}% solar</span>
             </div>
           </div>
-
           <h3 style={{ color: "#fff", marginBottom: 12 }}>Select Vehicle</h3>
           {["Car", "Scooter", "Tricycle"].map((v) => (
             <div key={v} onClick={() => setVehicle(v)}
@@ -268,7 +261,6 @@ export default function App() {
               <span style={{ color: teal, fontWeight: 700 }}>GH₵{prices[v]}</span>
             </div>
           ))}
-
           {vehicle && (
             <div style={{ marginTop: 20 }}>
               <div style={{ background: "#0d2018", borderRadius: 12, padding: "10px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between" }}>
