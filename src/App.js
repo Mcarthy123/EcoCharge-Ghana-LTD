@@ -147,22 +147,19 @@ export default function App() {
             { display_name: "Vehicle", value: vehicle },
           ]
         },
-        callback: async (response) => {
+        callback: function (response)  {
           setPaying(false);
           await saveToHistory(selected, vehicle, prices[vehicle]);
           alert("✅ Payment successful!\nRef: " + response.reference);
           setSelected(null);
-          setVehicle(null);
-        },
-        onClose: () => {
-          setPaying(false);
-        },
-      });
-      handler.openIframe();
-    } catch (e) {
+      setSelected(null);
+      setVehicle(null);
+    },
+    onClose: function() {
       setPaying(false);
-      alert("Payment error: " + e.message);
-    }
+    },
+  }).openIframe();
+};
   };
 
   const inputStyle = {
