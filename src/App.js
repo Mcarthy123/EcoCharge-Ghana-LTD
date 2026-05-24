@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 
 const SUPABASE_URL = "https://zgylidlhznlxciyoourd.supabase.co";
-const SUPABASE_KEY = "sb_publishable_n1KjfIQW2PQ3Zn87iRhV2g_9mDvepVr";
+const SUPABASE_KEY = "sb_publishable_n1KjfIQW2PQ3Zn87iRhV2g_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpneWxpZGxoem5seGNpeW9vdXJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NTMwODEsImV4cCI6MjA5NTEyOTA4MX0.8REdXTIxHLCvMOtLMWP5v-S92x7Rw_7u-WcepsJdPBI";
 const PAYSTACK_KEY = "pk_test_693bf3194bc8e8cf5024fac5cd8f23ac566e1199";
 
 const teal = "#00E5A0";
