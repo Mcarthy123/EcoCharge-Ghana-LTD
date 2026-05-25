@@ -130,24 +130,7 @@ export default function App() {
 
   const handlePay = function() {
   if (!vehicle || !user) return;
-  setPaying(true);
-  fetch("https://api.paystack.co/transaction/initialize", {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer sk_test_YOUR_SECRET_KEY",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      email: user.email,
-      amount: prices[vehicle] * 100,
-      currency: "GHS",
-      callback_url: "https://ecochargecar.netlify.app",
-    }),
-  })
-  .then(r => r.json())
-  .then(data => {
-    window.location.href = data.data.authorization_url;
-  });
+  window.location.href = "https://paystack.shop/pay/bldaqwywt5";
 };
 
   const inputStyle = {
