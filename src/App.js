@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 
 const SUPABASE_URL = "https://zgylidlhznlxciyoourd.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpneWxpZGxoem5seGNpeW9vdXJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NTMwODEsImV4cCI6MjA5NTEyOTA4MX0.8REdXTIxHLCvMOtLMWP5v-S92x7Rw_7u-WcepsJdPBI";
-const PAYSTACK_KEY = "pk_test_693bf3194bc8e8cf5024fac5cd8f23ac566e1199";
+const PAYSTACK_URL = "https://paystack.shop/pay/bldaqwywt5";
 
 const teal = "#00E5A0";
 const bg = "#0a0f0d";
@@ -15,11 +15,26 @@ const stationCoords = {
   "Madina Solar Point": [5.6720, -0.1711],
 };
 
-const VEHICLE_IMAGES = {
-  Car: "https://images.unsplash.com/photo-1593941707882-a5bba14938c7?w=200&q=80",
-  Scooter: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=200&q=80",
-  Tricycle: "https://images.unsplash.com/photo-1625047509168-a7026f36de04?w=200&q=80",
-};
+const VEHICLES = [
+  {
+    name: "Car",
+    price: 165,
+    image: "https://images.unsplash.com/photo-1617788138017-80ad40651399?w=400&q=90",
+    desc: "Electric SUV / Sedan",
+  },
+  {
+    name: "Scooter",
+    price: 12,
+    image: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&q=90",
+    desc: "Electric Scooter",
+  },
+  {
+    name: "Tricycle",
+    price: 23,
+    image: "https://images.unsplash.com/photo-1533591380943-3bb2bf9b5e08?w=400&q=90",
+    desc: "Electric Tricycle",
+  },
+];
 
 async function supabaseRequest(path, options = {}) {
   const res = await fetch(`${SUPABASE_URL}${path}`, {
@@ -69,7 +84,6 @@ export default function App() {
   const [selected, setSelected] = useState(null);
   const [vehicle, setVehicle] = useState(null);
   const [history, setHistory] = useState([]);
-  const [paying, setPaying] = useState(false);
 
   useEffect(() => {
     if (screen === "home") {
@@ -107,8 +121,6 @@ export default function App() {
     else setError("Signup failed. Use a stronger password.");
   };
 
-  const prices = { Car: 165, Scooter: 12, Tricycle: 23 };
-
   const saveToHistory = function(station, v, amount) {
     fetch(`${SUPABASE_URL}/rest/v1/history`, {
       method: "POST",
@@ -129,9 +141,10 @@ export default function App() {
   };
 
   const handlePay = function() {
-  if (!vehicle || !user) return;
-  window.location.href = "https://paystack.shop/pay/bldaqwywt5";
-};
+    if (!vehicle || !user) return;
+    saveToHistory(selected, vehicle.name, vehicle.price);
+    window.location.href = PAYSTACK_URL;
+  };
 
   const inputStyle = {
     width: "100%", padding: 12, background: card,
@@ -226,27 +239,38 @@ export default function App() {
               <span style={{ color: teal, fontSize: 13 }}>☀️ {selected.solar}% solar</span>
             </div>
           </div>
+
           <h3 style={{ color: "#fff", marginBottom: 12 }}>Select Vehicle</h3>
-          {["Car", "Scooter", "Tricycle"].map((v) => (
-            <div key={v} onClick={() => setVehicle(v)}
-              style={{ background: vehicle === v ? "#0d2018" : card, border: `1.5px solid ${vehicle === v ? teal : "#1e2e24"}`, borderRadius: 14, padding: "12px 16px", marginBottom: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <img src={VEHICLE_IMAGES[v]} alt={v}
-                  style={{ width: 60, height: 45, objectFit: "cover", borderRadius: 8 }} />
-                <span style={{ color: "#fff", fontWeight: 600, fontSize: 15 }}>{v}</span>
+          {VEHICLES.map((v) => (
+            <div key={v.name} onClick={() => setVehicle(v)}
+              style={{ background: vehicle?.name === v.name ? "#0d2018" : card, border: `1.5px solid ${vehicle?.name === v.name ? teal : "#1e2e24"}`, borderRadius: 16, marginBottom: 12, cursor: "pointer", overflow: "hidden" }}>
+              <div style={{ position: "relative", height: 140 }}>
+                <img src={v.image} alt={v.name}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 60%)" }} />
+                <div style={{ position: "absolute", bottom: 12, left: 14, right: 14, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+                  <div>
+                    <div style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>{v.name}</div>
+                    <div style={{ color: "#aaa", fontSize: 12 }}>{v.desc}</div>
+                  </div>
+                  <div style={{ color: teal, fontWeight: 700, fontSize: 18 }}>GH₵{v.price}</div>
+                </div>
+                {vehicle?.name === v.name && (
+                  <div style={{ position: "absolute", top: 10, right: 10, background: teal, borderRadius: "50%", width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: "#000" }}>✓</div>
+                )}
               </div>
-              <span style={{ color: teal, fontWeight: 700 }}>GH₵{prices[v]}</span>
             </div>
           ))}
+
           {vehicle && (
             <div style={{ marginTop: 20 }}>
               <div style={{ background: "#0d2018", borderRadius: 12, padding: "10px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between" }}>
                 <span style={{ color: "#7a9a85" }}>Total</span>
-                <span style={{ color: teal, fontWeight: 700 }}>GH₵{prices[vehicle]}</span>
+                <span style={{ color: teal, fontWeight: 700 }}>GH₵{vehicle.price}</span>
               </div>
-              <button onClick={handlePay} disabled={paying}
-                style={{ width: "100%", padding: 16, background: paying ? "#555" : teal, color: "#000", border: "none", borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: paying ? "not-allowed" : "pointer" }}>
-                {paying ? "Processing..." : "Pay with Mobile Money 💳"}
+              <button onClick={handlePay}
+                style={{ width: "100%", padding: 16, background: teal, color: "#000", border: "none", borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: "pointer" }}>
+                Pay with Mobile Money 💳
               </button>
             </div>
           )}
