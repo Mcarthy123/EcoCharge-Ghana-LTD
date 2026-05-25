@@ -129,32 +129,26 @@ export default function App() {
   };
 
   const handlePay = function() {
-    if (!vehicle || !user) return;
-    if (!window.PaystackPop) {
-      alert("Payment system not loaded. Please refresh and try again.");
-      return;
-    }
-    setPaying(true);
-    var handler = window.PaystackPop.setup({
-      key: PAYSTACK_KEY,
+  if (!vehicle || !user) return;
+  setPaying(true);
+  fetch("https://api.paystack.co/transaction/initialize", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer sk_test_YOUR_SECRET_KEY",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
       email: user.email,
       amount: prices[vehicle] * 100,
       currency: "GHS",
-      ref: "ECO" + Date.now(),
-      channels: ["mobile_money", "card"],
-      callback: function(response) {
-        setPaying(false);
-        saveToHistory(selected, vehicle, prices[vehicle]);
-        alert("Payment successful! Ref: " + response.reference);
-        setSelected(null);
-        setVehicle(null);
-      },
-      onClose: function() {
-        setPaying(false);
-      },
-    });
-    handler.openIframe();
-  };
+      callback_url: "https://ecochargecar.netlify.app",
+    }),
+  })
+  .then(r => r.json())
+  .then(data => {
+    window.location.href = data.data.authorization_url;
+  });
+};
 
   const inputStyle = {
     width: "100%", padding: 12, background: card,
