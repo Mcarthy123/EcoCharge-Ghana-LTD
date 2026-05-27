@@ -1,9 +1,9 @@
 // ============================================================
-//  EcoChargeCar — App.jsx  (Paystack redirect fix for mobile)
-//  Paste into src/App.jsx on GitHub
+//  EcoChargeCar — App.jsx
+//  Fixed: Paystack inline, logo, login required flow
 // ============================================================
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL  || "";
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
@@ -60,8 +60,8 @@ const CSS = `
   html, body, #root { height:100%; }
   body { font-family:'Inter',sans-serif; background:#0f1117; }
   @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
-  @keyframes slideIn { from{transform:translateX(-100%)} to{transform:translateX(0)} }
   @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
+  @keyframes spin { to{transform:rotate(360deg)} }
   .fade  { animation:fadeUp 0.35s ease both; }
   .fade1 { animation:fadeUp 0.35s 0.07s ease both; }
   .fade2 { animation:fadeUp 0.35s 0.14s ease both; }
@@ -80,14 +80,48 @@ const Icon = {
   station: (c="#9ca3af")=><svg width="22" height="22" viewBox="0 0 24 24" fill={c}><path d="M19.77 7.23l-.01.01-3.72-3.72L15 4.56l2.11 2.11c-.94.36-1.61 1.26-1.61 2.33 0 1.38 1.12 2.5 2.5 2.5.36 0 .69-.08 1-.21v7.21c0 .55-.45 1-1 1s-1-.45-1-1V14c0-1.1-.9-2-2-2h-1V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v16h10v-7.5h1.5v5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V9c0-.69-.28-1.32-.73-1.77zM12 15H6v-4h6v4zm0-6H6V5h6v4z"/></svg>,
   profile: (c="#9ca3af")=><svg width="22" height="22" viewBox="0 0 24 24" fill={c}><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>,
   more:    (c="#9ca3af")=><svg width="22" height="22" viewBox="0 0 24 24" fill={c}><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>,
-  bolt:    (c=T.green)  =><svg width="18" height="18" viewBox="0 0 24 24" fill={c}><path d="M13 2L4.09 12.97H11L10 22L20.91 11.03H14L13 2Z"/></svg>,
-  water:   (c=T.blue)   =><svg width="18" height="18" viewBox="0 0 24 24" fill={c}><path d="M12 2C12 2 5 10 5 15a7 7 0 0014 0C19 10 12 2 12 2z"/></svg>,
-  leaf:    (c=T.green)  =><svg width="18" height="18" viewBox="0 0 24 24" fill={c}><path d="M17 8C8 10 5.9 16.17 3.82 19.82a2 2 0 103.09 2.5C9 19.5 11 14 17 12v4l5-5-5-5v2z"/></svg>,
-  back:    ()           =><svg width="24" height="24" viewBox="0 0 24 24" fill="#fff"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>,
-  check:   (c=T.green)  =><svg width="20" height="20" viewBox="0 0 24 24" fill={c}><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>,
+  bolt:    (c=T.green)=><svg width="18" height="18" viewBox="0 0 24 24" fill={c}><path d="M13 2L4.09 12.97H11L10 22L20.91 11.03H14L13 2Z"/></svg>,
+  water:   (c=T.blue)=><svg width="18" height="18" viewBox="0 0 24 24" fill={c}><path d="M12 2C12 2 5 10 5 15a7 7 0 0014 0C19 10 12 2 12 2z"/></svg>,
+  leaf:    (c=T.green)=><svg width="18" height="18" viewBox="0 0 24 24" fill={c}><path d="M17 8C8 10 5.9 16.17 3.82 19.82a2 2 0 103.09 2.5C9 19.5 11 14 17 12v4l5-5-5-5v2z"/></svg>,
+  back:    ()=><svg width="24" height="24" viewBox="0 0 24 24" fill="#fff"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>,
+  check:   (c=T.green)=><svg width="20" height="20" viewBox="0 0 24 24" fill={c}><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>,
   arrow:   (c="#4b5563")=><svg width="16" height="16" viewBox="0 0 24 24" fill={c}><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>,
-  logout:  ()           =><svg width="18" height="18" viewBox="0 0 24 24" fill="#f87171"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>,
-  pin:     (c=T.green)  =><svg width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.27 0 0 6.27 0 14c0 9.33 14 22 14 22S28 23.33 28 14C28 6.27 21.73 0 14 0z" fill={c}/><circle cx="14" cy="14" r="6" fill="#0f1117"/><path d="M14 7l-3.5 5h2.5l-1 5 5-6h-2.5L14 7z" fill={c}/></svg>,
+  logout:  ()=><svg width="18" height="18" viewBox="0 0 24 24" fill="#f87171"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>,
+  pin:     (c=T.green)=><svg width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.27 0 0 6.27 0 14c0 9.33 14 22 14 22S28 23.33 28 14C28 6.27 21.73 0 14 0z" fill={c}/><circle cx="14" cy="14" r="6" fill="#0f1117"/><path d="M14 7l-3.5 5h2.5l-1 5 5-6h-2.5L14 7z" fill={c}/></svg>,
+};
+
+// ── LOGO COMPONENT — tries image first, falls back to SVG ─────
+const LogoImg = ({ size=34 }) => {
+  const [err, setErr] = useState(false);
+  if (!err) return (
+    <img src="/logo.png" alt="EcoCharge"
+      style={{ width:size, height:size, objectFit:"contain", borderRadius:8, flexShrink:0 }}
+      onError={()=>setErr(true)}/>
+  );
+  return (
+    <div style={{ width:size, height:size, borderRadius:8, flexShrink:0,
+      background:`linear-gradient(135deg,${T.green},${T.greenDark})`,
+      display:"flex", alignItems:"center", justifyContent:"center", fontSize:size*0.5 }}>
+      {Icon.bolt("#000")}
+    </div>
+  );
+};
+
+const LogoLarge = ({ size=70 }) => {
+  const [err, setErr] = useState(false);
+  if (!err) return (
+    <img src="/logo.png" alt="EcoCharge"
+      style={{ width:size, height:size, objectFit:"contain", marginBottom:12 }}
+      onError={()=>setErr(true)}/>
+  );
+  return (
+    <div style={{ width:size, height:size, borderRadius:16,
+      background:`linear-gradient(135deg,${T.green},${T.greenDark})`,
+      display:"flex", alignItems:"center", justifyContent:"center",
+      margin:"0 auto 12px", fontSize:size*0.45 }}>
+      {Icon.bolt("#000")}
+    </div>
+  );
 };
 
 const Badge = ({ children, color=T.green }) => (
@@ -114,6 +148,172 @@ const Ring = ({ pct, size=76, stroke=7, color=T.green, track="#1a2d1a", children
 
 const Divider = () => <div style={{ height:1,background:T.border,margin:"10px 0" }}/>;
 
+// ── SPLASH / ONBOARDING ───────────────────────────────────────
+function SplashScreen({ onLogin, onRegister, onGuest }) {
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,
+      alignItems:"center",justifyContent:"center",padding:"40px 28px" }}>
+      <div className="fade" style={{ textAlign:"center",marginBottom:40 }}>
+        <LogoLarge size={90}/>
+        <div style={{ fontWeight:800,fontSize:28,color:T.text,letterSpacing:-0.5 }}>EcoCharge</div>
+        <div style={{ fontWeight:600,fontSize:16,color:T.green,marginTop:4 }}>Ghana</div>
+        <div style={{ fontSize:13,color:T.muted,marginTop:12,lineHeight:1.7 }}>
+          Solar EV Charging · Clean Water<br/>Zero Emissions · Ghana
+        </div>
+      </div>
+
+      <div className="fade1" style={{ width:"100%" }}>
+        <button onClick={onLogin} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,
+            border:"none",borderRadius:14,padding:"16px",fontSize:16,fontWeight:700,
+            color:"#000",cursor:"pointer",marginBottom:12,fontFamily:"inherit" }}>
+          Sign In
+        </button>
+        <button onClick={onRegister} className="tap"
+          style={{ width:"100%",background:"transparent",border:`1px solid ${T.border}`,
+            borderRadius:14,padding:"16px",fontSize:16,fontWeight:600,
+            color:T.text,cursor:"pointer",marginBottom:16,fontFamily:"inherit" }}>
+          Create Account
+        </button>
+        <button onClick={onGuest} className="tap"
+          style={{ width:"100%",background:"none",border:"none",
+            fontSize:13,fontWeight:500,color:T.muted,cursor:"pointer",fontFamily:"inherit" }}>
+          Continue as Guest →
+        </button>
+      </div>
+
+      <div className="fade2" style={{ marginTop:32,display:"flex",gap:24 }}>
+        {[
+          { icon:Icon.bolt(T.green),  label:"Solar Power" },
+          { icon:Icon.water(T.blue),  label:"Clean Water" },
+          { icon:Icon.leaf(T.green),  label:"Zero CO₂"    },
+        ].map(f=>(
+          <div key={f.label} style={{ textAlign:"center" }}>
+            <div style={{ marginBottom:4 }}>{f.icon}</div>
+            <div style={{ fontSize:10,color:T.muted }}>{f.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── AUTH SCREEN ───────────────────────────────────────────────
+function AuthScreen({ mode, onBack, onSuccess }) {
+  const [email,    setEmail]    = useState("");
+  const [password, setPassword] = useState("");
+  const [name,     setName]     = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState("");
+
+  const authCall = async (endpoint, body) => {
+    if (!SUPABASE_URL) return { access_token:"demo", id:"demo" };
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/${endpoint}`, {
+      method:"POST",
+      headers:{ apikey:SUPABASE_ANON,"Content-Type":"application/json" },
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  };
+
+  const doLogin = async () => {
+    if (!email||!password) { setError("Enter email and password"); return; }
+    setLoading(true); setError("");
+    const d = await authCall("token?grant_type=password",{ email, password });
+    if (d.access_token) {
+      onSuccess({ email, name:email.split("@")[0], token:d.access_token });
+    } else {
+      setError(d.error_description||"Invalid email or password.");
+    }
+    setLoading(false);
+  };
+
+  const doRegister = async () => {
+    if (!name||!email||!password) { setError("Please fill in all fields"); return; }
+    if (password.length<6) { setError("Password must be at least 6 characters"); return; }
+    setLoading(true); setError("");
+    const d = await authCall("signup",{ email, password, data:{ full_name:name } });
+    if (d.id||d.user||d.access_token) {
+      onSuccess({ email, name, token: d.access_token||"demo" });
+    } else {
+      setError(d.msg||d.error_description||"Registration failed. Try again.");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <div style={{ padding:"14px 18px 13px",display:"flex",alignItems:"center",gap:12,
+        borderBottom:`1px solid ${T.border}`,flexShrink:0 }}>
+        <button onClick={onBack} className="tap"
+          style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
+          {Icon.back()}
+        </button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:800,fontSize:16,color:T.text }}>
+            {mode==="login"?"Sign In":"Create Account"}
+          </div>
+          <div style={{ fontSize:10,color:T.muted }}>EcoCharge Ghana</div>
+        </div>
+        <LogoImg size={34}/>
+      </div>
+
+      <div style={{ flex:1,overflowY:"auto",padding:"30px 24px 0" }}>
+        <div style={{ textAlign:"center",marginBottom:28 }}>
+          <LogoLarge size={64}/>
+          <div style={{ fontWeight:800,fontSize:20,color:T.text }}>
+            {mode==="login"?"Welcome Back!":"Join EcoCharge"}
+          </div>
+          <div style={{ fontSize:13,color:T.muted,marginTop:6 }}>
+            {mode==="login"?"Sign in to your account":"Create your free account today"}
+          </div>
+        </div>
+
+        <div style={{ background:T.card,borderRadius:16,padding:"20px",border:`1px solid ${T.border}` }}>
+          {mode==="register" && (
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:12,color:T.muted,marginBottom:6,fontWeight:600 }}>Full Name</div>
+              <input placeholder="Your full name" value={name}
+                onChange={e=>{ setName(e.target.value); setError(""); }}
+                style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,
+                  borderRadius:10,padding:"13px 14px",color:T.text,fontSize:14 }}/>
+            </div>
+          )}
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:12,color:T.muted,marginBottom:6,fontWeight:600 }}>Email Address</div>
+            <input type="email" placeholder="you@example.com" value={email}
+              onChange={e=>{ setEmail(e.target.value); setError(""); }}
+              style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,
+                borderRadius:10,padding:"13px 14px",color:T.text,fontSize:14 }}/>
+          </div>
+          <div style={{ marginBottom:22 }}>
+            <div style={{ fontSize:12,color:T.muted,marginBottom:6,fontWeight:600 }}>Password</div>
+            <input type="password" placeholder="••••••••" value={password}
+              onChange={e=>{ setPassword(e.target.value); setError(""); }}
+              style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,
+                borderRadius:10,padding:"13px 14px",color:T.text,fontSize:14 }}/>
+          </div>
+
+          {error && (
+            <div style={{ background:"rgba(248,113,113,0.08)",border:`1px solid rgba(248,113,113,0.3)`,
+              borderRadius:10,padding:"10px 14px",marginBottom:14,color:T.red,fontSize:12,fontWeight:500 }}>
+              {error}
+            </div>
+          )}
+
+          <button onClick={mode==="login"?doLogin:doRegister} disabled={loading} className="tap"
+            style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,
+              border:"none",borderRadius:12,padding:"15px",fontSize:15,fontWeight:700,
+              color:"#000",cursor:"pointer",opacity:loading?0.7:1,fontFamily:"inherit" }}>
+            {loading ? "Please wait…" : mode==="login" ? "Sign In" : "Create Account"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── DRAWER ────────────────────────────────────────────────────
 const Drawer = ({ open, onClose, go, user, onLogout }) => (
   <>
     {open && <div onClick={onClose} style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:200,animation:"fadeIn 0.25s ease" }}/>}
@@ -122,7 +322,7 @@ const Drawer = ({ open, onClose, go, user, onLogout }) => (
       transition:"transform 0.3s cubic-bezier(.4,0,.2,1)",display:"flex",flexDirection:"column" }}>
       <div style={{ padding:"52px 20px 20px",background:"linear-gradient(135deg,#0a1f12,#0f2b1a)",borderBottom:`1px solid ${T.border}` }}>
         <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:18 }}>
-          <img src="/logo.png" alt="EcoCharge" style={{ width:48,height:48,objectFit:"contain",borderRadius:12 }} onError={e=>e.target.style.display="none"}/>
+          <LogoImg size={48}/>
           <div>
             <div style={{ fontWeight:800,fontSize:18,color:T.text }}>EcoCharge</div>
             <div style={{ fontSize:11,color:T.muted }}>Ghana · Clean Energy</div>
@@ -133,8 +333,8 @@ const Drawer = ({ open, onClose, go, user, onLogout }) => (
               <div style={{ fontSize:11,color:T.muted }}>Signed in as</div>
               <div style={{ fontWeight:600,color:T.text,fontSize:13,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user.email}</div>
             </div>
-          : <button onClick={()=>{ go("profile"); onClose(); }} className="tap"
-              style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,color:"#000",cursor:"pointer" }}>
+          : <button onClick={()=>{ go("splash"); onClose(); }} className="tap"
+              style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:10,padding:"11px",fontSize:13,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
               Sign In / Register
             </button>
         }
@@ -159,7 +359,7 @@ const Drawer = ({ open, onClose, go, user, onLogout }) => (
           <button onClick={()=>{ onLogout(); onClose(); }} className="tap"
             style={{ width:"100%",background:"rgba(248,113,113,0.08)",border:`1px solid rgba(248,113,113,0.3)`,
               borderRadius:10,padding:"11px",fontSize:13,fontWeight:600,color:T.red,cursor:"pointer",
-              display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+              display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontFamily:"inherit" }}>
             {Icon.logout()} Sign Out
           </button>
         </div>
@@ -180,9 +380,9 @@ const NavBar = ({ active, go }) => {
       borderTop:`1px solid ${T.border}`,background:T.bg,flexShrink:0 }}>
       {tabs.map(({ label,screen,icon })=>(
         <button key={label} onClick={()=>go(screen)} className="tap"
-          style={{ background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",
-            alignItems:"center",gap:4,minWidth:56,color:active===label?T.green:T.muted,
-            fontSize:10,fontWeight:active===label?700:500 }}>
+          style={{ background:"none",border:"none",cursor:"pointer",display:"flex",
+            flexDirection:"column",alignItems:"center",gap:4,minWidth:56,
+            color:active===label?T.green:T.muted,fontSize:10,fontWeight:active===label?700:500,fontFamily:"inherit" }}>
           {icon(active===label?T.green:T.muted)}
           {label}
           {active===label && <div style={{ width:4,height:4,borderRadius:"50%",background:T.green,marginTop:-2 }}/>}
@@ -207,14 +407,20 @@ const Header = ({ title, subtitle, onBack, onMenu }) => (
       <div style={{ fontWeight:800,fontSize:16,color:T.text,lineHeight:1.2 }}>{title}</div>
       {subtitle && <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{subtitle}</div>}
     </div>
-    <img src="/logo.png" alt="EcoCharge" style={{ width:34,height:34,objectFit:"contain",borderRadius:8,flexShrink:0 }} onError={e=>e.target.style.display="none"}/>
+    <LogoImg size={34}/>
   </div>
 );
 
-function HomeScreen({ go, stations, setStation, onMenu }) {
+function HomeScreen({ go, stations, setStation, onMenu, user }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="EcoChargeCar" subtitle="Find a charging station near you" onMenu={onMenu}/>
+      {user && (
+        <div style={{ margin:"10px 14px 0",background:"linear-gradient(135deg,#0d2218,#112b1a)",borderRadius:12,padding:"10px 14px",border:`1px solid ${T.greenDim}`,display:"flex",alignItems:"center",gap:10 }}>
+          {Icon.profile(T.green)}
+          <span style={{ fontSize:13,color:T.text,fontWeight:500 }}>Welcome, <strong style={{ color:T.green }}>{user.name||user.email?.split("@")[0]}</strong></span>
+        </div>
+      )}
       <div style={{ flex:1,position:"relative",margin:"12px",borderRadius:18,overflow:"hidden",background:"#0e1525" }}>
         <svg width="100%" height="100%" style={{ position:"absolute",inset:0 }} preserveAspectRatio="none">
           <defs>
@@ -261,7 +467,7 @@ function HomeScreen({ go, stations, setStation, onMenu }) {
   );
 }
 
-function DetailScreen({ go, station, stations, setStation, onMenu }) {
+function DetailScreen({ go, station, stations, setStation }) {
   const s = station || stations[0];
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
@@ -297,7 +503,7 @@ function DetailScreen({ go, station, stations, setStation, onMenu }) {
           </div>
         </div>
         <button onClick={()=>go("vehicles")} className="tap"
-          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontFamily:"inherit" }}>
           {Icon.bolt("#000")} Charge Here — Select Vehicle
         </button>
         <div style={{ fontSize:11,color:T.muted,fontWeight:600,letterSpacing:0.6,textTransform:"uppercase",marginBottom:10 }}>All Stations</div>
@@ -314,7 +520,7 @@ function DetailScreen({ go, station, stations, setStation, onMenu }) {
                 <div style={{ color:T.muted,fontSize:10 }}>{st.open} open</div>
               </div>
               <button className="tap" onClick={e=>{ e.stopPropagation(); setStation(st); go("vehicles"); }}
-                style={{ background:T.green,border:"none",borderRadius:9,padding:"7px 13px",fontSize:11,fontWeight:700,color:"#000",cursor:"pointer" }}>
+                style={{ background:T.green,border:"none",borderRadius:9,padding:"7px 13px",fontSize:11,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
                 Select
               </button>
             </div>
@@ -361,7 +567,7 @@ function VehicleScreen({ go, setVehicle }) {
           <div style={{ display:"flex",alignItems:"center",gap:10 }}>{Icon.water(T.blue)}<span style={{ fontSize:13,color:T.text }}>20L clean desalinated water — free</span></div>
         </div>
         <button onClick={()=>{ if(selected){ setVehicle(selected); go("payment"); } }} className="tap"
-          style={{ width:"100%",background:selected?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.border,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:700,color:selected?"#000":T.muted,cursor:selected?"pointer":"not-allowed",marginBottom:16,transition:"all 0.2s" }}>
+          style={{ width:"100%",background:selected?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.border,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:700,color:selected?"#000":T.muted,cursor:selected?"pointer":"not-allowed",marginBottom:16,transition:"all 0.2s",fontFamily:"inherit" }}>
           {selected?`Continue with ${selected.type}  →`:"Select a vehicle to continue"}
         </button>
       </div>
@@ -370,65 +576,101 @@ function VehicleScreen({ go, setVehicle }) {
   );
 }
 
-function PaymentScreen({ go, vehicle, station }) {
+function PaymentScreen({ go, vehicle, station, user }) {
   const [method,  setMethod]  = useState("mtn");
-  const [email,   setEmail]   = useState("");
+  const [email,   setEmail]   = useState(user?.email||"");
   const [paying,  setPaying]  = useState(false);
   const [paid,    setPaid]    = useState(false);
   const [error,   setError]   = useState("");
+  const paystackLoaded = useRef(false);
 
   const amount = vehicle?.amount || 175;
   const s = station || FALLBACK_STATIONS[0];
 
-  // Check for successful payment return from Paystack redirect
-  useEffect(() => {
+  // Load Paystack script
+  useEffect(()=>{
+    if (window.PaystackPop) { paystackLoaded.current=true; return; }
+    const script = document.createElement("script");
+    script.src = "https://js.paystack.co/v1/inline.js";
+    script.async = true;
+    script.onload = ()=>{ paystackLoaded.current=true; };
+    document.head.appendChild(script);
+  },[]);
+
+  // Check for Paystack redirect return
+  useEffect(()=>{
     const params = new URLSearchParams(window.location.search);
-    const ref = params.get("reference") || params.get("trxref");
+    const ref = params.get("reference")||params.get("trxref");
     if (ref) {
       setPaid(true);
-      // Clean URL
-      window.history.replaceState({}, "", window.location.pathname);
-      // Save to Supabase
-      if (SUPABASE_URL) {
-        sb("payments", {
-          method: "POST",
-          headers: { Prefer:"return=minimal" },
-          body: JSON.stringify({
-            reference: ref,
-            amount,
-            status: "success",
-            created_at: new Date().toISOString(),
-          }),
-        }).catch(()=>{});
-      }
+      window.history.replaceState({},"",window.location.pathname);
     }
-  }, []);
+  },[]);
 
-  const handlePay = () => {
-    if (!email || !email.includes("@") || !email.includes(".")) {
-      setError("Please enter a valid email address."); return;
-    }
-    setError("");
-    setPaying(true);
+  const tryPay = () => {
+    if (!email||!email.includes("@")) { setError("Please enter a valid email"); return; }
+    setError(""); setPaying(true);
 
-    // Demo mode
     if (!PAYSTACK_KEY) {
-      setTimeout(() => { setPaid(true); setPaying(false); }, 1500);
+      setTimeout(()=>{ setPaid(true); setPaying(false); }, 1500);
       return;
     }
 
-    // ✅ REDIRECT METHOD — works perfectly on all mobile browsers
-    const ref = `ECO-${Date.now()}`;
-    const callbackUrl = `${window.location.origin}${window.location.pathname}`;
-    const params = new URLSearchParams({
-      key:          PAYSTACK_KEY,
-      email:        email,
-      amount:       String(amount * 100),
-      currency:     "GHS",
-      ref:          ref,
-      callback_url: callbackUrl,
-    });
-    window.location.href = `https://checkout.paystack.com/pay?${params.toString()}`;
+    const doIt = () => {
+      try {
+        // Try inline first
+        if (window.PaystackPop) {
+          const handler = window.PaystackPop.setup({
+            key: PAYSTACK_KEY,
+            email,
+            amount: amount * 100,
+            currency: "GHS",
+            ref: `ECO-${Date.now()}`,
+            metadata: {
+              custom_fields: [
+                { display_name:"Vehicle", variable_name:"vehicle", value:vehicle?.type||"Car" },
+                { display_name:"Station", variable_name:"station", value:s.name },
+              ]
+            },
+            callback: async (res) => {
+              if (SUPABASE_URL) {
+                await sb("payments",{
+                  method:"POST",
+                  headers:{ Prefer:"return=minimal" },
+                  body: JSON.stringify({ reference:res.reference, amount, email, vehicle:vehicle?.type, station:s.name, status:"success", created_at:new Date().toISOString() }),
+                }).catch(()=>{});
+              }
+              setPaid(true); setPaying(false);
+            },
+            onClose: ()=>{ setPaying(false); setError("Payment cancelled. Tap Pay again to retry."); },
+          });
+          handler.openIframe();
+        } else {
+          // Fallback: Paystack standard checkout redirect
+          const ref = `ECO-${Date.now()}`;
+          const qs = new URLSearchParams({
+            key: PAYSTACK_KEY,
+            email,
+            amount: String(amount*100),
+            currency: "GHS",
+            ref,
+            callback_url: window.location.href,
+          });
+          window.location.href = `https://checkout.paystack.com/pay?${qs.toString()}`;
+        }
+      } catch(err) {
+        setError("Payment error. Please try again.");
+        setPaying(false);
+      }
+    };
+
+    if (window.PaystackPop) { doIt(); return; }
+    let tries = 0;
+    const wait = setInterval(()=>{
+      tries++;
+      if (window.PaystackPop) { clearInterval(wait); doIt(); }
+      if (tries>20) { clearInterval(wait); setError("Payment system unavailable. Check internet connection."); setPaying(false); }
+    },300);
   };
 
   const METHODS = [
@@ -436,7 +678,7 @@ function PaymentScreen({ go, vehicle, station }) {
     { id:"vodafone", label:"Vodafone Cash"     },
     { id:"airtel",   label:"AirtelTigo Cash"   },
   ];
-  const METHOD_COLORS = { mtn:"#fbbf24", vodafone:"#f87171", airtel:"#60a5fa" };
+  const MCOLORS = { mtn:"#fbbf24", vodafone:"#f87171", airtel:"#60a5fa" };
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
@@ -462,34 +704,35 @@ function PaymentScreen({ go, vehicle, station }) {
         </div>
 
         <div className="fade1" style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:12,border:`1px solid ${T.border}` }}>
-          <div style={{ fontSize:12,color:T.muted,marginBottom:8,fontWeight:600 }}>Email address — for payment receipt</div>
+          <div style={{ fontSize:12,color:T.muted,marginBottom:8,fontWeight:600 }}>Email for receipt</div>
           <input type="email" placeholder="you@example.com" value={email}
             onChange={e=>{ setEmail(e.target.value); setError(""); }}
             style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",color:T.text,fontSize:14 }}/>
         </div>
 
         <div className="fade2" style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:12,border:`1px solid ${T.border}` }}>
-          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}>Select Mobile Money</div>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}>Mobile Money</div>
           {METHODS.map(m=>(
             <div key={m.id} className="tap rowcard" onClick={()=>setMethod(m.id)}
               style={{ display:"flex",alignItems:"center",gap:14,padding:"13px 12px",borderRadius:12,marginBottom:8,background:method===m.id?"#132010":"transparent",border:`1px solid ${method===m.id?T.greenDim:T.border}`,transition:"all 0.15s" }}>
-              <div style={{ width:12,height:12,borderRadius:"50%",background:METHOD_COLORS[m.id],flexShrink:0,boxShadow:`0 0 8px ${METHOD_COLORS[m.id]}80` }}/>
+              <div style={{ width:12,height:12,borderRadius:"50%",background:MCOLORS[m.id],flexShrink:0,boxShadow:`0 0 8px ${MCOLORS[m.id]}80` }}/>
               <span style={{ flex:1,color:T.text,fontSize:14,fontWeight:500 }}>{m.label}</span>
               <div style={{ width:20,height:20,borderRadius:"50%",border:`2px solid ${method===m.id?T.green:T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-                {method===m.id && <div style={{ width:10,height:10,borderRadius:"50%",background:T.green }}/>}
+                {method===m.id&&<div style={{ width:10,height:10,borderRadius:"50%",background:T.green }}/>}
               </div>
             </div>
           ))}
         </div>
 
-        {error && (
-          <div style={{ background:"rgba(248,113,113,0.08)",border:`1px solid rgba(248,113,113,0.3)`,borderRadius:10,padding:"11px 14px",marginBottom:12,color:T.red,fontSize:12,fontWeight:500 }}>{error}</div>
-        )}
+        {error && <div style={{ background:"rgba(248,113,113,0.08)",border:`1px solid rgba(248,113,113,0.3)`,borderRadius:10,padding:"11px 14px",marginBottom:12,color:T.red,fontSize:12,fontWeight:500 }}>{error}</div>}
 
         {!paid ? (
-          <button onClick={handlePay} disabled={paying} className="tap"
-            style={{ width:"100%",background:paying?"#0d2218":`linear-gradient(135deg,${T.green},${T.greenDark})`,border:paying?`1px solid ${T.greenDim}`:"none",borderRadius:14,padding:"16px",fontSize:16,fontWeight:800,color:paying?T.green:"#000",cursor:paying?"default":"pointer",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:10,transition:"all 0.2s" }}>
-            {paying ? "Redirecting to Paystack…" : <>{Icon.bolt("#000")} Pay GH₵{amount} via Paystack</>}
+          <button onClick={tryPay} disabled={paying} className="tap"
+            style={{ width:"100%",background:paying?"#0d2218":`linear-gradient(135deg,${T.green},${T.greenDark})`,border:paying?`1px solid ${T.greenDim}`:"none",borderRadius:14,padding:"16px",fontSize:16,fontWeight:800,color:paying?T.green:"#000",cursor:paying?"default":"pointer",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:10,transition:"all 0.2s",fontFamily:"inherit" }}>
+            {paying
+              ? <><span style={{ width:18,height:18,borderRadius:"50%",border:`2px solid ${T.green}`,borderTopColor:"transparent",display:"inline-block",animation:"spin 0.8s linear infinite" }}/> Opening Paystack…</>
+              : <>{Icon.bolt("#000")} Pay GH₵{amount} via Paystack</>
+            }
           </button>
         ) : (
           <div style={{ background:"#0a1f12",border:`1px solid ${T.greenDim}`,borderRadius:16,padding:"24px",textAlign:"center",marginBottom:12 }}>
@@ -499,7 +742,7 @@ function PaymentScreen({ go, vehicle, station }) {
             <div style={{ color:T.green,fontWeight:800,fontSize:19,marginBottom:6 }}>Payment Successful!</div>
             <div style={{ color:T.mutedLight,fontSize:13,lineHeight:1.6,marginBottom:16 }}>Bay assigned · Your charging session is starting.</div>
             <button onClick={()=>go("home")} className="tap"
-              style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:10,padding:"11px 28px",fontSize:13,fontWeight:700,color:"#000",cursor:"pointer" }}>
+              style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:10,padding:"11px 28px",fontSize:13,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
               Back to Map
             </button>
           </div>
@@ -519,91 +762,10 @@ function PaymentScreen({ go, vehicle, station }) {
 }
 
 function ProfileScreen({ go, user, setUser, onMenu }) {
-  const [mode,     setMode]     = useState("view");
-  const [email,    setEmail]    = useState("");
-  const [password, setPassword] = useState("");
-  const [name,     setName]     = useState("");
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState("");
-  const [msg,      setMsg]      = useState("");
-
-  const authCall = async (endpoint, body) => {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/${endpoint}`, {
-      method:"POST",
-      headers:{ apikey:SUPABASE_ANON,"Content-Type":"application/json" },
-      body: JSON.stringify(body),
-    });
-    return res.json();
-  };
-
-  const doLogin = async () => {
-    if (!email||!password) { setError("Enter email and password"); return; }
-    setLoading(true); setError("");
-    const d = SUPABASE_URL ? await authCall("token?grant_type=password",{ email, password }) : { access_token:"demo" };
-    if (d.access_token) { setUser({ email, name:name||email.split("@")[0], token:d.access_token }); setMsg("Signed in!"); setMode("view"); }
-    else setError(d.error_description||"Invalid credentials.");
-    setLoading(false);
-  };
-
-  const doRegister = async () => {
-    if (!name||!email||!password) { setError("Fill in all fields"); return; }
-    if (password.length<6) { setError("Password must be 6+ characters"); return; }
-    setLoading(true); setError("");
-    const d = SUPABASE_URL ? await authCall("signup",{ email, password, data:{ full_name:name } }) : { id:"demo" };
-    if (d.id||d.user) { setMsg("Account created! Check email to verify."); setMode("login"); }
-    else setError(d.msg||d.error_description||"Registration failed.");
-    setLoading(false);
-  };
-
-  if (mode==="login"||mode==="register") return (
-    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title={mode==="login"?"Sign In":"Create Account"} subtitle="EcoCharge Ghana" onBack={()=>{ setMode("view"); setError(""); setMsg(""); }}/>
-      <div style={{ flex:1,overflowY:"auto",padding:"30px 20px 0" }}>
-        <div style={{ textAlign:"center",marginBottom:28 }}>
-          <img src="/logo.png" alt="EcoCharge" style={{ width:70,height:70,objectFit:"contain",marginBottom:12 }} onError={e=>e.target.style.display="none"}/>
-          <div style={{ fontWeight:800,fontSize:20,color:T.text }}>{mode==="login"?"Welcome Back":"Join EcoCharge"}</div>
-          <div style={{ fontSize:12,color:T.muted,marginTop:5 }}>{mode==="login"?"Sign in to your account":"Create your free account"}</div>
-        </div>
-        <div style={{ background:T.card,borderRadius:16,padding:"20px",border:`1px solid ${T.border}` }}>
-          {mode==="register" && (
-            <div style={{ marginBottom:14 }}>
-              <div style={{ fontSize:12,color:T.muted,marginBottom:6 }}>Full Name</div>
-              <input placeholder="Your full name" value={name} onChange={e=>{ setName(e.target.value); setError(""); }}
-                style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",color:T.text,fontSize:14 }}/>
-            </div>
-          )}
-          <div style={{ marginBottom:14 }}>
-            <div style={{ fontSize:12,color:T.muted,marginBottom:6 }}>Email</div>
-            <input type="email" placeholder="you@example.com" value={email} onChange={e=>{ setEmail(e.target.value); setError(""); }}
-              style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",color:T.text,fontSize:14 }}/>
-          </div>
-          <div style={{ marginBottom:20 }}>
-            <div style={{ fontSize:12,color:T.muted,marginBottom:6 }}>Password</div>
-            <input type="password" placeholder="••••••••" value={password} onChange={e=>{ setPassword(e.target.value); setError(""); }}
-              style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",color:T.text,fontSize:14 }}/>
-          </div>
-          {error && <div style={{ color:T.red,fontSize:12,marginBottom:12,textAlign:"center",background:"rgba(248,113,113,0.08)",borderRadius:8,padding:"8px" }}>{error}</div>}
-          <button onClick={mode==="login"?doLogin:doRegister} disabled={loading} className="tap"
-            style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",opacity:loading?0.7:1 }}>
-            {loading?"Please wait…":mode==="login"?"Sign In":"Create Account"}
-          </button>
-        </div>
-        <div style={{ textAlign:"center",marginTop:20,marginBottom:16 }}>
-          <span style={{ color:T.muted,fontSize:13 }}>{mode==="login"?"Don't have an account? ":"Already have an account? "}</span>
-          <button onClick={()=>{ setMode(mode==="login"?"register":"login"); setError(""); }}
-            style={{ background:"none",border:"none",color:T.green,fontSize:13,fontWeight:700,cursor:"pointer" }}>
-            {mode==="login"?"Register":"Sign In"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="My Profile" subtitle="Account & activity" onMenu={onMenu}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 14px 0" }}>
-        {msg && <div className="fade" style={{ background:"rgba(74,222,128,0.08)",border:`1px solid ${T.greenDim}`,borderRadius:12,padding:"11px 14px",marginBottom:14,color:T.green,fontSize:13,fontWeight:500 }}>{msg}</div>}
         {user ? (
           <>
             <div className="fade" style={{ background:"linear-gradient(135deg,#0a1f12,#0e2716)",borderRadius:18,padding:"22px",marginBottom:16,border:`1px solid ${T.greenDim}`,textAlign:"center" }}>
@@ -627,23 +789,19 @@ function ProfileScreen({ go, user, setUser, onMenu }) {
                 </div>
               ))}
             </div>
-            <button onClick={()=>{ setUser(null); setMsg(""); }} className="tap"
-              style={{ width:"100%",background:"rgba(248,113,113,0.07)",border:`1px solid rgba(248,113,113,0.25)`,borderRadius:12,padding:"14px",fontSize:14,fontWeight:600,color:T.red,cursor:"pointer",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+            <button onClick={()=>setUser(null)} className="tap"
+              style={{ width:"100%",background:"rgba(248,113,113,0.07)",border:`1px solid rgba(248,113,113,0.25)`,borderRadius:12,padding:"14px",fontSize:14,fontWeight:600,color:T.red,cursor:"pointer",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontFamily:"inherit" }}>
               {Icon.logout()} Sign Out
             </button>
           </>
         ) : (
           <div style={{ textAlign:"center",padding:"30px 16px" }}>
-            <img src="/logo.png" alt="EcoCharge" style={{ width:76,height:76,objectFit:"contain",marginBottom:18 }} onError={e=>e.target.style.display="none"}/>
+            <LogoLarge size={76}/>
             <div style={{ fontWeight:800,fontSize:21,color:T.text,marginBottom:8 }}>Sign in to EcoCharge</div>
             <div style={{ color:T.muted,fontSize:13,marginBottom:28,lineHeight:1.7 }}>Track charges, view bookings,<br/>and see your environmental impact.</div>
-            <button onClick={()=>setMode("login")} className="tap"
-              style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",marginBottom:12 }}>
-              Sign In
-            </button>
-            <button onClick={()=>setMode("register")} className="tap"
-              style={{ width:"100%",background:"transparent",border:`1px solid ${T.border}`,borderRadius:14,padding:"16px",fontSize:15,fontWeight:600,color:T.mutedLight,cursor:"pointer" }}>
-              Create Account
+            <button onClick={()=>go("splash")} className="tap"
+              style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",marginBottom:12,fontFamily:"inherit" }}>
+              Sign In / Register
             </button>
           </div>
         )}
@@ -659,14 +817,14 @@ function AboutScreen({ go, onMenu }) {
       <Header title="About EcoCharge" subtitle="Our mission" onMenu={onMenu}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 14px 0" }}>
         <div className="fade" style={{ textAlign:"center",marginBottom:24 }}>
-          <img src="/logo.png" alt="EcoCharge" style={{ width:82,height:82,objectFit:"contain",marginBottom:14 }} onError={e=>e.target.style.display="none"}/>
+          <LogoLarge size={82}/>
           <div style={{ fontWeight:800,fontSize:22,color:T.text }}>EcoCharge Ghana</div>
           <div style={{ fontSize:13,color:T.muted,marginTop:6 }}>Solar Charging · Clean Water · Zero Emissions</div>
         </div>
         {[
-          { icon:Icon.bolt(T.yellow), title:"Solar EV Charging",    text:"100% solar-powered stations across Ghana. Fast, clean and affordable for all vehicle types." },
-          { icon:Icon.water(T.blue),  title:"Clean Water Access",   text:"Every session includes 20L of clean desalinated water — two needs solved at once." },
-          { icon:Icon.leaf(T.green),  title:"Zero Emissions",       text:"Our stations run on solar and hydrogen — zero carbon footprint, clean future." },
+          { icon:Icon.bolt(T.yellow), title:"Solar EV Charging",  text:"100% solar-powered stations across Ghana. Fast, clean and affordable for all vehicle types." },
+          { icon:Icon.water(T.blue),  title:"Clean Water Access", text:"Every session includes 20L of clean desalinated water — two needs solved at once." },
+          { icon:Icon.leaf(T.green),  title:"Zero Emissions",     text:"Our stations run on solar and hydrogen — zero carbon footprint, clean future." },
           { icon:Icon.profile(T.mutedLight), title:"Local Employment", text:"We train and employ local female technicians, building sustainable communities." },
         ].map((item,i)=>(
           <div key={i} className={`fade${i}`} style={{ background:T.card,borderRadius:14,padding:"16px",marginBottom:12,border:`1px solid ${T.border}`,display:"flex",gap:14,alignItems:"flex-start" }}>
@@ -678,7 +836,7 @@ function AboutScreen({ go, onMenu }) {
           </div>
         ))}
         <button onClick={()=>go("home")} className="tap"
-          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontFamily:"inherit" }}>
           {Icon.bolt("#000")} Find a Station
         </button>
       </div>
@@ -688,7 +846,8 @@ function AboutScreen({ go, onMenu }) {
 }
 
 export default function App() {
-  const [screen,   setScreen]   = useState("home");
+  const [screen,   setScreen]   = useState("splash");
+  const [authMode, setAuthMode] = useState("login");
   const [station,  setStation]  = useState(null);
   const [vehicle,  setVehicle]  = useState(null);
   const [stations, setStations] = useState(FALLBACK_STATIONS);
@@ -702,7 +861,24 @@ export default function App() {
     sb("stations?select=*&order=id").then(d=>{ if(d?.length) setStations(d); });
   },[]);
 
+  const handleAuthSuccess = (u) => { setUser(u); go("home"); };
+
   const props = { go, stations, station:station||stations[0], setStation, user, setUser, vehicle, setVehicle, onMenu:()=>setDrawer(true) };
+
+  if (screen==="splash") return (
+    <><style>{CSS}</style>
+    <SplashScreen
+      onLogin={()=>{ setAuthMode("login"); go("auth"); }}
+      onRegister={()=>{ setAuthMode("register"); go("auth"); }}
+      onGuest={()=>go("home")}/>
+    </>
+  );
+
+  if (screen==="auth") return (
+    <><style>{CSS}</style>
+    <AuthScreen mode={authMode} onBack={()=>go("splash")} onSuccess={handleAuthSuccess}/>
+    </>
+  );
 
   const views = {
     home:     <HomeScreen    {...props}/>,
@@ -717,7 +893,7 @@ export default function App() {
     <>
       <style>{CSS}</style>
       <div style={{ position:"relative",height:"100vh",overflow:"hidden",background:T.bg }}>
-        <Drawer open={drawer} onClose={()=>setDrawer(false)} go={go} user={user} onLogout={()=>setUser(null)}/>
+        <Drawer open={drawer} onClose={()=>setDrawer(false)} go={go} user={user} onLogout={()=>{ setUser(null); go("splash"); }}/>
         <div style={{ height:"100%",display:"flex",flexDirection:"column",overflow:"hidden" }}>
           {views[screen]||views.home}
         </div>
