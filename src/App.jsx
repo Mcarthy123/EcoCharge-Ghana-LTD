@@ -607,70 +607,46 @@ function PaymentScreen({ go, vehicle, station, user }) {
     }
   },[]);
 
-  const tryPay = () => {
+  const tryPay = async () => {
     if (!email||!email.includes("@")) { setError("Please enter a valid email"); return; }
     setError(""); setPaying(true);
 
-    if (!PAYSTACK_KEY) {
+    // Demo mode
+    if (!SUPABASE_URL) {
       setTimeout(()=>{ setPaid(true); setPaying(false); }, 1500);
       return;
     }
 
-    const doIt = () => {
-      try {
-        // Try inline first
-        if (window.PaystackPop) {
-          const handler = window.PaystackPop.setup({
-            key: PAYSTACK_KEY,
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/functions/v1/create-payment`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${SUPABASE_ANON}`,
+          },
+          body: JSON.stringify({
             email,
-            amount: amount * 100,
-            currency: "GHS",
+            amount,
             ref: `ECO-${Date.now()}`,
-            metadata: {
-              custom_fields: [
-                { display_name:"Vehicle", variable_name:"vehicle", value:vehicle?.type||"Car" },
-                { display_name:"Station", variable_name:"station", value:s.name },
-              ]
-            },
-            callback: async (res) => {
-              if (SUPABASE_URL) {
-                await sb("payments",{
-                  method:"POST",
-                  headers:{ Prefer:"return=minimal" },
-                  body: JSON.stringify({ reference:res.reference, amount, email, vehicle:vehicle?.type, station:s.name, status:"success", created_at:new Date().toISOString() }),
-                }).catch(()=>{});
-              }
-              setPaid(true); setPaying(false);
-            },
-            onClose: ()=>{ setPaying(false); setError("Payment cancelled. Tap Pay again to retry."); },
-          });
-          handler.openIframe();
-        } else {
-          // Fallback: Paystack standard checkout redirect
-          const ref = `ECO-${Date.now()}`;
-          const qs = new URLSearchParams({
-            key: PAYSTACK_KEY,
-            email,
-            amount: String(amount*100),
-            currency: "GHS",
-            ref,
-            callback_url: window.location.href,
-          });
-          window.location.href = `https://checkout.paystack.com/pay?${qs.toString()}`;
+            vehicle: vehicle?.type || "Car",
+            station: s.name,
+          }),
         }
-      } catch(err) {
-        setError("Payment error. Please try again.");
+      );
+      const data = await res.json();
+      if (data?.data?.authorization_url) {
+        // Redirect to Paystack checkout page
+        window.location.href = data.data.authorization_url;
+      } else {
+        setError("Could not start payment. Please try again.");
         setPaying(false);
       }
-    };
-
-    if (window.PaystackPop) { doIt(); return; }
-    let tries = 0;
-    const wait = setInterval(()=>{
-      tries++;
-      if (window.PaystackPop) { clearInterval(wait); doIt(); }
-      if (tries>20) { clearInterval(wait); setError("Payment system unavailable. Check internet connection."); setPaying(false); }
-    },300);
+    } catch(err) {
+      setError("Payment error. Please check your internet and try again.");
+      setPaying(false);
+    }
   };
 
   const METHODS = [
