@@ -32,9 +32,9 @@ const T = {
 
 const PHOTOS = {
   car:      "https://images.unsplash.com/photo-1593941707882-a5bba14938c7?w=700&q=85&fit=crop",
-  scooter:  "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=700&q=85&fit=crop",
-  tricycle: "https://images.unsplash.com/photo-1609619385002-f40f1df9b7eb?w=700&q=85&fit=crop",
-  station:  "https://images.unsplash.com/photo-1647166545674-e6e87e0ac24a?w=700&q=85&fit=crop",
+  scooter:  "https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=700&q=85&fit=crop",
+  tricycle: "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=700&q=85&fit=crop",
+  station:  "https://images.unsplash.com/photo-1620288627223-53302f4e8c74?w=700&q=85&fit=crop",
 };
 
 const FALLBACK_STATIONS = [
