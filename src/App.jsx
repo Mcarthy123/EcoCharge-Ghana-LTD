@@ -607,46 +607,13 @@ function PaymentScreen({ go, vehicle, station, user }) {
     }
   },[]);
 
-  const tryPay = async () => {
+  const tryPay = () => {
     if (!email||!email.includes("@")) { setError("Please enter a valid email"); return; }
     setError(""); setPaying(true);
-
-    // Demo mode
-    if (!SUPABASE_URL) {
-      setTimeout(()=>{ setPaid(true); setPaying(false); }, 1500);
-      return;
-    }
-
-    try {
-      const res = await fetch(
-        `${SUPABASE_URL}/functions/v1/create-payment`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${SUPABASE_ANON}`,
-          },
-          body: JSON.stringify({
-            email,
-            amount,
-            ref: `ECO-${Date.now()}`,
-            vehicle: vehicle?.type || "Car",
-            station: s.name,
-          }),
-        }
-      );
-      const data = await res.json();
-      if (data?.data?.authorization_url) {
-        // Redirect to Paystack checkout page
-        window.location.href = data.data.authorization_url;
-      } else {
-        setError("Could not start payment. Please try again.");
-        setPaying(false);
-      }
-    } catch(err) {
-      setError("Payment error. Please check your internet and try again.");
-      setPaying(false);
-    }
+    // Use existing Paystack payment page — already working!
+    setTimeout(() => {
+      window.location.href = `https://paystack.shop/pay/bldaqwywt5?email=${encodeURIComponent(email)}&amount=${amount * 100}`;
+    }, 800);
   };
 
   const METHODS = [
