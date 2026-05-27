@@ -30,10 +30,9 @@ const T = {
   blue:"#38bdf8", yellow:"#fbbf24", red:"#f87171",
 };
 
-const PHOTOS = {
   car:      "https://images.unsplash.com/photo-1593941707882-a5bba14938c7?w=700&q=85&fit=crop",
-  scooter:  "https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=700&q=85&fit=crop",
-  tricycle: "https://images.unsplash.com/photo-1558980664-1db506751c6c?w=700&q=85&fit=crop",
+  scooter:  "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=700&q=85&fit=crop",
+  tricycle: "https://images.unsplash.com/photo-1609619385002-f40f1df9b7eb?w=700&q=85&fit=crop",
   station:  "https://images.unsplash.com/photo-1647166545674-e6e87e0ac24a?w=700&q=85&fit=crop",
 };
 
@@ -94,7 +93,7 @@ const Icon = {
 const LogoImg = ({ size=34 }) => {
   const [err, setErr] = useState(false);
   if (!err) return (
-    <img src="/logo.png" alt="EcoCharge"
+    <img src="/WhatsApp Image 2026-05-25 at 2.39.58 AM.jpeg" alt="EcoCharge"
       style={{ width:size, height:size, objectFit:"contain", borderRadius:8, flexShrink:0 }}
       onError={()=>setErr(true)}/>
   );
@@ -110,7 +109,7 @@ const LogoImg = ({ size=34 }) => {
 const LogoLarge = ({ size=70 }) => {
   const [err, setErr] = useState(false);
   if (!err) return (
-    <img src="/logo.png" alt="EcoCharge"
+    <img src="/WhatsApp Image 2026-05-25 at 2.39.58 AM.jpeg" alt="EcoCharge"
       style={{ width:size, height:size, objectFit:"contain", marginBottom:12 }}
       onError={()=>setErr(true)}/>
   );
@@ -789,7 +788,7 @@ function AboutScreen({ go, onMenu }) {
 }
 
 export default function App() {
-  const [screen,   setScreen]   = useState("splash");
+  const [screen,   setScreen]   = useState("home");
   const [authMode, setAuthMode] = useState("login");
   const [station,  setStation]  = useState(null);
   const [vehicle,  setVehicle]  = useState(null);
