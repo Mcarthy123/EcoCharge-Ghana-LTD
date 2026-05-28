@@ -39,14 +39,14 @@ const VEHICLE_GRADIENTS = {
 const STATION_BG = "linear-gradient(135deg, #0a1f12 0%, #0d2d1a 50%, #071a0d 100%)";
 
 const FALLBACK_STATIONS = [
-  { id:1, name:"Accra Central",  bays:6, open:6, solar:85, hydrogen:15, time:"23m", lat:"38%", lng:"54%", city:"Accra" },
-  { id:2, name:"Kumasi Hub",     bays:4, open:3, solar:90, hydrogen:10, time:"12m", lat:"26%", lng:"37%", city:"Kumasi" },
-  { id:3, name:"Tema Station",   bays:8, open:8, solar:75, hydrogen:25, time:"8m",  lat:"50%", lng:"68%", city:"Tema" },
-  { id:4, name:"Takoradi",       bays:3, open:2, solar:80, hydrogen:20, time:"31m", lat:"22%", lng:"58%", city:"Takoradi" },
-  { id:5, name:"Tamale North",   bays:5, open:5, solar:95, hydrogen:5,  time:"45m", lat:"17%", lng:"24%", city:"Tamale" },
-  { id:6, name:"Sunyani East",   bays:2, open:1, solar:70, hydrogen:30, time:"19m", lat:"42%", lng:"19%", city:"Sunyani" },
-  { id:7, name:"Cape Coast",     bays:6, open:6, solar:88, hydrogen:12, time:"27m", lat:"72%", lng:"52%", city:"Cape Coast" },
-  { id:8, name:"Ho District",    bays:4, open:3, solar:82, hydrogen:18, time:"15m", lat:"68%", lng:"74%", city:"Ho" },
+  { id:1, name:"Accra Central",  bays:6, open:6, solar:85, hydrogen:15, time:"23m", lat:"38%", lng:"54%", city:"Accra",      lat_coord:5.5502,  lng_coord:-0.2174 },
+  { id:2, name:"Kumasi Hub",     bays:4, open:3, solar:90, hydrogen:10, time:"12m", lat:"26%", lng:"37%", city:"Kumasi",     lat_coord:6.6885,  lng_coord:-1.6244 },
+  { id:3, name:"Tema Station",   bays:8, open:8, solar:75, hydrogen:25, time:"8m",  lat:"50%", lng:"68%", city:"Tema",       lat_coord:5.6698,  lng_coord:0.0166  },
+  { id:4, name:"Takoradi",       bays:3, open:2, solar:80, hydrogen:20, time:"31m", lat:"22%", lng:"58%", city:"Takoradi",   lat_coord:4.9016,  lng_coord:-1.7648 },
+  { id:5, name:"Tamale North",   bays:5, open:5, solar:95, hydrogen:5,  time:"45m", lat:"17%", lng:"24%", city:"Tamale",     lat_coord:9.4034,  lng_coord:-0.8424 },
+  { id:6, name:"Sunyani East",   bays:2, open:1, solar:70, hydrogen:30, time:"19m", lat:"42%", lng:"19%", city:"Sunyani",    lat_coord:7.3349,  lng_coord:-2.3284 },
+  { id:7, name:"Cape Coast",     bays:6, open:6, solar:88, hydrogen:12, time:"27m", lat:"72%", lng:"52%", city:"Cape Coast", lat_coord:5.1053,  lng_coord:-1.2466 },
+  { id:8, name:"Ho District",    bays:4, open:3, solar:82, hydrogen:18, time:"15m", lat:"68%", lng:"74%", city:"Ho",         lat_coord:6.6011,  lng_coord:0.4717  },
 ];
 
 const VEHICLES = [
@@ -413,48 +413,126 @@ const Header = ({ title, subtitle, onBack, onMenu }) => (
 );
 
 function HomeScreen({ go, stations, setStation, onMenu, user }) {
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+
+  useEffect(() => {
+    // Load Leaflet CSS
+    if (!document.getElementById("leaflet-css")) {
+      const link = document.createElement("link");
+      link.id = "leaflet-css";
+      link.rel = "stylesheet";
+      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(link);
+    }
+
+    // Load Leaflet JS
+    const loadLeaflet = () => {
+      if (window.L) { initMap(); return; }
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.onload = initMap;
+      document.head.appendChild(script);
+    };
+
+    const initMap = () => {
+      if (mapInstanceRef.current || !mapRef.current) return;
+      const L = window.L;
+
+      // Center on Ghana
+      const map = L.map(mapRef.current, {
+        center: [7.9465, -1.0232],
+        zoom: 7,
+        zoomControl: true,
+        attributionControl: false,
+      });
+
+      // Dark tile layer
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        maxZoom: 19,
+      }).addTo(map);
+
+      // Custom green marker
+      const greenIcon = L.divIcon({
+        html: `<div style="width:28px;height:36px">
+          <svg viewBox="0 0 28 36">
+            <path d="M14 0C6.27 0 0 6.27 0 14c0 9.33 14 22 14 22S28 23.33 28 14C28 6.27 21.73 0 14 0z" fill="#4ade80"/>
+            <circle cx="14" cy="14" r="6" fill="#0f1117"/>
+            <path d="M14 7l-3.5 5h2.5l-1 5 5-6h-2.5L14 7z" fill="#4ade80"/>
+          </svg>
+        </div>`,
+        className: "",
+        iconSize: [28, 36],
+        iconAnchor: [14, 36],
+        popupAnchor: [0, -36],
+      });
+
+      // Add markers for each station
+      stations.forEach(s => {
+        if (!s.lat_coord || !s.lng_coord) return;
+        const marker = L.marker([s.lat_coord, s.lng_coord], { icon: greenIcon }).addTo(map);
+        marker.bindPopup(`
+          <div style="font-family:Inter,sans-serif;min-width:160px">
+            <strong style="font-size:14px">${s.name}</strong><br/>
+            <span style="color:#22c55e;font-size:12px">${s.open}/${s.bays} bays open</span><br/>
+            <span style="font-size:11px;color:#6b7280">Wait: ${s.time}</span>
+          </div>
+        `);
+        marker.on("click", () => {
+          setStation(s);
+          go("detail");
+        });
+      });
+
+      mapInstanceRef.current = map;
+    };
+
+    loadLeaflet();
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
+
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="EcoChargeCar" subtitle="Find a charging station near you" onMenu={onMenu}/>
       {user && (
-        <div style={{ margin:"10px 14px 0",background:"linear-gradient(135deg,#0d2218,#112b1a)",borderRadius:12,padding:"10px 14px",border:`1px solid ${T.greenDim}`,display:"flex",alignItems:"center",gap:10 }}>
+        <div style={{ margin:"10px 14px 0",background:"linear-gradient(135deg,#0d2218,#112b1a)",
+          borderRadius:12,padding:"10px 14px",border:`1px solid ${T.greenDim}`,
+          display:"flex",alignItems:"center",gap:10 }}>
           {Icon.profile(T.green)}
-          <span style={{ fontSize:13,color:T.text,fontWeight:500 }}>Welcome, <strong style={{ color:T.green }}>{user.name||user.email?.split("@")[0]}</strong></span>
+          <span style={{ fontSize:13,color:T.text,fontWeight:500 }}>
+            Welcome, <strong style={{ color:T.green }}>{user.name||user.email?.split("@")[0]}</strong>
+          </span>
         </div>
       )}
-      <div style={{ flex:1,position:"relative",margin:"12px",borderRadius:18,overflow:"hidden",background:"#0e1525" }}>
-        <svg width="100%" height="100%" style={{ position:"absolute",inset:0 }} preserveAspectRatio="none">
-          <defs>
-            <radialGradient id="mg" cx="50%" cy="50%" r="70%">
-              <stop offset="0%" stopColor="#192540"/>
-              <stop offset="100%" stopColor="#090e1a"/>
-            </radialGradient>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#mg)"/>
-          {["M5 35 Q30 28 60 40 Q80 48 95 35","M10 55 Q35 45 65 58 Q82 64 95 52",
-            "M0 20 Q25 18 50 25 Q70 30 100 22","M20 70 Q45 65 70 72 Q85 76 100 68",
-            "M30 10 Q32 40 28 70","M55 5 Q58 35 54 65","M70 8 Q73 38 69 68","M15 5 Q18 30 14 55"]
-            .map((d,i)=>(
-              <path key={i} d={d} stroke="#1e3060" strokeWidth={i%3===0?2.5:1.5} fill="none"
-                vectorEffect="non-scaling-stroke" transform="scale(4,4)" opacity={0.7}/>
-            ))}
-        </svg>
-        <div style={{ position:"absolute",top:14,left:16,color:T.text,fontWeight:700,fontSize:15,textShadow:"0 1px 8px rgba(0,0,0,0.8)" }}>Greater Accra</div>
-        <div style={{ position:"absolute",top:14,right:14,background:"rgba(15,17,23,0.85)",backdropFilter:"blur(8px)",borderRadius:20,padding:"5px 12px",fontSize:11,color:T.green,fontWeight:700,border:`1px solid ${T.border}` }}>
+
+      {/* Real Leaflet Map */}
+      <div style={{ flex:1,position:"relative",margin:"12px",borderRadius:18,overflow:"hidden" }}>
+        <div ref={mapRef} style={{ width:"100%",height:"100%" }}/>
+
+        {/* Station count pill */}
+        <div style={{ position:"absolute",top:14,right:14,zIndex:1000,
+          background:"rgba(15,17,23,0.85)",backdropFilter:"blur(8px)",
+          borderRadius:20,padding:"5px 12px",fontSize:11,color:T.green,
+          fontWeight:700,border:`1px solid ${T.border}` }}>
           {stations.length} stations
         </div>
-        {stations.map(s=>(
-          <button key={s.id} className="tap" onClick={()=>{ setStation(s); go("detail"); }}
-            style={{ position:"absolute",top:s.lat,left:s.lng,background:"none",border:"none",
-              transform:"translate(-50%,-100%)",filter:`drop-shadow(0 3px 8px rgba(74,222,128,0.4))`,transition:"filter 0.2s,transform 0.2s" }}>
-            {Icon.pin(s.open>0?T.green:"#6b7280")}
-          </button>
-        ))}
-        <div style={{ position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(0deg,rgba(9,14,26,1) 0%,transparent 100%)",padding:"24px 12px 12px" }}>
+
+        {/* Station cards at bottom */}
+        <div style={{ position:"absolute",bottom:0,left:0,right:0,zIndex:1000,
+          background:"linear-gradient(0deg,rgba(9,14,26,0.98) 0%,transparent 100%)",
+          padding:"24px 12px 12px" }}>
           <div style={{ display:"flex",gap:10,overflowX:"auto",paddingBottom:2 }}>
             {stations.map(s=>(
               <div key={s.id} className="tap" onClick={()=>{ setStation(s); go("detail"); }}
-                style={{ background:"rgba(26,29,39,0.95)",backdropFilter:"blur(8px)",borderRadius:12,padding:"10px 14px",border:`1px solid ${T.border}`,flexShrink:0,minWidth:150 }}>
+                style={{ background:"rgba(26,29,39,0.95)",backdropFilter:"blur(8px)",
+                  borderRadius:12,padding:"10px 14px",border:`1px solid ${T.border}`,
+                  flexShrink:0,minWidth:150 }}>
                 <div style={{ fontWeight:700,fontSize:12,color:T.text,marginBottom:3 }}>{s.name}</div>
                 <div style={{ fontSize:11,color:T.green,fontWeight:600 }}>{s.open}/{s.bays} bays open</div>
                 <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>Wait: {s.time}</div>
@@ -463,6 +541,7 @@ function HomeScreen({ go, stations, setStation, onMenu, user }) {
           </div>
         </div>
       </div>
+
       <NavBar active="Home" go={go}/>
     </div>
   );
