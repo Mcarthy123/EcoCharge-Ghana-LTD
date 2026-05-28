@@ -30,12 +30,13 @@ const T = {
   blue:"#38bdf8", yellow:"#fbbf24", red:"#f87171",
 };
 
-const PHOTOS = {
-  car:      "https://images.unsplash.com/photo-1593941707882-a5bba14938c7?w=700&q=85&fit=crop",
-  scooter:  "https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=700&q=85&fit=crop",
-  tricycle: "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=700&q=85&fit=crop",
-  station:  "https://images.unsplash.com/photo-1620288627223-53302f4e8c74?w=700&q=85&fit=crop",
+// No external images — using clean SVG illustrations that always work
+const VEHICLE_GRADIENTS = {
+  Car:      "linear-gradient(135deg, #0a2e14 0%, #0d3d1a 50%, #071a0d 100%)",
+  Scooter:  "linear-gradient(135deg, #0a1f2e 0%, #0d2a3d 50%, #071218 100%)",
+  Tricycle: "linear-gradient(135deg, #1a1f0a 0%, #252d0d 50%, #111507 100%)",
 };
+const STATION_BG = "linear-gradient(135deg, #0a1f12 0%, #0d2d1a 50%, #071a0d 100%)";
 
 const FALLBACK_STATIONS = [
   { id:1, name:"Accra Central",  bays:6, open:6, solar:85, hydrogen:15, time:"23m", lat:"38%", lng:"54%", city:"Accra" },
@@ -49,9 +50,9 @@ const FALLBACK_STATIONS = [
 ];
 
 const VEHICLES = [
-  { type:"Car",      price:"GH₵140–210", amount:175, desc:"Full EV sedan — solar powered",  img:PHOTOS.car      },
-  { type:"Scooter",  price:"GH₵8–15",   amount:12,  desc:"Electric scooter fast charge",    img:PHOTOS.scooter  },
-  { type:"Tricycle", price:"GH₵18–28",  amount:23,  desc:"Cargo tricycle — station charge", img:PHOTOS.tricycle },
+  { type:"Car",      price:"GH₵140–210", amount:175, desc:"Full EV sedan — solar powered",  icon:"🚗" },
+  { type:"Scooter",  price:"GH₵8–15",   amount:12,  desc:"Electric scooter fast charge",    icon:"🛵" },
+  { type:"Tricycle", price:"GH₵18–28",  amount:23,  desc:"Cargo tricycle — station charge", icon:"🛺" },
 ];
 
 const CSS = `
@@ -472,12 +473,38 @@ function DetailScreen({ go, station, stations, setStation }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title={s.name} subtitle={`${s.city} · Solar & Hydrogen`} onBack={()=>go("home")}/>
-      <div style={{ margin:"12px 12px 0",borderRadius:16,overflow:"hidden",height:155,position:"relative",flexShrink:0 }}>
-        <img src={PHOTOS.station} alt="Charging Station" style={{ width:"100%",height:"100%",objectFit:"cover",display:"block" }}/>
-        <div style={{ position:"absolute",inset:0,background:"linear-gradient(0deg,rgba(15,17,23,0.9) 0%,rgba(15,17,23,0.1) 60%)" }}/>
+      <div style={{ margin:"12px 12px 0",borderRadius:16,overflow:"hidden",height:155,
+        position:"relative",flexShrink:0,background:STATION_BG,
+        display:"flex",alignItems:"center",justifyContent:"center" }}>
+        {/* Decorative elements */}
+        <div style={{ position:"absolute",top:-40,right:-40,width:200,height:200,
+          borderRadius:"50%",background:"rgba(74,222,128,0.05)" }}/>
+        <div style={{ position:"absolute",bottom:-30,left:-30,width:150,height:150,
+          borderRadius:"50%",background:"rgba(56,189,248,0.05)" }}/>
+        {/* Station visual */}
+        <div style={{ display:"flex",gap:16,alignItems:"flex-end",zIndex:1 }}>
+          {[0,1,2].map(i=>(
+            <div key={i} style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:4 }}>
+              <div style={{ width:28,height:70,background:"linear-gradient(180deg,#1a3a2a,#0d2218)",
+                borderRadius:8,border:`1px solid ${T.greenDim}`,position:"relative",
+                display:"flex",flexDirection:"column",alignItems:"center",paddingTop:8,gap:4 }}>
+                <div style={{ width:14,height:10,background:T.green,borderRadius:3,opacity:0.9 }}/>
+                <div style={{ width:10,height:8,background:"#38bdf8",borderRadius:2,opacity:0.7 }}/>
+                <div style={{ position:"absolute",bottom:6,width:4,height:14,
+                  background:T.green,borderRadius:2,opacity:0.8 }}/>
+              </div>
+              <div style={{ width:4,height:20,background:T.greenDim,borderRadius:2 }}/>
+            </div>
+          ))}
+        </div>
+        {/* Badges */}
         <div style={{ position:"absolute",bottom:12,left:14,display:"flex",gap:8 }}>
           <Badge color={T.green}>{s.open}/{s.bays} Bays Open</Badge>
           <Badge color={T.yellow}>Wait: {s.time}</Badge>
+        </div>
+        {/* Solar label */}
+        <div style={{ position:"absolute",top:12,right:14 }}>
+          <Badge color={T.blue}>{s.solar}% Solar</Badge>
         </div>
       </div>
       <div style={{ flex:1,overflowY:"auto",padding:"12px 12px 0" }}>
@@ -541,22 +568,45 @@ function VehicleScreen({ go, setVehicle }) {
       <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 0" }}>
         {VEHICLES.map((v,i)=>(
           <div key={v.type} className={`tap fade${i}`} onClick={()=>setSelected(v)}
-            style={{ borderRadius:18,marginBottom:14,overflow:"hidden",border:`2px solid ${selected?.type===v.type?T.green:T.border}`,background:selected?.type===v.type?"#0d2010":T.card,transition:"border-color 0.2s,background 0.2s" }}>
-            <div style={{ height:175,position:"relative",overflow:"hidden" }}>
-              <img src={v.img} alt={v.type} style={{ width:"100%",height:"100%",objectFit:"cover",display:"block" }} onError={e=>{ e.target.parentElement.style.background="#1a2d1a"; e.target.style.display="none"; }}/>
-              <div style={{ position:"absolute",inset:0,background:"linear-gradient(0deg,rgba(15,17,23,0.9) 0%,rgba(15,17,23,0.15) 55%)" }}/>
-              <div style={{ position:"absolute",bottom:12,left:14 }}>
-                <div style={{ fontWeight:800,fontSize:20,color:T.text }}>{v.type}</div>
-                <div style={{ fontSize:12,color:T.mutedLight,marginTop:2 }}>{v.desc}</div>
+            style={{ borderRadius:18,marginBottom:14,overflow:"hidden",
+              border:`2px solid ${selected?.type===v.type?T.green:T.border}`,
+              background:selected?.type===v.type?"#0d2010":T.card,
+              transition:"border-color 0.2s,background 0.2s" }}>
+            {/* Gradient card with icon */}
+            <div style={{ height:160,position:"relative",overflow:"hidden",
+              background:VEHICLE_GRADIENTS[v.type]||T.card,
+              display:"flex",alignItems:"center",justifyContent:"center" }}>
+              {/* Decorative circles */}
+              <div style={{ position:"absolute",top:-30,right:-30,width:140,height:140,
+                borderRadius:"50%",background:"rgba(74,222,128,0.06)" }}/>
+              <div style={{ position:"absolute",bottom:-20,left:-20,width:100,height:100,
+                borderRadius:"50%",background:"rgba(74,222,128,0.04)" }}/>
+              {/* Big vehicle icon */}
+              <div style={{ fontSize:90,filter:"drop-shadow(0 4px 16px rgba(74,222,128,0.3))",
+                position:"relative",zIndex:1 }}>{v.icon}</div>
+              {/* Charging bolt overlay */}
+              <div style={{ position:"absolute",bottom:12,right:14,
+                background:"rgba(74,222,128,0.15)",borderRadius:10,padding:"4px 10px",
+                display:"flex",alignItems:"center",gap:6,border:`1px solid ${T.greenDim}` }}>
+                {Icon.bolt(T.green)}
+                <span style={{ fontSize:11,color:T.green,fontWeight:600 }}>Solar Powered</span>
               </div>
               {selected?.type===v.type && (
-                <div style={{ position:"absolute",top:12,right:12,width:30,height:30,borderRadius:"50%",background:T.green,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                <div style={{ position:"absolute",top:12,right:12,width:30,height:30,
+                  borderRadius:"50%",background:T.green,
+                  display:"flex",alignItems:"center",justifyContent:"center" }}>
                   {Icon.check("#000")}
                 </div>
               )}
             </div>
-            <div style={{ padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-              <div style={{ fontWeight:800,fontSize:19,color:T.green }}>{v.price}</div>
+            <div style={{ padding:"12px 16px" }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4 }}>
+                <div>
+                  <div style={{ fontWeight:800,fontSize:18,color:T.text }}>{v.type}</div>
+                  <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>{v.desc}</div>
+                </div>
+                <div style={{ fontWeight:800,fontSize:20,color:T.green }}>{v.price}</div>
+              </div>
               <Badge color={T.blue}>+ 20L Clean Water</Badge>
             </div>
           </div>
