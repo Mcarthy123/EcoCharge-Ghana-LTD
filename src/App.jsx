@@ -393,7 +393,7 @@ const NavBar = ({ active, go }) => {
   );
 };
 
-const Header = ({ title, subtitle, onBack, onMenu }) => (
+const Header = ({ title, subtitle, onBack, onMenu, darkMode, setDarkMode }) => (
   <div style={{ padding:"14px 18px 13px",display:"flex",alignItems:"center",gap:12,
     borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
     {onBack
@@ -408,6 +408,15 @@ const Header = ({ title, subtitle, onBack, onMenu }) => (
       <div style={{ fontWeight:800,fontSize:16,color:T.text,lineHeight:1.2 }}>{title}</div>
       {subtitle && <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{subtitle}</div>}
     </div>
+    {/* Dark/Light mode toggle */}
+    {setDarkMode && (
+      <button onClick={()=>setDarkMode(d=>!d)} className="tap"
+        style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:20,
+          padding:"5px 10px",cursor:"pointer",fontSize:14,display:"flex",
+          alignItems:"center",gap:4 }}>
+        {darkMode ? "☀️" : "🌙"}
+      </button>
+    )}
     <LogoImg size={34}/>
   </div>
 );
@@ -937,6 +946,9 @@ function BookingScreen({ go, station, vehicle, user }) {
   };
 
   const slots = generateSlots();
+  const [selectedSlotIndex, setSelectedSlotIndex] = useState(0);
+  const selectedSlot = slots[selectedSlotIndex] || slots[0];
+
   const durations = [
     { label:"30 min",  value:30,  price:0    },
     { label:"1 hour",  value:60,  price:5    },
@@ -944,7 +956,6 @@ function BookingScreen({ go, station, vehicle, user }) {
     { label:"3 hours", value:180, price:15   },
   ];
 
-  const [selectedSlot,     setSelectedSlot]     = useState(slots[0]);
   const [selectedDuration, setSelectedDuration] = useState(durations[1]);
   const [payMethod,        setPayMethod]         = useState("now");
   const [name,             setName]              = useState(user?.name||"");
@@ -1100,12 +1111,12 @@ function BookingScreen({ go, station, vehicle, user }) {
           </div>
           <div style={{ display:"flex",gap:8,overflowX:"auto",paddingBottom:4 }}>
             {slots.slice(0,12).map((slot,i)=>(
-              <button key={i} onClick={()=>setSelectedSlot(slot)} className="tap"
+              <button key={i} onClick={()=>setSelectedSlotIndex(i)} className="tap"
                 style={{ flexShrink:0,padding:"8px 14px",borderRadius:10,
-                  background:selectedSlot===slot?T.green:T.bg,
-                  border:`1px solid ${selectedSlot===slot?T.green:T.border}`,
-                  color:selectedSlot===slot?"#000":T.text,
-                  fontSize:13,fontWeight:selectedSlot===slot?700:500,
+                  background:selectedSlotIndex===i?T.green:T.bg,
+                  border:`1px solid ${selectedSlotIndex===i?T.green:T.border}`,
+                  color:selectedSlotIndex===i?"#000":T.text,
+                  fontSize:13,fontWeight:selectedSlotIndex===i?700:500,
                   cursor:"pointer",fontFamily:"inherit" }}>
                 {formatTime(slot)}
               </button>
@@ -1232,6 +1243,14 @@ export default function App() {
   const [stations, setStations] = useState(FALLBACK_STATIONS);
   const [user,     setUser]     = useState(null);
   const [drawer,   setDrawer]   = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
+
+  // Update theme based on mode
+  const theme = darkMode ? T : {
+    ...T,
+    bg:"#f8fafc", card:"#ffffff", border:"#e2e8f0",
+    text:"#0f1117", muted:"#64748b", mutedLight:"#94a3b8",
+  };
 
   const go = s => { setScreen(s); setDrawer(false); };
 
@@ -1242,7 +1261,13 @@ export default function App() {
 
   const handleAuthSuccess = (u) => { setUser(u); go("home"); };
 
-  const props = { go, stations, station:station||stations[0], setStation, user, setUser, vehicle, setVehicle, onMenu:()=>setDrawer(true) };
+  const props = {
+    go, stations, station:station||stations[0],
+    setStation, user, setUser,
+    vehicle, setVehicle,
+    onMenu:()=>setDrawer(true),
+    darkMode, setDarkMode,
+  };
 
   if (screen==="splash") return (
     <><style>{CSS}</style>
@@ -1272,7 +1297,8 @@ export default function App() {
   return (
     <>
       <style>{CSS}</style>
-      <div style={{ position:"relative",height:"100vh",overflow:"hidden",background:T.bg }}>
+      <div style={{ position:"relative",height:"100vh",overflow:"hidden",
+        background:darkMode?T.bg:"#f8fafc" }}>
         <Drawer open={drawer} onClose={()=>setDrawer(false)} go={go} user={user} onLogout={()=>{ setUser(null); go("splash"); }}/>
         <div style={{ height:"100%",display:"flex",flexDirection:"column",overflow:"hidden" }}>
           {views[screen]||views.home}
