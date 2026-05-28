@@ -616,7 +616,7 @@ function VehicleScreen({ go, setVehicle }) {
           <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}>{Icon.bolt(T.green)}<span style={{ fontSize:13,color:T.text }}>Full vehicle charge via solar energy</span></div>
           <div style={{ display:"flex",alignItems:"center",gap:10 }}>{Icon.water(T.blue)}<span style={{ fontSize:13,color:T.text }}>20L clean desalinated water — free</span></div>
         </div>
-        <button onClick={()=>{ if(selected){ setVehicle(selected); go("payment"); } }} className="tap"
+        <button onClick={()=>{ if(selected){ setVehicle(selected); go("booking"); } }} className="tap"
           style={{ width:"100%",background:selected?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.border,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:700,color:selected?"#000":T.muted,cursor:selected?"pointer":"not-allowed",marginBottom:16,transition:"all 0.2s",fontFamily:"inherit" }}>
           {selected?`Continue with ${selected.type}  →`:"Select a vehicle to continue"}
         </button>
@@ -838,6 +838,313 @@ function AboutScreen({ go, onMenu }) {
   );
 }
 
+// ── BOOKING SCREEN ────────────────────────────────────────────
+function BookingScreen({ go, station, vehicle, user }) {
+  const s = station || FALLBACK_STATIONS[0];
+  const now = new Date();
+
+  // Generate time slots from now until end of day (every 30 mins)
+  const generateSlots = () => {
+    const slots = [];
+    const start = new Date();
+    start.setMinutes(Math.ceil(start.getMinutes() / 30) * 30, 0, 0);
+    const end = new Date();
+    end.setHours(22, 0, 0, 0);
+    while (start <= end) {
+      slots.push(new Date(start));
+      start.setMinutes(start.getMinutes() + 30);
+    }
+    return slots;
+  };
+
+  const slots = generateSlots();
+  const durations = [
+    { label:"30 min",  value:30,  price:0    },
+    { label:"1 hour",  value:60,  price:5    },
+    { label:"2 hours", value:120, price:10   },
+    { label:"3 hours", value:180, price:15   },
+  ];
+
+  const [selectedSlot,     setSelectedSlot]     = useState(slots[0]);
+  const [selectedDuration, setSelectedDuration] = useState(durations[1]);
+  const [payMethod,        setPayMethod]         = useState("now");
+  const [name,             setName]              = useState(user?.name||"");
+  const [phone,            setPhone]             = useState("");
+  const [email,            setEmail]             = useState(user?.email||"");
+  const [booked,           setBooked]            = useState(false);
+  const [booking,          setBooking]           = useState(null);
+  const [loading,          setLoading]           = useState(false);
+  const [error,            setError]             = useState("");
+
+  const baseAmount = vehicle?.amount || 175;
+  const totalAmount = baseAmount + selectedDuration.price;
+
+  const formatTime = (d) => d.toLocaleTimeString("en-GH", { hour:"2-digit", minute:"2-digit", hour12:true });
+  const formatEndTime = (d, mins) => {
+    const end = new Date(d.getTime() + mins * 60000);
+    return formatTime(end);
+  };
+
+  const generateRef = () => `ECO-BK-${Date.now().toString(36).toUpperCase()}`;
+
+  const handleBook = async () => {
+    if (!name) { setError("Please enter your name"); return; }
+    if (!phone || phone.length < 10) { setError("Please enter a valid phone number"); return; }
+    if (!email || !email.includes("@")) { setError("Please enter a valid email"); return; }
+    setError(""); setLoading(true);
+
+    const ref = generateRef();
+    const bookingData = {
+      reference:    ref,
+      station:      s.name,
+      city:         s.city,
+      vehicle:      vehicle?.type || "Car",
+      slot_time:    selectedSlot.toISOString(),
+      duration_min: selectedDuration.value,
+      amount:       totalAmount,
+      name,
+      phone,
+      email,
+      pay_method:   payMethod,
+      status:       payMethod === "now" ? "pending_payment" : "confirmed",
+      created_at:   new Date().toISOString(),
+    };
+
+    // Save to Supabase
+    if (SUPABASE_URL) {
+      await sb("bookings", {
+        method: "POST",
+        headers: { Prefer:"return=minimal" },
+        body: JSON.stringify(bookingData),
+      }).catch(()=>{});
+    }
+
+    setBooking({ ...bookingData });
+
+    if (payMethod === "now") {
+      setLoading(false);
+      // Redirect to Paystack
+      window.location.href = `https://paystack.shop/pay/bldaqwywt5?email=${encodeURIComponent(email)}&amount=${totalAmount * 100}`;
+    } else {
+      setLoading(false);
+      setBooked(true);
+    }
+  };
+
+  if (booked && booking) return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Booking Confirmed!" onBack={()=>go("home")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 0" }}>
+        <div className="fade" style={{ background:"#0a1f12",border:`1px solid ${T.greenDim}`,
+          borderRadius:18,padding:24,textAlign:"center",marginBottom:16 }}>
+          <div style={{ width:64,height:64,borderRadius:"50%",background:T.green,
+            display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px" }}>
+            {Icon.check("#000")}
+          </div>
+          <div style={{ color:T.green,fontWeight:800,fontSize:20,marginBottom:6 }}>Booking Confirmed!</div>
+          <div style={{ color:T.mutedLight,fontSize:13,marginBottom:16 }}>Your slot is reserved</div>
+          <div style={{ background:"rgba(74,222,128,0.08)",borderRadius:12,padding:"12px 16px",
+            border:`1px solid ${T.greenDim}`,marginBottom:12 }}>
+            <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Booking Reference</div>
+            <div style={{ fontWeight:800,fontSize:18,color:T.green,letterSpacing:1 }}>{booking.reference}</div>
+          </div>
+        </div>
+
+        {/* Booking details */}
+        <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:12,
+          border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}>Booking Details</div>
+          {[
+            { label:"Station",   value:booking.station },
+            { label:"Vehicle",   value:booking.vehicle },
+            { label:"Time",      value:`${formatTime(new Date(booking.slot_time))} — ${formatEndTime(new Date(booking.slot_time), booking.duration_min)}` },
+            { label:"Duration",  value:`${booking.duration_min} minutes` },
+            { label:"Name",      value:booking.name },
+            { label:"Phone",     value:booking.phone },
+            { label:"Payment",   value:"Pay on arrival" },
+            { label:"Amount",    value:`GH₵${booking.amount}` },
+          ].map(r=>(
+            <div key={r.label} style={{ display:"flex",justifyContent:"space-between",
+              marginBottom:8,paddingBottom:8,borderBottom:`1px solid ${T.border}30` }}>
+              <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
+              <span style={{ color:T.text,fontWeight:600,fontSize:13 }}>{r.value}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ background:T.card,borderRadius:14,padding:"13px 16px",marginBottom:16,
+          border:`1px solid ${T.border}` }}>
+          <div style={{ fontSize:12,color:T.muted,marginBottom:6,fontWeight:600 }}>Important</div>
+          <div style={{ fontSize:13,color:T.text,lineHeight:1.7 }}>
+            Please arrive at <strong style={{ color:T.green }}>{s.name}</strong> by{" "}
+            <strong style={{ color:T.green }}>{formatTime(new Date(booking.slot_time))}</strong>.
+            Show your reference number <strong style={{ color:T.green }}>{booking.reference}</strong> to the attendant.
+          </div>
+        </div>
+
+        <button onClick={()=>go("home")} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,
+            border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:700,
+            color:"#000",cursor:"pointer",marginBottom:20,fontFamily:"inherit" }}>
+          Back to Map
+        </button>
+      </div>
+      <NavBar active="Stations" go={go}/>
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Book a Slot" subtitle={`${s.name} · ${s.city}`} onBack={()=>go("vehicles")}/>
+
+      <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 0" }}>
+
+        {/* Station + vehicle summary */}
+        <div className="fade" style={{ background:"linear-gradient(135deg,#0a1f12,#0d2d1a)",
+          borderRadius:16,padding:"14px 16px",marginBottom:14,border:`1px solid ${T.greenDim}`,
+          display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Booking for</div>
+            <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{s.name}</div>
+            <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>{vehicle?.type||"Car"} · {s.city}</div>
+          </div>
+          <div style={{ fontSize:40 }}>
+            {vehicle?.type==="Car"?"🚗":vehicle?.type==="Scooter"?"🛵":"🛺"}
+          </div>
+        </div>
+
+        {/* Time slot picker */}
+        <div className="fade1" style={{ background:T.card,borderRadius:16,padding:"14px 16px",
+          marginBottom:12,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}>
+            Select Time Slot — Today
+          </div>
+          <div style={{ display:"flex",gap:8,overflowX:"auto",paddingBottom:4 }}>
+            {slots.slice(0,12).map((slot,i)=>(
+              <button key={i} onClick={()=>setSelectedSlot(slot)} className="tap"
+                style={{ flexShrink:0,padding:"8px 14px",borderRadius:10,
+                  background:selectedSlot===slot?T.green:T.bg,
+                  border:`1px solid ${selectedSlot===slot?T.green:T.border}`,
+                  color:selectedSlot===slot?"#000":T.text,
+                  fontSize:13,fontWeight:selectedSlot===slot?700:500,
+                  cursor:"pointer",fontFamily:"inherit" }}>
+                {formatTime(slot)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Duration picker */}
+        <div className="fade1" style={{ background:T.card,borderRadius:16,padding:"14px 16px",
+          marginBottom:12,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}>
+            Charging Duration
+          </div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+            {durations.map(d=>(
+              <button key={d.value} onClick={()=>setSelectedDuration(d)} className="tap"
+                style={{ padding:"12px",borderRadius:12,
+                  background:selectedDuration===d?"#0d2010":T.bg,
+                  border:`1px solid ${selectedDuration===d?T.green:T.border}`,
+                  cursor:"pointer",fontFamily:"inherit",textAlign:"left" }}>
+                <div style={{ fontWeight:700,fontSize:15,color:selectedDuration===d?T.green:T.text }}>
+                  {d.label}
+                </div>
+                {d.price>0 && (
+                  <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>+GH₵{d.price}</div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Summary */}
+        <div className="fade2" style={{ background:T.card,borderRadius:16,padding:"14px 16px",
+          marginBottom:12,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:10 }}>Slot Summary</div>
+          <Divider/>
+          {[
+            { label:"Station",   value:s.name },
+            { label:"Time",      value:`${formatTime(selectedSlot)} — ${formatEndTime(selectedSlot, selectedDuration.value)}` },
+            { label:"Duration",  value:selectedDuration.label },
+            { label:"Vehicle",   value:vehicle?.type||"Car" },
+            { label:"Water",     value:"20L Clean Bundle" },
+          ].map(r=>(
+            <div key={r.label} style={{ display:"flex",justifyContent:"space-between",marginBottom:8 }}>
+              <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
+              <span style={{ color:T.text,fontWeight:600,fontSize:13 }}>{r.value}</span>
+            </div>
+          ))}
+          <Divider/>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+            <span style={{ fontWeight:700,color:T.text }}>Total</span>
+            <span style={{ fontWeight:800,fontSize:22,color:T.green }}>GH₵{totalAmount}</span>
+          </div>
+        </div>
+
+        {/* Contact info */}
+        <div className="fade2" style={{ background:T.card,borderRadius:16,padding:"14px 16px",
+          marginBottom:12,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}>Your Details</div>
+          {[
+            { placeholder:"Full name",      value:name,  set:setName,  type:"text"  },
+            { placeholder:"Phone number",   value:phone, set:setPhone, type:"tel"   },
+            { placeholder:"Email address",  value:email, set:setEmail, type:"email" },
+          ].map((f,i)=>(
+            <input key={i} type={f.type} placeholder={f.placeholder} value={f.value}
+              onChange={e=>{ f.set(e.target.value); setError(""); }}
+              style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,
+                borderRadius:10,padding:"12px 14px",color:T.text,fontSize:14,
+                marginBottom:10 }}/>
+          ))}
+        </div>
+
+        {/* Payment method */}
+        <div className="fade3" style={{ background:T.card,borderRadius:16,padding:"14px 16px",
+          marginBottom:12,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}>Payment</div>
+          {[
+            { id:"now",    label:"Pay now to confirm",    sub:"Instant booking via Paystack" },
+            { id:"arrive", label:"Pay on arrival",        sub:"Reserve now, pay at station"  },
+          ].map(m=>(
+            <div key={m.id} className="tap rowcard" onClick={()=>setPayMethod(m.id)}
+              style={{ display:"flex",alignItems:"center",gap:14,padding:"13px 12px",
+                borderRadius:12,marginBottom:8,
+                background:payMethod===m.id?"#132010":"transparent",
+                border:`1px solid ${payMethod===m.id?T.greenDim:T.border}` }}>
+              <div style={{ flex:1 }}>
+                <div style={{ color:T.text,fontSize:14,fontWeight:600 }}>{m.label}</div>
+                <div style={{ color:T.muted,fontSize:11,marginTop:2 }}>{m.sub}</div>
+              </div>
+              <div style={{ width:20,height:20,borderRadius:"50%",
+                border:`2px solid ${payMethod===m.id?T.green:T.border}`,
+                display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                {payMethod===m.id&&<div style={{ width:10,height:10,borderRadius:"50%",background:T.green }}/>}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {error && (
+          <div style={{ background:"rgba(248,113,113,0.08)",border:`1px solid rgba(248,113,113,0.3)`,
+            borderRadius:10,padding:"11px 14px",marginBottom:12,color:T.red,fontSize:12 }}>
+            {error}
+          </div>
+        )}
+
+        <button onClick={handleBook} disabled={loading} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,
+            border:"none",borderRadius:14,padding:"16px",fontSize:16,fontWeight:800,
+            color:"#000",cursor:"pointer",marginBottom:20,fontFamily:"inherit",
+            opacity:loading?0.7:1 }}>
+          {loading ? "Processing…" : payMethod==="now" ? `Pay GH₵${totalAmount} & Confirm` : `Reserve Slot — Pay on Arrival`}
+        </button>
+      </div>
+      <NavBar active="Stations" go={go}/>
+    </div>
+  );
+}
+
 export default function App() {
   const [screen,   setScreen]   = useState("home");
   const [authMode, setAuthMode] = useState("login");
@@ -877,6 +1184,7 @@ export default function App() {
     home:     <HomeScreen    {...props}/>,
     detail:   <DetailScreen  {...props}/>,
     vehicles: <VehicleScreen {...props}/>,
+    booking:  <BookingScreen {...props}/>,
     payment:  <PaymentScreen {...props}/>,
     profile:  <ProfileScreen {...props}/>,
     about:    <AboutScreen   {...props}/>,
@@ -894,3 +1202,9 @@ export default function App() {
     </>
   );
 }
+
+// ============================================================
+// BOOKING SCREEN — Add this to your App.jsx
+// Place BookingScreen component before the export default App
+// and add it to the views object as: booking: <BookingScreen {...props}/>
+// ============================================================
