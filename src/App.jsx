@@ -394,8 +394,9 @@ const NavBar = ({ active, go }) => {
 };
 
 const Header = ({ title, subtitle, onBack, onMenu, darkMode, setDarkMode }) => (
-  <div style={{ padding:"14px 18px 13px",display:"flex",alignItems:"center",gap:12,
-    borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
+  <div style={{ padding:"14px 18px 13px",display:"flex",alignItems:"center",gap:10,
+    borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg,zIndex:500,
+    position:"relative" }}>
     {onBack
       ? <button onClick={onBack} className="tap" style={{ background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",padding:4 }}>{Icon.back()}</button>
       : <button onClick={onMenu} className="tap" style={{ background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",gap:5,padding:4 }}>
@@ -408,16 +409,14 @@ const Header = ({ title, subtitle, onBack, onMenu, darkMode, setDarkMode }) => (
       <div style={{ fontWeight:800,fontSize:16,color:T.text,lineHeight:1.2 }}>{title}</div>
       {subtitle && <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{subtitle}</div>}
     </div>
-    {/* Dark/Light mode toggle */}
-    {setDarkMode && (
-      <button onClick={()=>setDarkMode(d=>!d)} className="tap"
-        style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:20,
-          padding:"5px 10px",cursor:"pointer",fontSize:14,display:"flex",
-          alignItems:"center",gap:4 }}>
-        {darkMode ? "☀️" : "🌙"}
-      </button>
-    )}
-    <LogoImg size={34}/>
+    {/* Dark/Light toggle — always visible */}
+    <button onClick={()=>setDarkMode&&setDarkMode(d=>!d)} className="tap"
+      style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:20,
+        width:36,height:36,cursor:"pointer",fontSize:16,display:"flex",
+        alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+      {darkMode?"☀️":"🌙"}
+    </button>
+    <LogoImg size={32}/>
   </div>
 );
 
@@ -521,8 +520,9 @@ function HomeScreen({ go, stations, setStation, onMenu, user }) {
       )}
 
       {/* Real Leaflet Map */}
-      <div style={{ flex:1,position:"relative",margin:"12px",borderRadius:18,overflow:"hidden" }}>
-        <div ref={mapRef} style={{ width:"100%",height:"100%" }}/>
+      <div style={{ flex:1,position:"relative",margin:"0 12px 12px",borderRadius:18,
+        overflow:"hidden",zIndex:0 }}>
+        <div ref={mapRef} style={{ width:"100%",height:"100%",zIndex:0 }}/>
 
         {/* Station count pill */}
         <div style={{ position:"absolute",top:14,right:14,zIndex:1000,
@@ -956,7 +956,8 @@ function BookingScreen({ go, station, vehicle, user }) {
     { label:"3 hours", value:180, price:15   },
   ];
 
-  const [selectedDuration, setSelectedDuration] = useState(durations[1]);
+  const [selectedDurationIndex, setSelectedDurationIndex] = useState(1);
+  const selectedDuration = durations[selectedDurationIndex];
   const [payMethod,        setPayMethod]         = useState("now");
   const [name,             setName]              = useState(user?.name||"");
   const [phone,            setPhone]             = useState("");
@@ -1131,13 +1132,14 @@ function BookingScreen({ go, station, vehicle, user }) {
             Charging Duration
           </div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
-            {durations.map(d=>(
-              <button key={d.value} onClick={()=>setSelectedDuration(d)} className="tap"
+            {durations.map((d,i)=>(
+              <button key={i} onClick={()=>setSelectedDurationIndex(i)} className="tap"
                 style={{ padding:"12px",borderRadius:12,
-                  background:selectedDuration===d?"#0d2010":T.bg,
-                  border:`1px solid ${selectedDuration===d?T.green:T.border}`,
+                  background:selectedDurationIndex===i?"#0d2010":T.bg,
+                  border:`1px solid ${selectedDurationIndex===i?T.green:T.border}`,
                   cursor:"pointer",fontFamily:"inherit",textAlign:"left" }}>
-                <div style={{ fontWeight:700,fontSize:15,color:selectedDuration===d?T.green:T.text }}>
+                <div style={{ fontWeight:700,fontSize:15,
+                  color:selectedDurationIndex===i?T.green:T.text }}>
                   {d.label}
                 </div>
                 {d.price>0 && (
