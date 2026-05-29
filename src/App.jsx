@@ -1014,11 +1014,12 @@ function BookingScreen({ go, station, vehicle, user }) {
 
     if (payMethod === "now") {
       setLoading(false);
-      // Redirect to Paystack
+      // Redirect to Paystack — QR shown after return
       window.location.href = `https://paystack.shop/pay/bldaqwywt5?email=${encodeURIComponent(email)}&amount=${totalAmount * 100}`;
     } else {
       setLoading(false);
-      setBooked(true);
+      // Go to QR screen directly for pay on arrival
+      go("qr");
     }
   };
 
@@ -1238,7 +1239,7 @@ function BookingScreen({ go, station, vehicle, user }) {
 }
 
 export default function App() {
-  const [screen,   setScreen]   = useState("home");
+  const [screen,   setScreen]   = useState("splash");
   const [authMode, setAuthMode] = useState("login");
   const [station,  setStation]  = useState(null);
   const [vehicle,  setVehicle]  = useState(null);
@@ -1246,29 +1247,36 @@ export default function App() {
   const [user,     setUser]     = useState(null);
   const [drawer,   setDrawer]   = useState(false);
   const [darkMode, setDarkMode] = useState(true);
-
-  // Update theme based on mode
-  const theme = darkMode ? T : {
-    ...T,
-    bg:"#f8fafc", card:"#ffffff", border:"#e2e8f0",
-    text:"#0f1117", muted:"#64748b", mutedLight:"#94a3b8",
-  };
+  const [booking,  setBooking]  = useState(null);
 
   const go = s => { setScreen(s); setDrawer(false); };
+
+  // Force login for protected screens
+  const goSecure = (s) => {
+    const open = ["splash","auth","about","home","detail"];
+    if (!user && !open.includes(s)) { setAuthMode("login"); go("auth"); return; }
+    go(s);
+  };
 
   useEffect(()=>{
     if (!SUPABASE_URL) return;
     sb("stations?select=*&order=id").then(d=>{ if(d?.length) setStations(d); });
+    // Check for Paystack return with reference
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("reference")||params.get("trxref");
+    if (ref) { window.history.replaceState({},"",window.location.pathname); go("qr"); }
   },[]);
 
   const handleAuthSuccess = (u) => { setUser(u); go("home"); };
 
   const props = {
-    go, stations, station:station||stations[0],
+    go: goSecure, stations,
+    station: station||stations[0],
     setStation, user, setUser,
     vehicle, setVehicle,
-    onMenu:()=>setDrawer(true),
+    onMenu: ()=>setDrawer(true),
     darkMode, setDarkMode,
+    booking, setBooking,
   };
 
   if (screen==="splash") return (
@@ -1292,16 +1300,27 @@ export default function App() {
     vehicles: <VehicleScreen {...props}/>,
     booking:  <BookingScreen {...props}/>,
     payment:  <PaymentScreen {...props}/>,
+    qr:       <QRScreen      {...props}/>,
+    verify:   <VerifyScreen  {...props}/>,
     profile:  <ProfileScreen {...props}/>,
     about:    <AboutScreen   {...props}/>,
   };
 
+  // Live dark/light mode applied to body
+  document.body.style.background = darkMode ? "#0f1117" : "#f0f4f8";
+
   return (
     <>
       <style>{CSS}</style>
+      <style>{`
+        body { background: ${darkMode?"#0f1117":"#f0f4f8"} !important; }
+        .eco-card { background: ${darkMode?"#1a1d27":"#ffffff"} !important; }
+      `}</style>
       <div style={{ position:"relative",height:"100vh",overflow:"hidden",
-        background:darkMode?T.bg:"#f8fafc" }}>
-        <Drawer open={drawer} onClose={()=>setDrawer(false)} go={go} user={user} onLogout={()=>{ setUser(null); go("splash"); }}/>
+        background:darkMode?"#0f1117":"#f0f4f8" }}>
+        <Drawer open={drawer} onClose={()=>setDrawer(false)}
+          go={goSecure} user={user}
+          onLogout={()=>{ setUser(null); go("splash"); }}/>
         <div style={{ height:"100%",display:"flex",flexDirection:"column",overflow:"hidden" }}>
           {views[screen]||views.home}
         </div>
@@ -1310,8 +1329,171 @@ export default function App() {
   );
 }
 
-// ============================================================
-// BOOKING SCREEN — Add this to your App.jsx
-// Place BookingScreen component before the export default App
-// and add it to the views object as: booking: <BookingScreen {...props}/>
-// ============================================================
+// ── QR CODE SCREEN ─────────────────────────────────────────
+function QRScreen({ go, booking, darkMode, setDarkMode }) {
+  const b = booking;
+
+  if (!b) return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Charging Pass" onBack={()=>go("home")} darkMode={darkMode} setDarkMode={setDarkMode}/>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:24,textAlign:"center" }}>
+        <div>
+          <div style={{ fontSize:40,marginBottom:14 }}>🎫</div>
+          <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>No Active Booking</div>
+          <div style={{ color:T.muted,fontSize:13,marginBottom:20 }}>Complete a booking to get your QR charging pass</div>
+          <button onClick={()=>go("home")} className="tap"
+            style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",
+              borderRadius:12,padding:"12px 24px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+            Find a Station
+          </button>
+        </div>
+      </div>
+      <NavBar active="Stations" go={go}/>
+    </div>
+  );
+
+  const qrData = encodeURIComponent(`${b.reference}|${b.station}|${b.vehicle}|PAID`);
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${qrData}&bgcolor=0f1117&color=4ade80&margin=10`;
+  const formatTime = (d) => new Date(d).toLocaleTimeString("en-GH",{ hour:"2-digit",minute:"2-digit",hour12:true });
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Your Charging Pass" subtitle="Show this to the attendant"
+        onBack={()=>go("home")} darkMode={darkMode} setDarkMode={setDarkMode}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 0" }}>
+        <div className="fade" style={{ background:"linear-gradient(135deg,#0a1f12,#0d2d1a)",
+          borderRadius:20,padding:24,textAlign:"center",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
+          <div style={{ fontSize:12,color:T.muted,marginBottom:4 }}>Booking Reference</div>
+          <div style={{ fontWeight:800,fontSize:18,color:T.green,letterSpacing:1,marginBottom:16 }}>{b.reference}</div>
+          <div style={{ background:"#0f1117",borderRadius:16,padding:12,display:"inline-block",
+            border:`2px solid ${T.greenDim}`,marginBottom:12 }}>
+            <img src={qrUrl} alt="QR Code" width={180} height={180} style={{ borderRadius:8,display:"block" }}/>
+          </div>
+          <div style={{ fontSize:12,color:T.muted }}>Attendant scans this to activate your charger</div>
+        </div>
+
+        <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:12,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}>Session Details</div>
+          {[
+            { label:"Station",   value:b.station },
+            { label:"Vehicle",   value:b.vehicle },
+            { label:"Duration",  value:`${b.duration_min} min` },
+            { label:"Amount",    value:`GH₵${b.amount}` },
+            { label:"Payment",   value:b.pay_method==="now"?"Paid ✅":"Pay on Arrival" },
+          ].map(r=>(
+            <div key={r.label} style={{ display:"flex",justifyContent:"space-between",
+              marginBottom:8,paddingBottom:8,borderBottom:`1px solid ${T.border}30` }}>
+              <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
+              <span style={{ color:T.text,fontWeight:600,fontSize:13 }}>{r.value}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Attendant verify link */}
+        <button onClick={()=>go("verify")} className="tap"
+          style={{ width:"100%",background:T.card,border:`1px solid ${T.border}`,
+            borderRadius:14,padding:"13px",fontSize:13,fontWeight:600,
+            color:T.mutedLight,cursor:"pointer",marginBottom:12,fontFamily:"inherit" }}>
+          Attendant Verification Portal →
+        </button>
+
+        <button onClick={()=>go("home")} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,
+            border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:700,
+            color:"#000",cursor:"pointer",marginBottom:20,fontFamily:"inherit" }}>
+          Back to Home
+        </button>
+      </div>
+      <NavBar active="Stations" go={go}/>
+    </div>
+  );
+}
+
+// ── VERIFY SCREEN (attendants) ──────────────────────────────
+function VerifyScreen({ go, darkMode, setDarkMode }) {
+  const [code,    setCode]    = useState("");
+  const [result,  setResult]  = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState("");
+
+  const verify = async () => {
+    if (!code.trim()) { setError("Enter a booking reference"); return; }
+    setLoading(true); setError(""); setResult(null);
+    try {
+      const ref = code.trim().toUpperCase();
+      const data = await sb(`bookings?reference=eq.${ref}&select=*`);
+      if (!data || data.length===0) {
+        setError("Booking not found. Check reference and try again.");
+      } else {
+        const b = data[0];
+        if (SUPABASE_URL) {
+          await sb(`bookings?id=eq.${b.id}`,{
+            method:"PATCH",
+            headers:{ Prefer:"return=minimal" },
+            body: JSON.stringify({ verified:true, verified_at:new Date().toISOString() }),
+          });
+        }
+        setResult(b);
+      }
+    } catch(e) { setError("Verification failed. Check internet."); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Verify Booking" subtitle="Attendant portal"
+        onBack={()=>go("home")} darkMode={darkMode} setDarkMode={setDarkMode}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 0" }}>
+        <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:12,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}>Enter Booking Reference</div>
+          <input placeholder="e.g. ECO-BK-ABC123" value={code}
+            onChange={e=>{ setCode(e.target.value.toUpperCase()); setError(""); setResult(null); }}
+            style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,
+              borderRadius:10,padding:"14px",color:T.text,fontSize:16,
+              fontFamily:"monospace",letterSpacing:1,marginBottom:12 }}/>
+          <button onClick={verify} disabled={loading} className="tap"
+            style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,
+              border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,
+              color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+            {loading?"Verifying…":"Verify Booking"}
+          </button>
+        </div>
+
+        {error && <div style={{ background:"rgba(248,113,113,0.08)",border:`1px solid rgba(248,113,113,0.3)`,
+          borderRadius:12,padding:"12px 16px",marginBottom:12,color:T.red,fontSize:13 }}>{error}</div>}
+
+        {result && (
+          <div className="fade" style={{ background:"#0a1f12",border:`1px solid ${T.greenDim}`,
+            borderRadius:16,padding:"16px",marginBottom:12 }}>
+            <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:14 }}>
+              <div style={{ width:48,height:48,borderRadius:"50%",background:T.green,
+                display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0 }}>✅</div>
+              <div>
+                <div style={{ fontWeight:800,fontSize:16,color:T.green }}>VERIFIED — Activate Charger</div>
+                <div style={{ fontSize:12,color:T.muted }}>Booking confirmed and valid</div>
+              </div>
+            </div>
+            {[
+              { label:"Name",     value:result.name     },
+              { label:"Phone",    value:result.phone    },
+              { label:"Vehicle",  value:result.vehicle  },
+              { label:"Duration", value:`${result.duration_min} min` },
+              { label:"Amount",   value:`GH₵${result.amount}` },
+              { label:"Payment",  value:result.pay_method==="now"?"PAID ✅":"Collect GH₵"+result.amount },
+            ].map(r=>(
+              <div key={r.label} style={{ display:"flex",justifyContent:"space-between",
+                marginBottom:8,paddingBottom:8,borderBottom:`1px solid ${T.border}30` }}>
+                <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
+                <span style={{ color:T.text,fontWeight:600,fontSize:13 }}>{r.value}</span>
+              </div>
+            ))}
+            <div style={{ background:T.green,borderRadius:12,padding:"14px",textAlign:"center",marginTop:8 }}>
+              <div style={{ fontWeight:800,fontSize:16,color:"#000" }}>⚡ ACTIVATE CHARGER NOW</div>
+            </div>
+          </div>
+        )}
+      </div>
+      <NavBar active="More" go={go}/>
+    </div>
+  );
+}
