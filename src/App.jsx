@@ -393,32 +393,36 @@ const NavBar = ({ active, go }) => {
   );
 };
 
-const Header = ({ title, subtitle, onBack, onMenu, darkMode, setDarkMode }) => (
+const Header = ({ title, subtitle, onBack, onMenu, darkMode, setDarkMode, DT: dt }) => {
+  const C = dt || T; // use passed theme or fallback to T
+  return (
   <div style={{ padding:"14px 18px 13px",display:"flex",alignItems:"center",gap:10,
-    borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg,zIndex:500,
+    borderBottom:`1px solid ${C.border}`,flexShrink:0,background:C.bg,zIndex:500,
     position:"relative" }}>
     {onBack
-      ? <button onClick={onBack} className="tap" style={{ background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",padding:4 }}>{Icon.back()}</button>
+      ? <button onClick={onBack} className="tap" style={{ background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",padding:4 }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill={C.text}><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
       : <button onClick={onMenu} className="tap" style={{ background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",gap:5,padding:4 }}>
-          <div style={{ width:22,height:2,background:T.mutedLight,borderRadius:2 }}/>
-          <div style={{ width:16,height:2,background:T.mutedLight,borderRadius:2 }}/>
-          <div style={{ width:22,height:2,background:T.mutedLight,borderRadius:2 }}/>
+          <div style={{ width:22,height:2,background:C.mutedLight,borderRadius:2 }}/>
+          <div style={{ width:16,height:2,background:C.mutedLight,borderRadius:2 }}/>
+          <div style={{ width:22,height:2,background:C.mutedLight,borderRadius:2 }}/>
         </button>
     }
     <div style={{ flex:1 }}>
-      <div style={{ fontWeight:800,fontSize:16,color:T.text,lineHeight:1.2 }}>{title}</div>
-      {subtitle && <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{subtitle}</div>}
+      <div style={{ fontWeight:800,fontSize:16,color:C.text,lineHeight:1.2 }}>{title}</div>
+      {subtitle && <div style={{ fontSize:10,color:C.muted,marginTop:2 }}>{subtitle}</div>}
     </div>
-    {/* Dark/Light toggle — always visible */}
+    {/* Dark/Light toggle */}
     <button onClick={()=>setDarkMode&&setDarkMode(d=>!d)} className="tap"
-      style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:20,
+      style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:20,
         width:36,height:36,cursor:"pointer",fontSize:16,display:"flex",
         alignItems:"center",justifyContent:"center",flexShrink:0 }}>
       {darkMode?"☀️":"🌙"}
     </button>
     <LogoImg size={32}/>
   </div>
-);
+);};
 
 function HomeScreen({ go, stations, setStation, onMenu, user }) {
   const mapRef = useRef(null);
@@ -1014,11 +1018,11 @@ function BookingScreen({ go, station, vehicle, user }) {
 
     if (payMethod === "now") {
       setLoading(false);
-      // Redirect to Paystack — QR shown after return
+      // Save booking to localStorage BEFORE redirecting — so it survives the redirect
+      try { localStorage.setItem("eco_booking", JSON.stringify(bookingData)); } catch(e){}
       window.location.href = `https://paystack.shop/pay/bldaqwywt5?email=${encodeURIComponent(email)}&amount=${totalAmount * 100}`;
     } else {
       setLoading(false);
-      // Go to QR screen directly for pay on arrival
       go("qr");
     }
   };
@@ -1239,19 +1243,67 @@ function BookingScreen({ go, station, vehicle, user }) {
 }
 
 export default function App() {
-  const [screen,   setScreen]   = useState("splash");
+  // ── Persist dark mode & booking across page reloads ───────
+  const [darkMode, setDarkModeRaw] = useState(()=>{
+    try { return localStorage.getItem("eco_dark") !== "false"; } catch(e){ return true; }
+  });
+  const setDarkMode = (val) => {
+    const v = typeof val === "function" ? val(darkMode) : val;
+    setDarkModeRaw(v);
+    try { localStorage.setItem("eco_dark", String(v)); } catch(e){}
+  };
+
+  const [booking, setBookingRaw] = useState(()=>{
+    try { const b = localStorage.getItem("eco_booking"); return b ? JSON.parse(b) : null; } catch(e){ return null; }
+  });
+  const setBooking = (b) => {
+    setBookingRaw(b);
+    try {
+      if (b) localStorage.setItem("eco_booking", JSON.stringify(b));
+      else localStorage.removeItem("eco_booking");
+    } catch(e){}
+  };
+
+  const [user, setUserRaw] = useState(()=>{
+    try { const u = localStorage.getItem("eco_user"); return u ? JSON.parse(u) : null; } catch(e){ return null; }
+  });
+  const setUser = (u) => {
+    setUserRaw(u);
+    try {
+      if (u) localStorage.setItem("eco_user", JSON.stringify(u));
+      else localStorage.removeItem("eco_user");
+    } catch(e){}
+  };
+
+  const [screen,   setScreen]   = useState(()=>{
+    // If user already logged in, go to home
+    try { return localStorage.getItem("eco_user") ? "home" : "splash"; } catch(e){ return "splash"; }
+  });
   const [authMode, setAuthMode] = useState("login");
   const [station,  setStation]  = useState(null);
   const [vehicle,  setVehicle]  = useState(null);
   const [stations, setStations] = useState(FALLBACK_STATIONS);
-  const [user,     setUser]     = useState(null);
   const [drawer,   setDrawer]   = useState(false);
-  const [darkMode, setDarkMode] = useState(true);
-  const [booking,  setBooking]  = useState(null);
+
+  // ── LIVE THEME ────────────────────────────────────────────
+  // This object is passed to ALL screens so dark/light affects everything
+  const DT = {
+    bg:         darkMode ? "#0f1117" : "#f0f4f8",
+    card:       darkMode ? "#1a1d27" : "#ffffff",
+    border:     darkMode ? "#2a2d3a" : "#e2e8f0",
+    green:      darkMode ? "#4ade80" : "#16a34a",
+    greenDark:  darkMode ? "#22c55e" : "#15803d",
+    greenDim:   darkMode ? "#166534" : "#bbf7d0",
+    text:       darkMode ? "#ffffff" : "#0f1117",
+    muted:      darkMode ? "#6b7280" : "#64748b",
+    mutedLight: darkMode ? "#9ca3af" : "#94a3b8",
+    blue:       darkMode ? "#38bdf8" : "#0284c7",
+    yellow:     darkMode ? "#fbbf24" : "#d97706",
+    red:        darkMode ? "#f87171" : "#dc2626",
+  };
 
   const go = s => { setScreen(s); setDrawer(false); };
 
-  // Force login for protected screens
   const goSecure = (s) => {
     const open = ["splash","auth","about","home","detail"];
     if (!user && !open.includes(s)) { setAuthMode("login"); go("auth"); return; }
@@ -1259,15 +1311,27 @@ export default function App() {
   };
 
   useEffect(()=>{
-    if (!SUPABASE_URL) return;
-    sb("stations?select=*&order=id").then(d=>{ if(d?.length) setStations(d); });
-    // Check for Paystack return with reference
+    if (SUPABASE_URL) {
+      sb("stations?select=*&order=id").then(d=>{ if(d?.length) setStations(d); });
+    }
+    // Check if returning from Paystack payment
     const params = new URLSearchParams(window.location.search);
     const ref = params.get("reference")||params.get("trxref");
-    if (ref) { window.history.replaceState({},"",window.location.pathname); go("qr"); }
+    if (ref) {
+      window.history.replaceState({},"",window.location.pathname);
+      // Booking was saved to localStorage before redirect — go to QR
+      go("qr");
+    }
   },[]);
 
   const handleAuthSuccess = (u) => { setUser(u); go("home"); };
+
+  // Dynamic CSS that changes with theme
+  const dynamicCSS = `
+    ${CSS}
+    body { background: ${DT.bg} !important; color: ${DT.text} !important; }
+    * { -webkit-tap-highlight-color: transparent; }
+  `;
 
   const props = {
     go: goSecure, stations,
@@ -1275,23 +1339,27 @@ export default function App() {
     setStation, user, setUser,
     vehicle, setVehicle,
     onMenu: ()=>setDrawer(true),
-    darkMode, setDarkMode,
+    darkMode, setDarkMode, DT,
     booking, setBooking,
   };
 
   if (screen==="splash") return (
-    <><style>{CSS}</style>
-    <SplashScreen
-      onLogin={()=>{ setAuthMode("login"); go("auth"); }}
-      onRegister={()=>{ setAuthMode("register"); go("auth"); }}
-      onGuest={()=>go("home")}/>
-    </>
+    <><style>{dynamicCSS}</style>
+    <div style={{ background:DT.bg, height:"100vh" }}>
+      <SplashScreen
+        onLogin={()=>{ setAuthMode("login"); go("auth"); }}
+        onRegister={()=>{ setAuthMode("register"); go("auth"); }}
+        onGuest={()=>go("home")}
+        DT={DT}/>
+    </div></>
   );
 
   if (screen==="auth") return (
-    <><style>{CSS}</style>
-    <AuthScreen mode={authMode} onBack={()=>go("splash")} onSuccess={handleAuthSuccess}/>
-    </>
+    <><style>{dynamicCSS}</style>
+    <div style={{ background:DT.bg, height:"100vh" }}>
+      <AuthScreen mode={authMode} onBack={()=>go("splash")}
+        onSuccess={handleAuthSuccess} DT={DT}/>
+    </div></>
   );
 
   const views = {
@@ -1306,18 +1374,10 @@ export default function App() {
     about:    <AboutScreen   {...props}/>,
   };
 
-  // Live dark/light mode applied to body
-  document.body.style.background = darkMode ? "#0f1117" : "#f0f4f8";
-
   return (
     <>
-      <style>{CSS}</style>
-      <style>{`
-        body { background: ${darkMode?"#0f1117":"#f0f4f8"} !important; }
-        .eco-card { background: ${darkMode?"#1a1d27":"#ffffff"} !important; }
-      `}</style>
-      <div style={{ position:"relative",height:"100vh",overflow:"hidden",
-        background:darkMode?"#0f1117":"#f0f4f8" }}>
+      <style>{dynamicCSS}</style>
+      <div style={{ position:"relative",height:"100vh",overflow:"hidden",background:DT.bg }}>
         <Drawer open={drawer} onClose={()=>setDrawer(false)}
           go={goSecure} user={user}
           onLogout={()=>{ setUser(null); go("splash"); }}/>
@@ -1329,7 +1389,6 @@ export default function App() {
   );
 }
 
-// ── QR CODE SCREEN ─────────────────────────────────────────
 function QRScreen({ go, booking, darkMode, setDarkMode }) {
   const b = booking;
 
