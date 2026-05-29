@@ -23,12 +23,22 @@ const sb = async (path, opts = {}) => {
   return res.ok ? res.json() : null;
 };
 
-const T = {
+// ── THEME — mutable object, updated when dark/light changes ──
+// All components use T directly — when T changes, everything updates
+const DARK = {
   bg:"#0f1117", card:"#1a1d27", border:"#2a2d3a",
   green:"#4ade80", greenDark:"#22c55e", greenDim:"#166534",
   text:"#ffffff", muted:"#6b7280", mutedLight:"#9ca3af",
   blue:"#38bdf8", yellow:"#fbbf24", red:"#f87171",
 };
+const LIGHT = {
+  bg:"#f0f4f8", card:"#ffffff", border:"#e2e8f0",
+  green:"#16a34a", greenDark:"#15803d", greenDim:"#bbf7d0",
+  text:"#0f1117", muted:"#64748b", mutedLight:"#94a3b8",
+  blue:"#0284c7", yellow:"#d97706", red:"#dc2626",
+};
+const T = { ...DARK };
+const applyTheme = (dark) => { Object.assign(T, dark ? DARK : LIGHT); };
 
 // No external images — using clean SVG illustrations that always work
 const VEHICLE_GRADIENTS = {
@@ -1245,10 +1255,15 @@ function BookingScreen({ go, station, vehicle, user }) {
 export default function App() {
   // ── Persist dark mode & booking across page reloads ───────
   const [darkMode, setDarkModeRaw] = useState(()=>{
-    try { return localStorage.getItem("eco_dark") !== "false"; } catch(e){ return true; }
+    try {
+      const saved = localStorage.getItem("eco_dark") !== "false";
+      applyTheme(saved); // apply immediately on load
+      return saved;
+    } catch(e){ return true; }
   });
   const setDarkMode = (val) => {
     const v = typeof val === "function" ? val(darkMode) : val;
+    applyTheme(v); // ← updates T object immediately for all components
     setDarkModeRaw(v);
     try { localStorage.setItem("eco_dark", String(v)); } catch(e){}
   };
@@ -1329,7 +1344,7 @@ export default function App() {
   // Dynamic CSS that changes with theme
   const dynamicCSS = `
     ${CSS}
-    body { background: ${DT.bg} !important; color: ${DT.text} !important; }
+    body { background: ${T.bg} !important; color: ${T.text} !important; }
     * { -webkit-tap-highlight-color: transparent; }
   `;
 
@@ -1377,7 +1392,7 @@ export default function App() {
   return (
     <>
       <style>{dynamicCSS}</style>
-      <div style={{ position:"relative",height:"100vh",overflow:"hidden",background:DT.bg }}>
+      <div key={darkMode?"dark":"light"} style={{ position:"relative",height:"100vh",overflow:"hidden",background:T.bg }}>
         <Drawer open={drawer} onClose={()=>setDrawer(false)}
           go={goSecure} user={user}
           onLogout={()=>{ setUser(null); go("splash"); }}/>
