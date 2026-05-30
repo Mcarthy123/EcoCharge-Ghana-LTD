@@ -23,7 +23,7 @@ const sb = async (path, opts = {}) => {
   return res.ok ? res.json() : null;
 };
 
-// ── CSS VARIABLE THEME SYSTEM ─────────────────────────────
+// ── THEME ─────────────────────────────────────────────────
 const DARK = {
   bg:"#0f1117", card:"#1a1d27", border:"#2a2d3a",
   green:"#4ade80", greenDark:"#22c55e", greenDim:"#166534",
@@ -36,19 +36,9 @@ const LIGHT = {
   text:"#0f1117", muted:"#64748b", mutedLight:"#94a3b8",
   blue:"#0284c7", yellow:"#d97706", red:"#dc2626",
 };
-
-// T uses actual color values — updated by applyTheme
-const T = { ...DARK };
-
-const applyTheme = (dark) => {
-  const theme = dark ? DARK : LIGHT;
-  Object.assign(T, theme);
-  // Also set CSS variables for smooth transitions
-  const root = document.documentElement;
-  Object.entries(theme).forEach(([k,v]) => {
-    root.style.setProperty(`--t-${k}`, v);
-  });
-};
+// T is updated before each render in App
+let T = { ...DARK };
+const applyTheme = (dark) => { T = dark ? { ...DARK } : { ...LIGHT }; };
 
 // No external images — using clean SVG illustrations that always work
 const VEHICLE_GRADIENTS = {
@@ -1288,14 +1278,17 @@ export default function App() {
   const [darkMode, setDarkModeRaw] = useState(()=>{
     try {
       const saved = localStorage.getItem("eco_dark") !== "false";
-      applyTheme(saved); // apply immediately on load
+      applyTheme(saved);
       return saved;
     } catch(e){ return true; }
   });
+  const [, forceRender] = useState(0);
+
   const setDarkMode = (val) => {
     const v = typeof val === "function" ? val(darkMode) : val;
     applyTheme(v);
     setDarkModeRaw(v);
+    forceRender(n => n + 1); // force full re-render
     try { localStorage.setItem("eco_dark", String(v)); } catch(e){}
   };
 
