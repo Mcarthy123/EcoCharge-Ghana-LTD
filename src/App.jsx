@@ -24,21 +24,25 @@ const sb = async (path, opts = {}) => {
 };
 
 // ── THEME ─────────────────────────────────────────────────
-const DARK = {
+const T = {
   bg:"#0f1117", card:"#1a1d27", border:"#2a2d3a",
   green:"#4ade80", greenDark:"#22c55e", greenDim:"#166534",
   text:"#ffffff", muted:"#6b7280", mutedLight:"#9ca3af",
   blue:"#38bdf8", yellow:"#fbbf24", red:"#f87171",
 };
-const LIGHT = {
-  bg:"#f0f4f8", card:"#ffffff", border:"#e2e8f0",
-  green:"#16a34a", greenDark:"#15803d", greenDim:"#bbf7d0",
-  text:"#0f1117", muted:"#64748b", mutedLight:"#94a3b8",
-  blue:"#0284c7", yellow:"#d97706", red:"#dc2626",
+const applyTheme = (dark) => {
+  if (dark) {
+    T.bg="#0f1117"; T.card="#1a1d27"; T.border="#2a2d3a";
+    T.green="#4ade80"; T.greenDark="#22c55e"; T.greenDim="#166534";
+    T.text="#ffffff"; T.muted="#6b7280"; T.mutedLight="#9ca3af";
+    T.blue="#38bdf8"; T.yellow="#fbbf24"; T.red="#f87171";
+  } else {
+    T.bg="#f0f4f8"; T.card="#ffffff"; T.border="#e2e8f0";
+    T.green="#16a34a"; T.greenDark="#15803d"; T.greenDim="#bbf7d0";
+    T.text="#0f1117"; T.muted="#64748b"; T.mutedLight="#94a3b8";
+    T.blue="#0284c7"; T.yellow="#d97706"; T.red="#dc2626";
+  }
 };
-// T is updated before each render in App
-let T = { ...DARK };
-const applyTheme = (dark) => { T = dark ? { ...DARK } : { ...LIGHT }; };
 
 // No external images — using clean SVG illustrations that always work
 const VEHICLE_GRADIENTS = {
