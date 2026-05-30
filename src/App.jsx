@@ -23,8 +23,9 @@ const sb = async (path, opts = {}) => {
   return res.ok ? res.json() : null;
 };
 
-// ── THEME — mutable object, updated when dark/light changes ──
-// All components use T directly — when T changes, everything updates
+// ── CSS VARIABLE THEME SYSTEM ─────────────────────────────
+// All colors use CSS variables — toggling dark/light just swaps them
+// No prop drilling needed — instant update across entire app
 const DARK = {
   bg:"#0f1117", card:"#1a1d27", border:"#2a2d3a",
   green:"#4ade80", greenDark:"#22c55e", greenDim:"#166534",
@@ -37,8 +38,21 @@ const LIGHT = {
   text:"#0f1117", muted:"#64748b", mutedLight:"#94a3b8",
   blue:"#0284c7", yellow:"#d97706", red:"#dc2626",
 };
-const T = { ...DARK };
-const applyTheme = (dark) => { Object.assign(T, dark ? DARK : LIGHT); };
+
+// T always reads from CSS variables — works everywhere automatically
+const T = new Proxy({}, {
+  get: (_, key) => `var(--t-${key})`
+});
+
+// Apply theme by setting CSS variables on :root
+const applyTheme = (dark) => {
+  const theme = dark ? DARK : LIGHT;
+  const root = document.documentElement;
+  Object.entries(theme).forEach(([k, v]) => {
+    root.style.setProperty(`--t-${k}`, v);
+  });
+  root.style.setProperty("--t-bg-raw", theme.bg);
+};
 
 // No external images — using clean SVG illustrations that always work
 const VEHICLE_GRADIENTS = {
@@ -69,7 +83,28 @@ const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
   html, body, #root { height:100%; }
-  body { font-family:'Inter',sans-serif; background:#0f1117; }
+  body { font-family:'Inter',sans-serif; background:var(--t-bg); color:var(--t-text); transition: background 0.3s, color 0.3s; }
+
+  /* CSS variable defaults (dark mode) */
+  :root {
+    --t-bg: #0f1117;
+    --t-card: #1a1d27;
+    --t-border: #2a2d3a;
+    --t-green: #4ade80;
+    --t-greenDark: #22c55e;
+    --t-greenDim: #166534;
+    --t-text: #ffffff;
+    --t-muted: #6b7280;
+    --t-mutedLight: #9ca3af;
+    --t-blue: #38bdf8;
+    --t-yellow: #fbbf24;
+    --t-red: #f87171;
+    --t-bg-raw: #0f1117;
+  }
+
+  /* All elements transition smoothly */
+  div, button, input, span, a { transition: background-color 0.25s, color 0.25s, border-color 0.25s; }
+
   @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
   @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
   @keyframes spin { to{transform:rotate(360deg)} }
@@ -79,10 +114,10 @@ const CSS = `
   .fade3 { animation:fadeUp 0.35s 0.21s ease both; }
   .tap { transition:opacity 0.15s,transform 0.15s; cursor:pointer; -webkit-tap-highlight-color:transparent; }
   .tap:active { opacity:0.7; transform:scale(0.97); }
-  .rowcard { transition:background 0.15s; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-  .rowcard:hover { background:#21253a !important; }
+  .rowcard { transition:background 0.25s; cursor:pointer; -webkit-tap-highlight-color:transparent; }
   input,button { font-family:'Inter',sans-serif; outline:none; }
-  input::placeholder { color:#4b5563; }
+  input { color: var(--t-text); background: var(--t-bg); }
+  input::placeholder { color:var(--t-muted); }
   ::-webkit-scrollbar { width:0; }
 `;
 
@@ -286,7 +321,7 @@ function AuthScreen({ mode, onBack, onSuccess }) {
               <div style={{ fontSize:12,color:T.muted,marginBottom:6,fontWeight:600 }}>Full Name</div>
               <input placeholder="Your full name" value={name}
                 onChange={e=>{ setName(e.target.value); setError(""); }}
-                style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,
+                style={{ width:"100%",background:T.bg,border:`1px solid ${T.border}`,
                   borderRadius:10,padding:"13px 14px",color:T.text,fontSize:14 }}/>
             </div>
           )}
@@ -294,14 +329,14 @@ function AuthScreen({ mode, onBack, onSuccess }) {
             <div style={{ fontSize:12,color:T.muted,marginBottom:6,fontWeight:600 }}>Email Address</div>
             <input type="email" placeholder="you@example.com" value={email}
               onChange={e=>{ setEmail(e.target.value); setError(""); }}
-              style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,
+              style={{ width:"100%",background:T.bg,border:`1px solid ${T.border}`,
                 borderRadius:10,padding:"13px 14px",color:T.text,fontSize:14 }}/>
           </div>
           <div style={{ marginBottom:22 }}>
             <div style={{ fontSize:12,color:T.muted,marginBottom:6,fontWeight:600 }}>Password</div>
             <input type="password" placeholder="••••••••" value={password}
               onChange={e=>{ setPassword(e.target.value); setError(""); }}
-              style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,
+              style={{ width:"100%",background:T.bg,border:`1px solid ${T.border}`,
                 borderRadius:10,padding:"13px 14px",color:T.text,fontSize:14 }}/>
           </div>
 
@@ -521,7 +556,7 @@ function HomeScreen({ go, stations, setStation, onMenu, user }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="EcoChargeCar" subtitle="Find a charging station near you" onMenu={onMenu}/>
+      <Header title="EcoChargeCar" subtitle="Find a charging station near you" onMenu={onMenu} darkMode={darkMode} setDarkMode={setDarkMode}/>
       {user && (
         <div style={{ margin:"10px 14px 0",background:"linear-gradient(135deg,#0d2218,#112b1a)",
           borderRadius:12,padding:"10px 14px",border:`1px solid ${T.greenDim}`,
@@ -574,7 +609,7 @@ function DetailScreen({ go, station, stations, setStation }) {
   const s = station || stations[0];
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title={s.name} subtitle={`${s.city} · Solar & Hydrogen`} onBack={()=>go("home")}/>
+      <Header title={s.name} subtitle={`${s.city} · Solar & Hydrogen`} onBack={()=>go("home")} darkMode={darkMode} setDarkMode={setDarkMode}/>
       <div style={{ margin:"12px 12px 0",borderRadius:16,overflow:"hidden",height:155,
         position:"relative",flexShrink:0,background:STATION_BG,
         display:"flex",alignItems:"center",justifyContent:"center" }}>
@@ -666,7 +701,7 @@ function VehicleScreen({ go, setVehicle }) {
   const [selected, setSelected] = useState(null);
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Select Vehicle" subtitle="Choose your vehicle type" onBack={()=>go("detail")}/>
+      <Header title="Select Vehicle" subtitle="Choose your vehicle type" onBack={()=>go("detail")} darkMode={darkMode} setDarkMode={setDarkMode}/>
       <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 0" }}>
         {VEHICLES.map((v,i)=>(
           <div key={v.type} className={`tap fade${i}`} onClick={()=>setSelected(v)}
@@ -777,7 +812,7 @@ function PaymentScreen({ go, vehicle, station, user }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Payment" subtitle="Secure checkout via Paystack" onBack={()=>go("vehicles")}/>
+      <Header title="Payment" subtitle="Secure checkout via Paystack" onBack={()=>go("vehicles")} darkMode={darkMode} setDarkMode={setDarkMode}/>
       <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 0" }}>
 
         <div className="fade" style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:12,border:`1px solid ${T.border}` }}>
@@ -802,7 +837,7 @@ function PaymentScreen({ go, vehicle, station, user }) {
           <div style={{ fontSize:12,color:T.muted,marginBottom:8,fontWeight:600 }}>Email for receipt</div>
           <input type="email" placeholder="you@example.com" value={email}
             onChange={e=>{ setEmail(e.target.value); setError(""); }}
-            style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",color:T.text,fontSize:14 }}/>
+            style={{ width:"100%",background:T.bg,border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",color:T.text,fontSize:14 }}/>
         </div>
 
         <div className="fade2" style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:12,border:`1px solid ${T.border}` }}>
@@ -859,7 +894,7 @@ function PaymentScreen({ go, vehicle, station, user }) {
 function ProfileScreen({ go, user, setUser, onMenu }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="My Profile" subtitle="Account & activity" onMenu={onMenu}/>
+      <Header title="My Profile" subtitle="Account & activity" onMenu={onMenu} darkMode={darkMode} setDarkMode={setDarkMode}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 14px 0" }}>
         {user ? (
           <>
@@ -909,7 +944,7 @@ function ProfileScreen({ go, user, setUser, onMenu }) {
 function AboutScreen({ go, onMenu }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="About EcoCharge" subtitle="Our mission" onMenu={onMenu}/>
+      <Header title="About EcoCharge" subtitle="Our mission" onMenu={onMenu} darkMode={darkMode} setDarkMode={setDarkMode}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 14px 0" }}>
         <div className="fade" style={{ textAlign:"center",marginBottom:24 }}>
           <LogoLarge size={82}/>
@@ -1039,7 +1074,7 @@ function BookingScreen({ go, station, vehicle, user }) {
 
   if (booked && booking) return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Booking Confirmed!" onBack={()=>go("home")}/>
+      <Header title="Booking Confirmed!" onBack={()=>go("home")} darkMode={darkMode} setDarkMode={setDarkMode}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 0" }}>
         <div className="fade" style={{ background:"#0a1f12",border:`1px solid ${T.greenDim}`,
           borderRadius:18,padding:24,textAlign:"center",marginBottom:16 }}>
@@ -1101,12 +1136,12 @@ function BookingScreen({ go, station, vehicle, user }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Book a Slot" subtitle={`${s.name} · ${s.city}`} onBack={()=>go("vehicles")}/>
+      <Header title="Book a Slot" subtitle={`${s.name} · ${s.city}`} onBack={()=>go("vehicles")} darkMode={darkMode} setDarkMode={setDarkMode}/>
 
       <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 0" }}>
 
         {/* Station + vehicle summary */}
-        <div className="fade" style={{ background:"linear-gradient(135deg,#0a1f12,#0d2d1a)",
+        <div className="fade" style={{ background:T.card,
           borderRadius:16,padding:"14px 16px",marginBottom:14,border:`1px solid ${T.greenDim}`,
           display:"flex",justifyContent:"space-between",alignItems:"center" }}>
           <div>
@@ -1200,7 +1235,7 @@ function BookingScreen({ go, station, vehicle, user }) {
           ].map((f,i)=>(
             <input key={i} type={f.type} placeholder={f.placeholder} value={f.value}
               onChange={e=>{ f.set(e.target.value); setError(""); }}
-              style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,
+              style={{ width:"100%",background:T.bg,border:`1px solid ${T.border}`,
                 borderRadius:10,padding:"12px 14px",color:T.text,fontSize:14,
                 marginBottom:10 }}/>
           ))}
@@ -1341,39 +1376,31 @@ export default function App() {
 
   const handleAuthSuccess = (u) => { setUser(u); go("home"); };
 
-  // Dynamic CSS that changes with theme
-  const dynamicCSS = `
-    ${CSS}
-    body { background: ${T.bg} !important; color: ${T.text} !important; }
-    * { -webkit-tap-highlight-color: transparent; }
-  `;
-
   const props = {
     go: goSecure, stations,
     station: station||stations[0],
     setStation, user, setUser,
     vehicle, setVehicle,
     onMenu: ()=>setDrawer(true),
-    darkMode, setDarkMode, DT,
+    darkMode, setDarkMode,
     booking, setBooking,
   };
 
   if (screen==="splash") return (
-    <><style>{dynamicCSS}</style>
-    <div style={{ background:DT.bg, height:"100vh" }}>
+    <><style>{CSS}</style>
+    <div style={{ background:"var(--t-bg)", height:"100vh" }}>
       <SplashScreen
         onLogin={()=>{ setAuthMode("login"); go("auth"); }}
         onRegister={()=>{ setAuthMode("register"); go("auth"); }}
-        onGuest={()=>go("home")}
-        DT={DT}/>
+        onGuest={()=>go("home")}/>
     </div></>
   );
 
   if (screen==="auth") return (
-    <><style>{dynamicCSS}</style>
-    <div style={{ background:DT.bg, height:"100vh" }}>
+    <><style>{CSS}</style>
+    <div style={{ background:"var(--t-bg)", height:"100vh" }}>
       <AuthScreen mode={authMode} onBack={()=>go("splash")}
-        onSuccess={handleAuthSuccess} DT={DT}/>
+        onSuccess={handleAuthSuccess}/>
     </div></>
   );
 
@@ -1391,8 +1418,9 @@ export default function App() {
 
   return (
     <>
-      <style>{dynamicCSS}</style>
-      <div key={darkMode?"dark":"light"} style={{ position:"relative",height:"100vh",overflow:"hidden",background:T.bg }}>
+      <style>{CSS}</style>
+      <div style={{ position:"relative",height:"100vh",overflow:"hidden",
+        background:"var(--t-bg)" }}>
         <Drawer open={drawer} onClose={()=>setDrawer(false)}
           go={goSecure} user={user}
           onLogout={()=>{ setUser(null); go("splash"); }}/>
@@ -1435,7 +1463,7 @@ function QRScreen({ go, booking, darkMode, setDarkMode }) {
       <Header title="Your Charging Pass" subtitle="Show this to the attendant"
         onBack={()=>go("home")} darkMode={darkMode} setDarkMode={setDarkMode}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 0" }}>
-        <div className="fade" style={{ background:"linear-gradient(135deg,#0a1f12,#0d2d1a)",
+        <div className="fade" style={{ background:T.card,
           borderRadius:20,padding:24,textAlign:"center",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
           <div style={{ fontSize:12,color:T.muted,marginBottom:4 }}>Booking Reference</div>
           <div style={{ fontWeight:800,fontSize:18,color:T.green,letterSpacing:1,marginBottom:16 }}>{b.reference}</div>
@@ -1522,7 +1550,7 @@ function VerifyScreen({ go, darkMode, setDarkMode }) {
           <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}>Enter Booking Reference</div>
           <input placeholder="e.g. ECO-BK-ABC123" value={code}
             onChange={e=>{ setCode(e.target.value.toUpperCase()); setError(""); setResult(null); }}
-            style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,
+            style={{ width:"100%",background:T.bg,border:`1px solid ${T.border}`,
               borderRadius:10,padding:"14px",color:T.text,fontSize:16,
               fontFamily:"monospace",letterSpacing:1,marginBottom:12 }}/>
           <button onClick={verify} disabled={loading} className="tap"
