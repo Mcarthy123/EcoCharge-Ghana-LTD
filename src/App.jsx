@@ -24,8 +24,6 @@ const sb = async (path, opts = {}) => {
 };
 
 // ── CSS VARIABLE THEME SYSTEM ─────────────────────────────
-// All colors use CSS variables — toggling dark/light just swaps them
-// No prop drilling needed — instant update across entire app
 const DARK = {
   bg:"#0f1117", card:"#1a1d27", border:"#2a2d3a",
   green:"#4ade80", greenDark:"#22c55e", greenDim:"#166534",
@@ -39,19 +37,17 @@ const LIGHT = {
   blue:"#0284c7", yellow:"#d97706", red:"#dc2626",
 };
 
-// T always reads from CSS variables — works everywhere automatically
-const T = new Proxy({}, {
-  get: (_, key) => `var(--t-${key})`
-});
+// T uses actual color values — updated by applyTheme
+const T = { ...DARK };
 
-// Apply theme by setting CSS variables on :root
 const applyTheme = (dark) => {
   const theme = dark ? DARK : LIGHT;
+  Object.assign(T, theme);
+  // Also set CSS variables for smooth transitions
   const root = document.documentElement;
-  Object.entries(theme).forEach(([k, v]) => {
+  Object.entries(theme).forEach(([k,v]) => {
     root.style.setProperty(`--t-${k}`, v);
   });
-  root.style.setProperty("--t-bg-raw", theme.bg);
 };
 
 // No external images — using clean SVG illustrations that always work
@@ -1298,7 +1294,7 @@ export default function App() {
   });
   const setDarkMode = (val) => {
     const v = typeof val === "function" ? val(darkMode) : val;
-    applyTheme(v); // ← updates T object immediately for all components
+    applyTheme(v);
     setDarkModeRaw(v);
     try { localStorage.setItem("eco_dark", String(v)); } catch(e){}
   };
@@ -1419,8 +1415,9 @@ export default function App() {
   return (
     <>
       <style>{CSS}</style>
-      <div style={{ position:"relative",height:"100vh",overflow:"hidden",
-        background:"var(--t-bg)" }}>
+      <div key={darkMode?"dark":"light"}
+        style={{ position:"relative",height:"100vh",overflow:"hidden",
+        background:T.bg }}>
         <Drawer open={drawer} onClose={()=>setDrawer(false)}
           go={goSecure} user={user}
           onLogout={()=>{ setUser(null); go("splash"); }}/>
