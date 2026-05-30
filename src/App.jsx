@@ -428,36 +428,37 @@ const NavBar = ({ active, go }) => {
   );
 };
 
-const Header = ({ title, subtitle, onBack, onMenu, darkMode, setDarkMode, DT: dt }) => {
-  const C = dt || T; // use passed theme or fallback to T
-  return (
+// Global theme toggle function — set by App on mount
+let _toggleTheme = () => {};
+let _isDark = true;
+
+const Header = ({ title, subtitle, onBack, onMenu }) => (
   <div style={{ padding:"14px 18px 13px",display:"flex",alignItems:"center",gap:10,
-    borderBottom:`1px solid ${C.border}`,flexShrink:0,background:C.bg,zIndex:500,
+    borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg,zIndex:500,
     position:"relative" }}>
     {onBack
       ? <button onClick={onBack} className="tap" style={{ background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",padding:4 }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill={C.text}><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill={T.text}><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
         </button>
       : <button onClick={onMenu} className="tap" style={{ background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",gap:5,padding:4 }}>
-          <div style={{ width:22,height:2,background:C.mutedLight,borderRadius:2 }}/>
-          <div style={{ width:16,height:2,background:C.mutedLight,borderRadius:2 }}/>
-          <div style={{ width:22,height:2,background:C.mutedLight,borderRadius:2 }}/>
+          <div style={{ width:22,height:2,background:T.mutedLight,borderRadius:2 }}/>
+          <div style={{ width:16,height:2,background:T.mutedLight,borderRadius:2 }}/>
+          <div style={{ width:22,height:2,background:T.mutedLight,borderRadius:2 }}/>
         </button>
     }
     <div style={{ flex:1 }}>
-      <div style={{ fontWeight:800,fontSize:16,color:C.text,lineHeight:1.2 }}>{title}</div>
-      {subtitle && <div style={{ fontSize:10,color:C.muted,marginTop:2 }}>{subtitle}</div>}
+      <div style={{ fontWeight:800,fontSize:16,color:T.text,lineHeight:1.2 }}>{title}</div>
+      {subtitle && <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{subtitle}</div>}
     </div>
-    {/* Dark/Light toggle */}
-    <button onClick={()=>setDarkMode&&setDarkMode(d=>!d)} className="tap"
-      style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:20,
+    <button onClick={_toggleTheme} className="tap"
+      style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:20,
         width:36,height:36,cursor:"pointer",fontSize:16,display:"flex",
         alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-      {darkMode?"☀️":"🌙"}
+      {_isDark?"☀️":"🌙"}
     </button>
     <LogoImg size={32}/>
   </div>
-);};
+);
 
 function HomeScreen({ go, stations, setStation, onMenu, user }) {
   const mapRef = useRef(null);
@@ -546,7 +547,7 @@ function HomeScreen({ go, stations, setStation, onMenu, user }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="EcoChargeCar" subtitle="Find a charging station near you" onMenu={onMenu} darkMode={darkMode} setDarkMode={setDarkMode}/>
+      <Header title="EcoChargeCar" subtitle="Find a charging station near you" onMenu={onMenu}/>
       {user && (
         <div style={{ margin:"10px 14px 0",background:"linear-gradient(135deg,#0d2218,#112b1a)",
           borderRadius:12,padding:"10px 14px",border:`1px solid ${T.greenDim}`,
@@ -599,7 +600,7 @@ function DetailScreen({ go, station, stations, setStation }) {
   const s = station || stations[0];
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title={s.name} subtitle={`${s.city} · Solar & Hydrogen`} onBack={()=>go("home")} darkMode={darkMode} setDarkMode={setDarkMode}/>
+      <Header title={s.name} subtitle={`${s.city} · Solar & Hydrogen`} onBack={()=>go("home")}/>
       <div style={{ margin:"12px 12px 0",borderRadius:16,overflow:"hidden",height:155,
         position:"relative",flexShrink:0,background:STATION_BG,
         display:"flex",alignItems:"center",justifyContent:"center" }}>
@@ -691,7 +692,7 @@ function VehicleScreen({ go, setVehicle }) {
   const [selected, setSelected] = useState(null);
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Select Vehicle" subtitle="Choose your vehicle type" onBack={()=>go("detail")} darkMode={darkMode} setDarkMode={setDarkMode}/>
+      <Header title="Select Vehicle" subtitle="Choose your vehicle type" onBack={()=>go("detail")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 0" }}>
         {VEHICLES.map((v,i)=>(
           <div key={v.type} className={`tap fade${i}`} onClick={()=>setSelected(v)}
@@ -802,7 +803,7 @@ function PaymentScreen({ go, vehicle, station, user }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Payment" subtitle="Secure checkout via Paystack" onBack={()=>go("vehicles")} darkMode={darkMode} setDarkMode={setDarkMode}/>
+      <Header title="Payment" subtitle="Secure checkout via Paystack" onBack={()=>go("vehicles")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 0" }}>
 
         <div className="fade" style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:12,border:`1px solid ${T.border}` }}>
@@ -884,7 +885,7 @@ function PaymentScreen({ go, vehicle, station, user }) {
 function ProfileScreen({ go, user, setUser, onMenu }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="My Profile" subtitle="Account & activity" onMenu={onMenu} darkMode={darkMode} setDarkMode={setDarkMode}/>
+      <Header title="My Profile" subtitle="Account & activity" onMenu={onMenu}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 14px 0" }}>
         {user ? (
           <>
@@ -934,7 +935,7 @@ function ProfileScreen({ go, user, setUser, onMenu }) {
 function AboutScreen({ go, onMenu }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="About EcoCharge" subtitle="Our mission" onMenu={onMenu} darkMode={darkMode} setDarkMode={setDarkMode}/>
+      <Header title="About EcoCharge" subtitle="Our mission" onMenu={onMenu}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 14px 0" }}>
         <div className="fade" style={{ textAlign:"center",marginBottom:24 }}>
           <LogoLarge size={82}/>
@@ -1064,7 +1065,7 @@ function BookingScreen({ go, station, vehicle, user }) {
 
   if (booked && booking) return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Booking Confirmed!" onBack={()=>go("home")} darkMode={darkMode} setDarkMode={setDarkMode}/>
+      <Header title="Booking Confirmed!" onBack={()=>go("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 0" }}>
         <div className="fade" style={{ background:"#0a1f12",border:`1px solid ${T.greenDim}`,
           borderRadius:18,padding:24,textAlign:"center",marginBottom:16 }}>
@@ -1126,7 +1127,7 @@ function BookingScreen({ go, station, vehicle, user }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Book a Slot" subtitle={`${s.name} · ${s.city}`} onBack={()=>go("vehicles")} darkMode={darkMode} setDarkMode={setDarkMode}/>
+      <Header title="Book a Slot" subtitle={`${s.name} · ${s.city}`} onBack={()=>go("vehicles")}/>
 
       <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 0" }}>
 
@@ -1291,10 +1292,14 @@ export default function App() {
   const setDarkMode = (val) => {
     const v = typeof val === "function" ? val(darkMode) : val;
     applyTheme(v);
+    _isDark = v;
     setDarkModeRaw(v);
-    forceRender(n => n + 1); // force full re-render
+    forceRender(n => n + 1);
     try { localStorage.setItem("eco_dark", String(v)); } catch(e){}
   };
+
+  // Set global toggle function
+  _toggleTheme = () => setDarkMode(!darkMode);
 
   const [booking, setBookingRaw] = useState(()=>{
     try { const b = localStorage.getItem("eco_booking"); return b ? JSON.parse(b) : null; } catch(e){ return null; }
@@ -1431,7 +1436,7 @@ function QRScreen({ go, booking, darkMode, setDarkMode }) {
 
   if (!b) return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Charging Pass" onBack={()=>go("home")} darkMode={darkMode} setDarkMode={setDarkMode}/>
+      <Header title="Charging Pass" onBack={()=>go("home")}/>
       <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:24,textAlign:"center" }}>
         <div>
           <div style={{ fontSize:40,marginBottom:14 }}>🎫</div>
@@ -1455,7 +1460,7 @@ function QRScreen({ go, booking, darkMode, setDarkMode }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Your Charging Pass" subtitle="Show this to the attendant"
-        onBack={()=>go("home")} darkMode={darkMode} setDarkMode={setDarkMode}/>
+        onBack={()=>go("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 0" }}>
         <div className="fade" style={{ background:T.card,
           borderRadius:20,padding:24,textAlign:"center",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
@@ -1538,7 +1543,7 @@ function VerifyScreen({ go, darkMode, setDarkMode }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Verify Booking" subtitle="Attendant portal"
-        onBack={()=>go("home")} darkMode={darkMode} setDarkMode={setDarkMode}/>
+        onBack={()=>go("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 0" }}>
         <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:12,border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}>Enter Booking Reference</div>
