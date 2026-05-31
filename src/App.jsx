@@ -80,6 +80,10 @@ const CSS = `
   input{color:#fff}
   input::placeholder{color:#4b5563}
   ::-webkit-scrollbar{width:0}
+  /* Fix Leaflet map z-index — prevents map overlapping drawer */
+  .leaflet-pane { z-index: 1 !important; }
+  .leaflet-top, .leaflet-bottom { z-index: 2 !important; }
+  .leaflet-control { z-index: 2 !important; }
 `;
 
 // ── HELPERS ───────────────────────────────────────────────────
@@ -367,7 +371,9 @@ function Home({ go, stations, setStation, user, onMenu }) {
     const init = () => {
       if (mapInst.current||!mapRef.current) return;
       const L = window.L;
-      const map = L.map(mapRef.current,{ center:[7.9465,-1.0232],zoom:7,attributionControl:false });
+      const map = L.map(mapRef.current,{ center:[7.9465,-1.0232],zoom:7,attributionControl:false,zoomControl:true });
+      // Fix z-index so map doesn't overlap drawer
+      mapRef.current.style.zIndex = "0";
       L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{ maxZoom:19 }).addTo(map);
       const icon = L.divIcon({
         html:`<div style="filter:drop-shadow(0 2px 6px rgba(74,222,128,.6))">${`<svg width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.27 0 0 6.27 0 14c0 9.33 14 22 14 22S28 23.33 28 14C28 6.27 21.73 0 14 0z" fill="#4ade80"/><circle cx="14" cy="14" r="6" fill="#0f1117"/><path d="M14 7l-3.5 5h2.5l-1 5 5-6h-2.5L14 7z" fill="#4ade80"/></svg>`}</div>`,
@@ -401,8 +407,9 @@ function Home({ go, stations, setStation, user, onMenu }) {
           </span>
         </div>
       )}
-      <div style={{ flex:1,position:"relative",margin:"12px",borderRadius:18,overflow:"hidden" }}>
-        <div ref={mapRef} style={{ width:"100%",height:"100%" }}/>
+      <div style={{ flex:1,position:"relative",margin:"12px",borderRadius:18,
+        overflow:"hidden",zIndex:0,isolation:"isolate" }}>
+        <div ref={mapRef} style={{ width:"100%",height:"100%",zIndex:0 }}/>
         <div style={{ position:"absolute",top:14,right:14,zIndex:1000,
           background:"rgba(15,17,23,.85)",backdropFilter:"blur(8px)",
           borderRadius:20,padding:"5px 12px",fontSize:11,color:T.green,
@@ -844,10 +851,12 @@ function Verify({ go }) {
     if (!code.trim()) { setErr("Enter a booking reference"); return; }
     setLoad(true); setErr(""); setResult(null);
     try {
-      const ref = code.trim().toUpperCase();
+      // Extract just the reference — handles both "ECO-ABC123" and full QR string
+      const raw = code.trim().toUpperCase();
+      const ref = raw.includes("|") ? raw.split("|")[0].trim() : raw;
       const data = await sb(`bookings?reference=eq.${ref}&select=*`);
       if (!data||data.length===0) {
-        setErr("Booking not found. Check the reference and try again.");
+        setErr(`Booking "${ref}" not found. Make sure the booking was saved correctly.`);
       } else {
         const b = data[0];
         if (SUPABASE_URL) {
