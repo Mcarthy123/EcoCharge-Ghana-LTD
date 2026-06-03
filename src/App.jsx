@@ -1426,9 +1426,44 @@ export default function App() {
 
   useEffect(()=>{
     if (SUPABASE_URL) sb("stations?select=*&order=id").then(d=>{ if(d?.length) setStations(d); });
+
+    // Handle Paystack redirect after payment
     const params = new URLSearchParams(window.location.search);
     const ref = params.get("reference")||params.get("trxref");
-    if (ref) { window.history.replaceState({},"",window.location.pathname); go("qr"); }
+    if (ref) {
+      window.history.replaceState({},"",window.location.pathname);
+
+      // Load booking from localStorage and mark as paid
+      try {
+        const saved = localStorage.getItem("eco_booking");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const updated = { ...parsed, status:"confirmed", pay_method:"now" };
+          setBooking(updated);
+          localStorage.setItem("eco_booking", JSON.stringify(updated));
+        }
+      } catch(e){}
+
+      // Also update Supabase status
+      if (SUPABASE_URL) {
+        sb(`bookings?reference=eq.${ref}&select=*`).then(data=>{
+          if (data&&data.length>0) {
+            const b = data[0];
+            sb(`bookings?id=eq.${b.id}`,{
+              method:"PATCH",
+              headers:{ Prefer:"return=minimal" },
+              body:JSON.stringify({ status:"confirmed", payment_confirmed:true }),
+            });
+            const updated = { ...b, status:"confirmed", pay_method:"now" };
+            setBooking(updated);
+            try { localStorage.setItem("eco_booking", JSON.stringify(updated)); } catch(e){}
+          }
+        });
+      }
+
+      // Go to QR screen
+      go("qr");
+    }
   },[]);
 
   const props = {
