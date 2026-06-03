@@ -62,7 +62,6 @@ const DURATIONS = [
 // ── CSS + FONT AWESOME + INTER ────────────────────────────────
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
-  @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   html,body,#root{height:100%;-webkit-text-size-adjust:100%}
   body{
@@ -1169,7 +1168,14 @@ function Booking({ go, station, vehicle, user, setBooking }) {
 
 // ── QR SCREEN ─────────────────────────────────────────────────
 function QRScreen({ go, booking }) {
-  const b = booking;
+  // Try localStorage as fallback if booking prop is empty
+  let b = booking;
+  if (!b) {
+    try {
+      const saved = localStorage.getItem("eco_booking");
+      if (saved) b = JSON.parse(saved);
+    } catch(e){}
+  }
   if (!b) return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%", background:T.bg }}>
       <Header title="Charging Pass" onBack={()=>go("home")}/>
@@ -1425,45 +1431,55 @@ export default function App() {
   };
 
   useEffect(()=>{
+    // Load Font Awesome via link tag (most reliable method)
+    if (!document.getElementById("fa-css")) {
+      const link = document.createElement("link");
+      link.id = "fa-css";
+      link.rel = "stylesheet";
+      link.href = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css";
+      document.head.appendChild(link);
+    }
     if (SUPABASE_URL) sb("stations?select=*&order=id").then(d=>{ if(d?.length) setStations(d); });
 
     // Handle Paystack redirect after payment
-    const params = new URLSearchParams(window.location.search);
-    const ref = params.get("reference")||params.get("trxref");
-    if (ref) {
-      window.history.replaceState({},"",window.location.pathname);
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get("reference")||params.get("trxref");
+      if (ref) {
+        window.history.replaceState({},"",window.location.pathname);
 
-      // Load booking from localStorage and mark as paid
-      try {
-        const saved = localStorage.getItem("eco_booking");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          const updated = { ...parsed, status:"confirmed", pay_method:"now" };
-          setBooking(updated);
-          localStorage.setItem("eco_booking", JSON.stringify(updated));
-        }
-      } catch(e){}
-
-      // Also update Supabase status
-      if (SUPABASE_URL) {
-        sb(`bookings?reference=eq.${ref}&select=*`).then(data=>{
-          if (data&&data.length>0) {
-            const b = data[0];
-            sb(`bookings?id=eq.${b.id}`,{
-              method:"PATCH",
-              headers:{ Prefer:"return=minimal" },
-              body:JSON.stringify({ status:"confirmed", payment_confirmed:true }),
-            });
-            const updated = { ...b, status:"confirmed", pay_method:"now" };
+        // Load booking from localStorage and mark as paid
+        try {
+          const saved = localStorage.getItem("eco_booking");
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            const updated = { ...parsed, status:"confirmed", pay_method:"now", reference: parsed.reference || ref };
             setBooking(updated);
-            try { localStorage.setItem("eco_booking", JSON.stringify(updated)); } catch(e){}
+            localStorage.setItem("eco_booking", JSON.stringify(updated));
           }
-        });
-      }
+        } catch(e){ console.log("localStorage error", e); }
 
-      // Go to QR screen
-      go("qr");
-    }
+        // Update Supabase status in background
+        if (SUPABASE_URL) {
+          sb(`bookings?reference=eq.${ref}&select=*`).then(data=>{
+            if (data&&data.length>0) {
+              const b = data[0];
+              sb(`bookings?id=eq.${b.id}`,{
+                method:"PATCH",
+                headers:{ Prefer:"return=minimal" },
+                body:JSON.stringify({ status:"confirmed", payment_confirmed:true }),
+              });
+              const updated = { ...b, status:"confirmed", pay_method:"now" };
+              setBooking(updated);
+              try { localStorage.setItem("eco_booking", JSON.stringify(updated)); } catch(e){}
+            }
+          }).catch(e=>{ console.log("Supabase error", e); });
+        }
+
+        // Always go to QR screen
+        setTimeout(()=>{ go("qr"); }, 100);
+      }
+    } catch(e){ console.log("Redirect handler error", e); }
   },[]);
 
   const props = {
