@@ -1188,6 +1188,8 @@ function QRScreen({ go, booking }) {
       </div>
       <Nav active="Stations" go={go}/>
     </div>
+  );
+}
 
 // ── VERIFY ────────────────────────────────────────────────────
 function Verify({ go }) {
