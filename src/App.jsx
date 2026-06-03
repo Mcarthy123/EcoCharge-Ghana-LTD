@@ -157,6 +157,41 @@ const Nav = ({ active, go }) => (
   </div>
 );
 
+// ── NEW BOTTOM NAV (5 tabs with center scan button) ──────────
+const NewNav = ({ active, go }) => (
+  <div style={{ position:"fixed",bottom:0,left:0,right:0,
+    display:"flex",justifyContent:"space-around",alignItems:"flex-end",
+    padding:"10px 0 22px",borderTop:`1px solid ${T.border}`,
+    background:"rgba(8,13,16,.97)",backdropFilter:"blur(12px)",zIndex:100 }}>
+    {[
+      { label:"Home",     screen:"home",   icon:"🏠" },
+      { label:"Stations", screen:"detail", icon:"⚡" },
+      { label:"Scan",     screen:"qr",     icon:"📱", center:true },
+      { label:"Bookings", screen:"map",    icon:"📋" },
+      { label:"Profile",  screen:"profile",icon:"👤" },
+    ].map(({ label,screen,icon,center })=>(
+      <button key={label} onClick={()=>go(screen)} className="tap"
+        style={{ background:"none",border:"none",cursor:"pointer",display:"flex",
+          flexDirection:"column",alignItems:"center",gap:4,minWidth:56,fontFamily:"inherit" }}>
+        {center ? (
+          <div style={{ width:52,height:52,borderRadius:"50%",
+            background:`linear-gradient(135deg,${T.green},${T.greenDark})`,
+            display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:22,marginBottom:2,
+            boxShadow:`0 4px 20px rgba(74,222,128,.4)`,marginTop:-20 }}>{icon}</div>
+        ) : (
+          <>
+            <div style={{ fontSize:22,opacity:active===label?1:.45 }}>{icon}</div>
+            <span style={{ fontSize:10,fontWeight:active===label?700:500,
+              color:active===label?T.green:T.muted }}>{label}</span>
+            {active===label&&<div style={{ width:4,height:4,borderRadius:"50%",background:T.green }}/>}
+          </>
+        )}
+      </button>
+    ))}
+  </div>
+);
+
 // ── HEADER ────────────────────────────────────────────────────
 const Header = ({ title, sub, onBack, onMenu }) => (
   <div style={{ padding:"14px 18px",display:"flex",alignItems:"center",gap:12,
@@ -357,7 +392,8 @@ function Auth({ mode, onBack, onSuccess }) {
 }
 
 // ── HOME / MAP ────────────────────────────────────────────────
-function Home({ go, stations, setStation, user, onMenu }) {
+// ── MAP SCREEN (moved from home) ──────────────────────────────
+function MapScreen({ go, stations, setStation, onMenu }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
 
@@ -372,11 +408,10 @@ function Home({ go, stations, setStation, user, onMenu }) {
       if (mapInst.current||!mapRef.current) return;
       const L = window.L;
       const map = L.map(mapRef.current,{ center:[7.9465,-1.0232],zoom:7,attributionControl:false,zoomControl:true });
-      // Fix z-index so map doesn't overlap drawer
       mapRef.current.style.zIndex = "0";
       L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{ maxZoom:19 }).addTo(map);
       const icon = L.divIcon({
-        html:`<div style="filter:drop-shadow(0 2px 6px rgba(74,222,128,.6))">${`<svg width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.27 0 0 6.27 0 14c0 9.33 14 22 14 22S28 23.33 28 14C28 6.27 21.73 0 14 0z" fill="#4ade80"/><circle cx="14" cy="14" r="6" fill="#0f1117"/><path d="M14 7l-3.5 5h2.5l-1 5 5-6h-2.5L14 7z" fill="#4ade80"/></svg>`}</div>`,
+        html:`<div style="filter:drop-shadow(0 2px 6px rgba(74,222,128,.6))"><svg width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.27 0 0 6.27 0 14c0 9.33 14 22 14 22S28 23.33 28 14C28 6.27 21.73 0 14 0z" fill="#4ade80"/><circle cx="14" cy="14" r="6" fill="#0f1117"/><path d="M14 7l-3.5 5h2.5l-1 5 5-6h-2.5L14 7z" fill="#4ade80"/></svg></div>`,
         className:"",iconSize:[28,36],iconAnchor:[14,36],
       });
       stations.forEach(s=>{
@@ -396,19 +431,8 @@ function Home({ go, stations, setStation, user, onMenu }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="EcoChargeCar" sub="Find a charging station near you" onMenu={onMenu}/>
-      {user&&(
-        <div style={{ margin:"10px 14px 0",background:"linear-gradient(135deg,#0d2218,#112b1a)",
-          borderRadius:12,padding:"10px 14px",border:`1px solid ${T.greenDim}`,
-          display:"flex",alignItems:"center",gap:10 }}>
-          {Ico.profile(T.green)}
-          <span style={{ fontSize:13,color:T.text,fontWeight:500 }}>
-            Welcome, <strong style={{ color:T.green }}>{user.name||user.email?.split("@")[0]}</strong>
-          </span>
-        </div>
-      )}
-      <div style={{ flex:1,position:"relative",margin:"12px",borderRadius:18,
-        overflow:"hidden",zIndex:0,isolation:"isolate" }}>
+      <Header title="Find Stations" sub="Ghana charging network" onBack={()=>go("home")}/>
+      <div style={{ flex:1,position:"relative",margin:"12px",borderRadius:18,overflow:"hidden",zIndex:0,isolation:"isolate" }}>
         <div ref={mapRef} style={{ width:"100%",height:"100%",zIndex:0 }}/>
         <div style={{ position:"absolute",top:14,right:14,zIndex:1000,
           background:"rgba(15,17,23,.85)",backdropFilter:"blur(8px)",
@@ -430,12 +454,216 @@ function Home({ go, stations, setStation, user, onMenu }) {
           </div>
         </div>
       </div>
-      <Nav active="Home" go={go}/>
+      <NewNav active="Stations" go={go}/>
     </div>
   );
 }
 
-// ── STATION DETAIL ────────────────────────────────────────────
+// ── NEW HOME DASHBOARD ────────────────────────────────────────
+function Home({ go, stations, setStation, user, onMenu }) {
+  const [search, setSearch] = useState("");
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const greetEmoji = hour < 12 ? "👋" : hour < 17 ? "☀️" : "🌙";
+
+  const filtered = search
+    ? stations.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.city.toLowerCase().includes(search.toLowerCase()))
+    : stations;
+
+  const quickActions = [
+    { icon:"⚡", label:"Find Stations", sub:"Nearby",    screen:"map"      },
+    { icon:"📋", label:"My Bookings",   sub:"View all",  screen:"bookings" },
+    { icon:"📱", label:"Charging Pass", sub:"Show QR",   screen:"qr"       },
+    { icon:"💧", label:"Water Points",  sub:"Find clean water", screen:"detail" },
+  ];
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:"#080d10",overflowY:"auto" }}>
+
+      {/* Header */}
+      <div style={{ padding:"14px 18px 12px",display:"flex",justifyContent:"space-between",
+        alignItems:"center",flexShrink:0 }}>
+        <button onClick={onMenu} className="tap"
+          style={{ background:"rgba(255,255,255,.08)",border:`1px solid ${T.border}`,
+            borderRadius:12,width:40,height:40,cursor:"pointer",
+            display:"flex",flexDirection:"column",gap:4,alignItems:"center",justifyContent:"center" }}>
+          <div style={{ width:18,height:2,background:T.mutedLight,borderRadius:1 }}/>
+          <div style={{ width:14,height:2,background:T.mutedLight,borderRadius:1 }}/>
+          <div style={{ width:18,height:2,background:T.mutedLight,borderRadius:1 }}/>
+        </button>
+        <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+          <Logo size={28}/>
+          <div>
+            <div style={{ fontWeight:800,fontSize:16,color:T.text,lineHeight:1 }}>EcoCharge</div>
+            <div style={{ fontSize:10,color:T.green,fontWeight:600 }}>Ghana</div>
+          </div>
+        </div>
+        <div style={{ position:"relative" }}>
+          <div style={{ background:"rgba(255,255,255,.08)",border:`1px solid ${T.border}`,
+            borderRadius:12,width:40,height:40,
+            display:"flex",alignItems:"center",justifyContent:"center",fontSize:18 }}>🔔</div>
+          <div style={{ position:"absolute",top:-3,right:-3,width:12,height:12,
+            borderRadius:"50%",background:T.green,border:"2px solid #080d10" }}/>
+        </div>
+      </div>
+
+      {/* Hero section */}
+      <div style={{ margin:"0 14px 16px",borderRadius:20,overflow:"hidden",
+        background:"linear-gradient(135deg,#0a1f0a,#0d2d14)",
+        position:"relative",minHeight:180 }}>
+        {/* BG image overlay */}
+        <div style={{ position:"absolute",inset:0,
+          background:"linear-gradient(135deg,rgba(10,31,10,.85) 0%,rgba(13,45,20,.6) 100%)",zIndex:1 }}/>
+        {/* Charging station silhouette */}
+        <div style={{ position:"absolute",right:0,bottom:0,top:0,width:"55%",
+          background:"linear-gradient(135deg,#0d2d14,#0a1f0a)",
+          display:"flex",alignItems:"center",justifyContent:"center",
+          fontSize:80,opacity:.15 }}>⚡</div>
+        <div style={{ position:"relative",zIndex:2,padding:"20px 20px 16px" }}>
+          <div style={{ fontSize:14,color:"rgba(255,255,255,.7)",marginBottom:4 }}>
+            {greeting} {greetEmoji}
+          </div>
+          <div style={{ fontWeight:800,fontSize:24,color:T.text,marginBottom:6,letterSpacing:-.5 }}>
+            {user?.name || user?.email?.split("@")[0] || "Welcome"}
+          </div>
+          <div style={{ fontSize:13,color:T.muted,lineHeight:1.6 }}>
+            Powering Ghana with{" "}
+            <span style={{ color:T.green,fontWeight:600 }}>clean energy</span>
+            {" "}and{" "}
+            <span style={{ color:T.blue,fontWeight:600 }}>clean water</span>
+          </div>
+          <div style={{ marginTop:14,display:"flex",gap:8 }}>
+            <button onClick={()=>go("map")} className="tap"
+              style={{ background:T.green,border:"none",borderRadius:10,
+                padding:"8px 16px",fontSize:13,fontWeight:700,color:"#000",
+                cursor:"pointer",fontFamily:"inherit" }}>Find Station →</button>
+            <button onClick={()=>go("qr")} className="tap"
+              style={{ background:"rgba(255,255,255,.1)",border:`1px solid rgba(255,255,255,.2)`,
+                borderRadius:10,padding:"8px 14px",fontSize:13,fontWeight:600,color:T.text,
+                cursor:"pointer",fontFamily:"inherit" }}>My Pass</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div style={{ margin:"0 14px 16px",position:"relative" }}>
+        <div style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:16 }}>🔍</div>
+        <input placeholder="Search station or location" value={search}
+          onChange={e=>setSearch(e.target.value)}
+          style={{ width:"100%",background:"#1a1d27",border:`1px solid ${T.border}`,
+            borderRadius:14,padding:"13px 14px 13px 42px",color:T.text,fontSize:14 }}/>
+        <div style={{ position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",
+          background:"rgba(255,255,255,.06)",borderRadius:8,padding:"5px 8px",fontSize:14 }}>⚙️</div>
+      </div>
+
+      {/* Quick actions */}
+      <div style={{ margin:"0 14px 16px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10 }}>
+        {quickActions.map(a=>(
+          <div key={a.label} className="tap" onClick={()=>go(a.screen)}
+            style={{ background:"#1a1d27",borderRadius:14,padding:"14px 8px",
+              border:`1px solid ${T.border}`,textAlign:"center",cursor:"pointer" }}>
+            <div style={{ fontSize:24,marginBottom:6 }}>{a.icon}</div>
+            <div style={{ fontSize:11,fontWeight:700,color:T.text,lineHeight:1.3 }}>{a.label}</div>
+            <div style={{ fontSize:9,color:T.muted,marginTop:3 }}>{a.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Impact card */}
+      <div style={{ margin:"0 14px 16px",background:"linear-gradient(135deg,#0a2010,#0d2d1a)",
+        borderRadius:16,padding:"16px",border:`1px solid ${T.greenDim}`,
+        display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+        <div>
+          <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
+            <div style={{ width:32,height:32,borderRadius:"50%",background:T.green,
+              display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>🌱</div>
+            <span style={{ fontWeight:700,fontSize:13,color:T.text }}>You're making impact!</span>
+          </div>
+          <div style={{ fontSize:13,color:T.mutedLight }}>
+            <strong style={{ color:T.text }}>0 charges</strong> · <strong style={{ color:T.green }}>0 kg CO₂</strong> saved
+          </div>
+          <div style={{ fontSize:13,color:T.mutedLight,marginTop:4 }}>
+            <strong style={{ color:T.blue }}>0L</strong> clean water received
+          </div>
+        </div>
+        <div style={{ fontSize:40 }}>🌍</div>
+      </div>
+
+      {/* Nearby stations */}
+      <div style={{ margin:"0 14px 16px" }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
+          <div style={{ fontWeight:800,fontSize:16,color:T.text }}>Nearby Stations</div>
+          <button onClick={()=>go("detail")} className="tap"
+            style={{ background:"none",border:"none",color:T.green,fontSize:13,
+              fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4 }}>
+            View all →
+          </button>
+        </div>
+        {(search ? filtered : stations).slice(0,4).map(s=>(
+          <div key={s.id} className="tap row" onClick={()=>{ setStation(s); go("detail"); }}
+            style={{ background:"#1a1d27",borderRadius:16,padding:"14px",
+              border:`1px solid ${T.border}`,marginBottom:10,
+              display:"flex",gap:12,alignItems:"center" }}>
+            {/* Station icon */}
+            <div style={{ width:72,height:72,borderRadius:12,flexShrink:0,
+              background:"linear-gradient(135deg,#0a2010,#0d3018)",
+              display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,
+              border:`1px solid ${T.greenDim}` }}>⚡</div>
+            <div style={{ flex:1,minWidth:0 }}>
+              <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:3,
+                overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{s.name}</div>
+              <div style={{ fontSize:11,color:T.muted,marginBottom:8 }}>{s.time} away · {s.city}</div>
+              <div style={{ display:"flex",gap:8 }}>
+                <div style={{ background:"rgba(255,255,255,.06)",borderRadius:6,padding:"3px 8px",
+                  fontSize:10,color:T.mutedLight }}>⚡ {s.solar*1.2|0} kW Max</div>
+                <div style={{ background:"rgba(255,255,255,.06)",borderRadius:6,padding:"3px 8px",
+                  fontSize:10,color:T.mutedLight }}>☀️ {s.solar}% Solar</div>
+              </div>
+            </div>
+            <div style={{ flexShrink:0,textAlign:"center" }}>
+              <div style={{ background:`${T.green}22`,borderRadius:10,padding:"6px 10px",
+                border:`1px solid ${T.greenDim}`,marginBottom:8 }}>
+                <div style={{ fontWeight:800,fontSize:16,color:T.green }}>{s.open}/{s.bays}</div>
+                <div style={{ fontSize:9,color:T.green }}>Bays avail.</div>
+              </div>
+              <button onClick={e=>{ e.stopPropagation(); setStation(s); go("detail"); }} className="tap"
+                style={{ background:T.green,border:"none",borderRadius:8,
+                  width:32,height:32,cursor:"pointer",fontSize:16,
+                  display:"flex",alignItems:"center",justifyContent:"center" }}>↗</button>
+            </div>
+          </div>
+        ))}
+        {search && filtered.length===0 && (
+          <div style={{ textAlign:"center",padding:"30px 0",color:T.muted,fontSize:13 }}>
+            No stations found for "{search}"
+          </div>
+        )}
+      </div>
+
+      {/* Water banner */}
+      <div style={{ margin:"0 14px 20px",background:"linear-gradient(135deg,#061824,#0a2030)",
+        borderRadius:16,padding:"16px",border:`1px solid rgba(56,189,248,.2)`,
+        display:"flex",alignItems:"center",gap:14 }}>
+        <div style={{ fontSize:40 }}>💧</div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.blue,marginBottom:4 }}>
+            Every charge includes 20L Clean Water
+          </div>
+          <div style={{ fontSize:12,color:T.muted }}>Clean energy for your ride. Clean water for life.</div>
+        </div>
+        <div style={{ fontSize:20,color:T.muted }}>›</div>
+      </div>
+
+      {/* Bottom nav spacer */}
+      <div style={{ height:80,flexShrink:0 }}/>
+
+      {/* Fixed bottom nav */}
+      <NewNav active="Home" go={go}/>
+    </div>
+  );
+}
+
+
 function Detail({ go, station, stations, setStation }) {
   const s = station||stations[0];
   return (
@@ -515,7 +743,7 @@ function Detail({ go, station, stations, setStation }) {
         ))}
         <div style={{ height:18 }}/>
       </div>
-      <Nav active="Stations" go={go}/>
+      <NewNav active="Stations" go={go}/>
     </div>
   );
 }
@@ -584,7 +812,7 @@ function Vehicles({ go, setVehicle, user }) {
           {sel?`Continue with ${sel.type} →`:"Select a vehicle to continue"}
         </button>
       </div>
-      <Nav active="Stations" go={go}/>
+      <NewNav active="Stations" go={go}/>
     </div>
   );
 }
@@ -762,7 +990,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
           {loading?<><Spinner/> Processing…</>:payHow==="now"?`Pay GH₵${total} & Confirm`:"Reserve — Pay on Arrival"}
         </button>
       </div>
-      <Nav active="Stations" go={go}/>
+      <NewNav active="Stations" go={go}/>
     </div>
   );
 }
@@ -785,7 +1013,7 @@ function QRScreen({ go, booking }) {
           </button>
         </div>
       </div>
-      <Nav active="Stations" go={go}/>
+      <NewNav active="Stations" go={go}/>
     </div>
   );
 
@@ -835,7 +1063,7 @@ function QRScreen({ go, booking }) {
           Back to Home
         </button>
       </div>
-      <Nav active="Stations" go={go}/>
+      <NewNav active="Stations" go={go}/>
     </div>
   );
 }
@@ -923,7 +1151,7 @@ function Verify({ go }) {
           </div>
         )}
       </div>
-      <Nav active="More" go={go}/>
+      <NewNav active="More" go={go}/>
     </div>
   );
 }
@@ -982,7 +1210,7 @@ function Profile({ go, user, setUser, onMenu }) {
           </div>
         )}
       </div>
-      <Nav active="Profile" go={go}/>
+      <NewNav active="Profile" go={go}/>
     </div>
   );
 }
@@ -1021,7 +1249,7 @@ function About({ go, onMenu }) {
           {Ico.bolt("#000")} Find a Station
         </button>
       </div>
-      <Nav active="More" go={go}/>
+      <NewNav active="More" go={go}/>
     </div>
   );
 }
@@ -1084,14 +1312,16 @@ export default function App() {
   );
 
   const views = {
-    home:     <Home     {...props}/>,
-    detail:   <Detail   {...props}/>,
-    vehicles: <Vehicles {...props}/>,
-    booking:  <Booking  {...props}/>,
-    qr:       <QRScreen {...props}/>,
-    verify:   <Verify   {...props}/>,
-    profile:  <Profile  {...props}/>,
-    about:    <About    {...props}/>,
+    home:     <Home      {...props}/>,
+    map:      <MapScreen {...props}/>,
+    detail:   <Detail    {...props}/>,
+    vehicles: <Vehicles  {...props}/>,
+    booking:  <Booking   {...props}/>,
+    qr:       <QRScreen  {...props}/>,
+    verify:   <Verify    {...props}/>,
+    profile:  <Profile   {...props}/>,
+    about:    <About     {...props}/>,
+    bookings: <Detail    {...props}/>,
   };
 
   return (
