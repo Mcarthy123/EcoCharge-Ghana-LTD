@@ -1,21 +1,27 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>EcoCharge Ghana</title>
-    <link rel="manifest" href="/manifest.json"/>
-    <meta name="theme-color" content="#4ade80"/>
-    <meta name="apple-mobile-web-app-capable" content="yes"/>
-    <meta name="apple-mobile-web-app-title" content="EcoCharge"/>
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-    <link rel="apple-touch-icon" href="/logo.png"/>
-    <link rel="apple-touch-icon-precomposed" href="/logo.png"/>
-    <link rel="shortcut icon" href="/logo.png"/>
-    <link rel="icon" type="image/png" href="/logo.png"/>
+
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body, #root { height: 100%; }
+      body { background: #0a0d10; color: #fff; font-family: 'Inter', sans-serif; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/index.jsx"></script>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
