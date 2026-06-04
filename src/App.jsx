@@ -62,6 +62,7 @@ const DURATIONS = [
 // ── CSS + FONT AWESOME + INTER ────────────────────────────────
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+  @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   html,body,#root{height:100%;-webkit-text-size-adjust:100%}
   body{
@@ -87,69 +88,15 @@ const CSS = `
   input{color:#fff}
   input::placeholder{color:#4b5563}
   ::-webkit-scrollbar{width:0;height:0}
+  .fa, .fas, .far, .fab, .fa-solid, .fa-regular, .fa-brands {
+    font-family: "Font Awesome 6 Free", "Font Awesome 6 Brands" !important;
+    font-style: normal;
+  }
   .leaflet-pane{z-index:1!important}
   .leaflet-top,.leaflet-bottom{z-index:2!important}
   .leaflet-control{z-index:2!important}
 
 `;
-
-// ── SVG ICON COMPONENT (no external dependency) ──────────────
-const Icon = ({ name, size=16, color="currentColor", style={} }) => {
-  const s = { display:"inline-block", flexShrink:0, verticalAlign:"middle", lineHeight:1, ...style };
-  const p = { fill:"none", stroke:color, strokeWidth:"1.8", strokeLinecap:"round" };
-  const f = { fill:color };
-  const icons = {
-    "bars":                <svg width={size} height={size} viewBox="0 0 24 24" style={s}><path stroke={color} strokeWidth="2" strokeLinecap="round" d="M3 12h18M3 6h18M3 18h18"/></svg>,
-    "house":               <svg width={size} height={size} viewBox="0 0 24 24" style={s} {...f}><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>,
-    "charging-station":    <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><rect x="2" y="3" width="13" height="18" rx="2"/><path d="M15 8h2a2 2 0 012 2v3a2 2 0 01-2 2h-2M7 8v8M10 8v8"/></svg>,
-    "qrcode":              <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="3" height="3"/><rect x="18" y="14" width="3" height="3"/><rect x="14" y="18" width="3" height="3"/><rect x="18" y="18" width="3" height="3"/></svg>,
-    "calendar-check":      <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></svg>,
-    "user":                <svg width={size} height={size} viewBox="0 0 24 24" style={s} {...f}><path d="M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v2h20v-2c0-3.3-6.7-5-10-5z"/></svg>,
-    "bell":                <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>,
-    "magnifying-glass":    <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>,
-    "sliders":             <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>,
-    "location-dot":        <svg width={size} height={size} viewBox="0 0 24 24" style={s} {...f}><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>,
-    "droplet":             <svg width={size} height={size} viewBox="0 0 24 24" style={s} {...f}><path d="M12 2C12 2 5 10.5 5 15a7 7 0 0014 0C19 10.5 12 2 12 2Z"/></svg>,
-    "leaf":                <svg width={size} height={size} viewBox="0 0 24 24" style={s} {...f}><path d="M17 8C8 10 5.9 16.17 3.82 21.34L5.71 22l1-2.3A4.49 4.49 0 008 20C19 20 22 3 22 3c-1 2-8 4-5 0z"/></svg>,
-    "bolt":                <svg width={size} height={size} viewBox="0 0 24 24" style={s} {...f}><path d="M13 2L4.5 13.5H11L10 22L20.5 10H14L13 2Z"/></svg>,
-    "solar-panel":         <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><rect x="2" y="5" width="20" height="14" rx="1"/><path d="M12 5v14M2 12h20M7 5v14M17 5v14"/></svg>,
-    "sun":                 <svg width={size} height={size} viewBox="0 0 24 24" style={s} {...f}><circle cx="12" cy="12" r="5"/><path stroke={color} strokeWidth="2" strokeLinecap="round" d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>,
-    "clock":               <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>,
-    "arrow-right":         <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>,
-    "arrow-left":          <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>,
-    "arrow-up-right-from-square": <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6M10 14L21 3"/></svg>,
-    "earth-africa":        <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/><path d="M2 12h20"/></svg>,
-    "chevron-right":       <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>,
-    "right-to-bracket":    <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>,
-    "right-from-bracket":  <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>,
-    "user-plus":           <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>,
-    "circle-info":         <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>,
-    "ellipsis":            <svg width={size} height={size} viewBox="0 0 24 24" style={s} {...f}><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>,
-    "car":                 <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><path d="M5 17H3a2 2 0 01-2-2V9a2 2 0 012-2h14l3 4v4a2 2 0 01-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>,
-    "motorcycle":          <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h-3l-3 6h9.5M5.5 14L9 6"/></svg>,
-    "truck-pickup":        <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><path d="M2 17l1-8h13l1 4h3l1 4H2z"/><circle cx="6" cy="17" r="2"/><circle cx="18" cy="17" r="2"/></svg>,
-    "check":               <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg>,
-    "receipt":             <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1z"/><path d="M9 9h6M9 13h6"/></svg>,
-    "address-card":        <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="12" r="2"/><path d="M14 9h4M14 13h3"/></svg>,
-    "phone":               <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.22 1.18 2 2 0 012.18 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.16 6.16l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>,
-    "envelope":            <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="M22 6l-10 7L2 6"/></svg>,
-    "lock":                <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>,
-    "store":               <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><path d="M3 9l1-6h16l1 6M3 9h18M3 9v11a1 1 0 001 1h16a1 1 0 001-1V9M9 21V12h6v9"/></svg>,
-    "credit-card":         <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg>,
-    "triangle-exclamation":<svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>,
-    "ticket":              <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><path d="M2 9a3 3 0 010-6h20a3 3 0 010 6v3a3 3 0 010 6H2a3 3 0 010-6V9z"/></svg>,
-    "shield-halved":       <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>,
-    "money-bill":          <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><rect x="1" y="5" width="22" height="14" rx="2"/><circle cx="12" cy="12" r="3"/></svg>,
-    "hashtag":             <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><path d="M4 9h16M4 15h16M10 3l-3 18M17 3l-3 18"/></svg>,
-    "hourglass-half":      <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><path d="M5 2h14M5 22h14M6 2v6l6 4-6 4v6M18 2v6l-6 4 6 4v6"/></svg>,
-    "atom":                <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.5"><circle cx="12" cy="12" r="2"/><ellipse cx="12" cy="12" rx="10" ry="4"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(120 12 12)"/></svg>,
-    "people-group":        <svg width={size} height={size} viewBox="0 0 24 24" style={s} {...f}><path d="M12 12c2.2 0 4-1.8 4-4s-1.8-4-4-4-4 1.8-4 4 1.8 4 4 4zm0 2c-2.7 0-8 1.3-8 4v2h16v-2c0-2.7-5.3-4-8-4zm7-9c1.7 0 3-1.3 3-3s-1.3-3-3-3c-.4 0-.8.1-1.1.2.7.8 1.1 1.8 1.1 2.8s-.4 2-1.1 2.8c.3.1.7.2 1.1.2zm2 2h-2c-.5 0-1 .1-1.5.2 1.2.9 2 2.2 2 3.8v1H24v-2c0-2-2.7-3-4-3zM5 5c1.7 0 3-1.3 3-3S6.7-1 5-1 2 .3 2 2s1.3 3 3 3zm-2 2H1C-.3 7-3 8-3 10v2H3v-1c0-1.6.8-2.9 2-3.8C4.5 7.1 4 7 3 7z"/></svg>,
-    "circle-user":         <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M6 20.5a9 9 0 0112 0"/></svg>,
-    "cloud-sun":           <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><path d="M12 2v2M4.22 4.22l1.42 1.42M2 12h2M19.78 4.22l-1.42 1.42"/><circle cx="12" cy="7" r="3"/><path d="M6 19a4 4 0 010-8h.5A5.5 5.5 0 1118 14.5a3.5 3.5 0 01-3 5H6z"/></svg>,
-    "moon":                <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>,
-  };
-  return icons[name] || <svg width={size} height={size} viewBox="0 0 24 24" style={s} fill={color}><circle cx="12" cy="12" r="5"/></svg>;
-};
 
 // ── HELPERS ───────────────────────────────────────────────────
 const Badge = ({ label, color=T.green }) => (
@@ -187,7 +134,7 @@ const Logo = ({ size=34 }) => {
       background:`linear-gradient(135deg,${T.green},${T.greenDark})`,
       display:"flex", alignItems:"center", justifyContent:"center",
     }}>
-      <Icon name="bolt" size={16} color={"#000"}/>
+      <i className="fa-solid fa-bolt" style={{ fontSize:16, color:"#000" }}/>
     </div>
   );
 };
@@ -221,10 +168,10 @@ const NewNav = ({ active, go }) => (
             marginTop:-22, marginBottom:2,
             boxShadow:`0 4px 24px rgba(74,222,128,.45)`,
           }}>
-            <Icon name={icon} size={20} color={"#000"}/>
+            <i className={`fa-solid fa-${icon}`} style={{ fontSize:20, color:"#000" }}/>
           </div>
         ) : (
-          <Icon name={icon} size={20} color={active}/>
+          <i className={`fa-solid fa-${icon}`} style={{ fontSize:20, color:active }}/>
         )}
         <span style={{
           fontSize:10, fontWeight: active===label ? 700 : 500,
@@ -259,7 +206,7 @@ const Nav = ({ active, go }) => (
           display:"flex", flexDirection:"column", alignItems:"center",
           gap:4, minWidth:56, fontFamily:"inherit",
         }}>
-        <Icon name={icon} size={20} color={active}/>
+        <i className={`fa-solid fa-${icon}`} style={{ fontSize:20, color:active }}/>
         <span style={{
           fontSize:10, fontWeight: active===label ? 700 : 500,
           color: active===label ? T.green : T.muted,
@@ -280,10 +227,10 @@ const Header = ({ title, sub, onBack, onMenu }) => (
   }}>
     {onBack
       ? <button onClick={onBack} className="tap" style={{ background:"none", border:"none", cursor:"pointer", padding:4 }}>
-          <Icon name="arrow-left" size={20} color={T.text}/>
+          <i className="fa-solid fa-arrow-left" style={{ fontSize:20, color:T.text }}/>
         </button>
       : <button onClick={onMenu} className="tap" style={{ background:"none", border:"none", cursor:"pointer", padding:4 }}>
-          <Icon name="bars" size={20} color={T.mutedLight}/>
+          <i className="fa-solid fa-bars" style={{ fontSize:20, color:T.mutedLight }}/>
         </button>
     }
     <div style={{ flex:1 }}>
@@ -338,9 +285,9 @@ const Drawer = ({ open, onClose, go, user, onLogout }) => (
         ].map(item=>(
           <div key={item.label} className="tap row" onClick={()=>{ go(item.screen); onClose(); }}
             style={{ display:"flex", alignItems:"center", gap:14, padding:"16px 20px", borderBottom:`1px solid ${T.border}20` }}>
-            <Icon name={item.icon} size={16} color={item.color} style={{ width:20 }}/>
+            <i className={`fa-solid fa-${item.icon}`} style={{ fontSize:16, color:item.color, width:20 }}/>
             <span style={{ color:T.text, fontSize:14, fontWeight:500, flex:1 }}>{item.label}</span>
-            <Icon name="chevron-right" size={12} color={T.muted}/>
+            <i className="fa-solid fa-chevron-right" style={{ fontSize:12, color:T.muted }}/>
           </div>
         ))}
       </div>
@@ -351,7 +298,7 @@ const Drawer = ({ open, onClose, go, user, onLogout }) => (
               borderRadius:10, padding:"11px", fontSize:13, fontWeight:600, color:T.red,
               cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
               gap:8, fontFamily:"inherit" }}>
-            <Icon name="right-from-bracket" size={16} color={T.muted}/> Sign Out
+            <i className="fa-solid fa-right-from-bracket" style={{ fontSize:16, color:T.muted }}/> Sign Out
           </button>
         </div>
       )}
@@ -378,14 +325,14 @@ function Splash({ onLogin, onRegister, onGuest }) {
             border:"none", borderRadius:14, padding:"16px", fontSize:16, fontWeight:700,
             color:"#000", cursor:"pointer", marginBottom:12, fontFamily:"inherit",
             display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
-          <Icon name="right-to-bracket" size={16} color={T.muted}/> Sign In
+          <i className="fa-solid fa-right-to-bracket" style={{ fontSize:16, color:T.muted }}/> Sign In
         </button>
         <button onClick={onRegister} className="tap"
           style={{ width:"100%", background:"transparent", border:`1px solid ${T.border}`,
             borderRadius:14, padding:"16px", fontSize:16, fontWeight:600,
             color:T.text, cursor:"pointer", marginBottom:16, fontFamily:"inherit",
             display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
-          <Icon name="user-plus" size={16} color={T.muted}/> Create Account
+          <i className="fa-solid fa-user-plus" style={{ fontSize:16, color:T.muted }}/> Create Account
         </button>
         <button onClick={onGuest} className="tap"
           style={{ width:"100%", background:"none", border:"none", fontSize:13,
@@ -400,7 +347,7 @@ function Splash({ onLogin, onRegister, onGuest }) {
           { icon:"fa-leaf",        label:"Green",   color:T.green  },
         ].map(f=>(
           <div key={f.label} style={{ textAlign:"center" }}>
-            <Icon name={f.icon} size={22} color={f.color}/>
+            <i className={`fa-solid fa-${f.icon}`} style={{ fontSize:22, color:f.color }}/>
             <div style={{ fontSize:10, color:T.muted, marginTop:6 }}>{f.label}</div>
           </div>
         ))}
@@ -449,7 +396,7 @@ function Auth({ mode, onBack, onSuccess }) {
         onChange={e=>{ set(e.target.value); setErr(""); }}
         style={{ width:"100%", background:"#0c0f18", border:`1px solid ${T.border}`,
           borderRadius:10, padding:"13px 14px 13px 44px", color:T.text, fontSize:14 }}/>
-      <Icon name={type==="email"?"envelope":type==="password"?"lock":"user"} size={14} color={T.muted} style={{ position:"absolute", left:15, top:"50%", transform:"translateY(-50%)" }}/>
+      <i className={`fa-solid fa-${type==="email"?"envelope":type==="password"?"lock":"user"}`} style={{ fontSize:14, color:T.muted, position:"absolute", left:15, top:"50%", transform:"translateY(-50%)" }}/>
     </div>
   );
 
@@ -479,7 +426,7 @@ function Auth({ mode, onBack, onSuccess }) {
               border:"none", borderRadius:12, padding:"14px", fontSize:15, fontWeight:700,
               color:"#000", cursor:"pointer", fontFamily:"inherit", opacity:loading?.7:1,
               display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
-            {loading ? <Spinner/> : <><Icon name={mode==="login"?"right-to-bracket":"user-plus"} size={16} color={T.muted}/> {mode==="login"?"Sign In":"Create Account"}</>}
+            {loading ? <Spinner/> : <><i className={`fa-solid fa-${mode==="login"?"right-to-bracket":"user-plus"}`} style={{ fontSize:16, color:T.muted }}/> {mode==="login"?"Sign In":"Create Account"}</>}
           </button>
         </div>
         <div style={{ textAlign:"center", marginTop:20, paddingBottom:40 }}>
@@ -542,7 +489,7 @@ function MapScreen({ go, stations, setStation, onMenu }) {
           background:"rgba(10,13,16,.85)", backdropFilter:"blur(8px)",
           borderRadius:20, padding:"5px 14px", fontSize:11, color:T.green,
           fontWeight:700, border:`1px solid ${T.border}` }}>
-          <Icon name="location-dot" size={16} color={T.muted} style={{ marginRight:5 }}/>{stations.length} stations
+          <i className="fa-solid fa-location-dot" style={{ fontSize:16, color:T.muted, marginRight:5 }}/>{stations.length} stations
         </div>
         <div style={{ position:"absolute", bottom:0, left:0, right:0, zIndex:10,
           background:"linear-gradient(0deg,rgba(9,14,26,.98) 0%,transparent 100%)",
@@ -555,10 +502,10 @@ function MapScreen({ go, stations, setStation, onMenu }) {
                   flexShrink:0, minWidth:150 }}>
                 <div style={{ fontWeight:700, fontSize:12, color:T.text, marginBottom:3 }}>{s.name}</div>
                 <div style={{ fontSize:11, color:T.green, fontWeight:600 }}>
-                  <Icon name="charging-station" size={16} color={T.muted} style={{ marginRight:4 }}/>{s.open}/{s.bays} bays
+                  <i className="fa-solid fa-charging-station" style={{ fontSize:16, color:T.muted, marginRight:4 }}/>{s.open}/{s.bays} bays
                 </div>
                 <div style={{ fontSize:10, color:T.muted, marginTop:2 }}>
-                  <Icon name="clock" size={16} color={T.muted} style={{ marginRight:4 }}/>Wait: {s.time}
+                  <i className="fa-solid fa-clock" style={{ fontSize:16, color:T.muted, marginRight:4 }}/>Wait: {s.time}
                 </div>
               </div>
             ))}
@@ -575,7 +522,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
   const [search, setSearch] = useState("");
   const hour      = new Date().getHours();
   const greeting  = hour<12 ? "Good morning" : hour<17 ? "Good afternoon" : "Good evening";
-  const greetIcon = hour<12 ? "sun" : hour<17 ? "sun" : "bolt";
+  const greetIcon = hour<12 ? "fa-sun" : hour<17 ? "fa-cloud-sun" : "fa-moon";
   const displayName = user?.name || user?.email?.split("@")[0] || "Welcome";
 
   const filtered = search
@@ -602,7 +549,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
           style={{ background:"rgba(255,255,255,.07)", border:`1px solid ${T.border}`,
             borderRadius:12, width:40, height:40, cursor:"pointer",
             display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <Icon name="bars" size={16} color={T.mutedLight}/>
+          <i className="fa-solid fa-bars" style={{ fontSize:16, color:T.mutedLight }}/>
         </button>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <Logo size={30}/>
@@ -614,7 +561,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
         <div style={{ position:"relative" }}>
           <button className="tap" style={{ background:"rgba(255,255,255,.07)", border:`1px solid ${T.border}`,
             borderRadius:12, width:40, height:40, display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <Icon name="bell" size={16} color={T.mutedLight}/>
+            <i className="fa-solid fa-bell" style={{ fontSize:16, color:T.mutedLight }}/>
           </button>
           <div style={{ position:"absolute", top:-2, right:-2, width:10, height:10,
             borderRadius:"50%", background:T.green, border:`2px solid ${T.bg}` }}/>
@@ -645,7 +592,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
         {/* Text */}
         <div style={{ position:"relative", zIndex:2, padding:"22px 20px 20px" }}>
           <div style={{ fontSize:13, color:"rgba(255,255,255,.6)", marginBottom:4, display:"flex", alignItems:"center", gap:6 }}>
-            <Icon name={greetIcon} size={12} color={T.yellow}/> {greeting}
+            <i className={`fa-solid fa-${greetIcon}`} style={{ fontSize:12, color:T.yellow }}/> {greeting}
           </div>
           <div style={{ fontWeight:800, fontSize:26, color:T.text, marginBottom:8, letterSpacing:-0.5 }}>
             {displayName}
@@ -661,13 +608,13 @@ function Home({ go, stations, setStation, user, onMenu }) {
               style={{ background:T.green, border:"none", borderRadius:10,
                 padding:"9px 18px", fontSize:13, fontWeight:700, color:"#000",
                 cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
-              <Icon name="location-dot" size={16} color={T.muted}/> Find Station
+              <i className="fa-solid fa-location-dot" style={{ fontSize:16, color:T.muted }}/> Find Station
             </button>
             <button onClick={()=>go("qr")} className="tap"
               style={{ background:"rgba(255,255,255,.1)", border:`1px solid rgba(255,255,255,.15)`,
                 borderRadius:10, padding:"9px 16px", fontSize:13, fontWeight:600, color:T.text,
                 cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
-              <Icon name="qrcode" size={16} color={T.muted}/> My Pass
+              <i className="fa-solid fa-qrcode" style={{ fontSize:16, color:T.muted }}/> My Pass
             </button>
           </div>
         </div>
@@ -675,14 +622,14 @@ function Home({ go, stations, setStation, user, onMenu }) {
 
       {/* SEARCH */}
       <div className="fade1" style={{ margin:"0 14px 16px", position:"relative" }}>
-        <Icon name="magnifying-glass" size={14} color={T.muted}/>
+        <i className="fa-solid fa-magnifying-glass" style={{ fontSize:14, color:T.muted }}/>
         <input placeholder="Search station or location" value={search}
           onChange={e=>setSearch(e.target.value)}
           style={{ width:"100%", background:T.card, border:`1px solid ${T.border}`,
             borderRadius:14, padding:"13px 48px 13px 42px", fontSize:14, fontFamily:"inherit" }}/>
         <div style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)",
           background:"rgba(255,255,255,.06)", borderRadius:8, padding:"5px 9px" }}>
-          <Icon name="sliders" size={13} color={T.mutedLight}/>
+          <i className="fa-solid fa-sliders" style={{ fontSize:13, color:T.mutedLight }}/>
         </div>
       </div>
 
@@ -699,7 +646,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
               fontFamily:"inherit" }}>
             <div style={{ width:40, height:40, borderRadius:12, background:a.bg,
               display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <Icon name={a.icon} size={17} color={a.color}/>
+              <i className={`fa-solid fa-${a.icon}`} style={{ fontSize:17, color:a.color }}/>
             </div>
             <div style={{ textAlign:"center" }}>
               <div style={{ fontSize:10, fontWeight:700, color:T.text, lineHeight:1.3 }}>{a.label}</div>
@@ -718,7 +665,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
           <div style={{ width:44, height:44, borderRadius:"50%",
             background:`linear-gradient(135deg,${T.green},${T.greenDark})`,
             display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-            <Icon name="leaf" size={18} color={"#000"}/>
+            <i className="fa-solid fa-leaf" style={{ fontSize:18, color:"#000" }}/>
           </div>
           <div>
             <div style={{ fontWeight:700, fontSize:13, color:T.text, marginBottom:5 }}>
@@ -730,12 +677,12 @@ function Home({ go, stations, setStation, user, onMenu }) {
               <strong style={{ color:T.text }}>48 kg CO₂</strong> saved
             </div>
             <div style={{ fontSize:12, color:T.mutedLight, marginTop:3 }}>
-              <Icon name="droplet" size={16} color={T.blue} style={{ marginRight:4 }}/>
+              <i className="fa-solid fa-droplet" style={{ fontSize:16, color:T.blue, marginRight:4 }}/>
               <strong style={{ color:T.blue }}>240 L</strong> clean water received
             </div>
           </div>
         </div>
-        <Icon name="earth-africa" size={40} color={T.green}/>
+        <i className="fa-solid fa-earth-africa" style={{ fontSize:40, color:T.green }}/>
       </div>
 
       {/* NEARBY STATIONS */}
@@ -746,7 +693,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
             style={{ background:"none", border:"none", color:T.green, fontSize:13,
               fontWeight:600, cursor:"pointer", fontFamily:"inherit",
               display:"flex", alignItems:"center", gap:5 }}>
-            View all <Icon name="arrow-right" size={11} color={T.muted}/>
+            View all <i className="fa-solid fa-arrow-right" style={{ fontSize:11, color:T.muted }}/>
           </button>
         </div>
 
@@ -767,24 +714,24 @@ function Home({ go, stations, setStation, user, onMenu }) {
                 justifyContent:"center", border:`1px solid ${T.border}`, overflow:"hidden", position:"relative" }}>
                 <div style={{ position:"absolute", top:0, left:0, right:0, height:7,
                   background:"rgba(74,222,128,0.1)", borderBottom:"1px solid rgba(74,222,128,0.15)" }}/>
-                <Icon name="charging-station" size={28} color={T.green}/>
+                <i className="fa-solid fa-charging-station" style={{ fontSize:28, color:T.green }}/>
               </div>
               {/* Info */}
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontWeight:700, fontSize:14, color:T.text, marginBottom:3,
                   overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</div>
                 <div style={{ fontSize:11, color:T.muted, marginBottom:8 }}>
-                  <Icon name="clock" size={16} color={T.muted} style={{ marginRight:4 }}/>{s.time} away · {s.city}
+                  <i className="fa-solid fa-clock" style={{ fontSize:16, color:T.muted, marginRight:4 }}/>{s.time} away · {s.city}
                 </div>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                   <div style={{ background:"rgba(255,255,255,.05)", borderRadius:6, padding:"3px 8px",
                     display:"flex", alignItems:"center", gap:4 }}>
-                    <Icon name="bolt" size={9} color={T.mutedLight}/>
+                    <i className="fa-solid fa-bolt" style={{ fontSize:9, color:T.mutedLight }}/>
                     <span style={{ fontSize:10, color:T.mutedLight }}>{kw} kW Max</span>
                   </div>
                   <div style={{ background:"rgba(255,255,255,.05)", borderRadius:6, padding:"3px 8px",
                     display:"flex", alignItems:"center", gap:4 }}>
-                    <Icon name="sun" size={9} color={T.yellow}/>
+                    <i className="fa-solid fa-sun" style={{ fontSize:9, color:T.yellow }}/>
                     <span style={{ fontSize:10, color:T.mutedLight }}>{s.solar}% Solar</span>
                   </div>
                 </div>
@@ -801,7 +748,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
                     border:"none", borderRadius:9, cursor:"pointer",
                     display:"flex", alignItems:"center", justifyContent:"center",
                     boxShadow:`0 2px 8px rgba(74,222,128,.3)` }}>
-                  <Icon name="arrow-up-right-from-square" size={12} color={"#000"}/>
+                  <i className="fa-solid fa-arrow-up-right-from-square" style={{ fontSize:12, color:"#000" }}/>
                 </button>
               </div>
             </div>
@@ -810,7 +757,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
 
         {search && filtered.length===0 && (
           <div style={{ textAlign:"center", padding:"30px 0", color:T.muted, fontSize:13 }}>
-            <Icon name="magnifying-glass" size={24} color={T.muted} style={{ marginBottom:10, display:"block" }}/>
+            <i className="fa-solid fa-magnifying-glass" style={{ fontSize:24, color:T.muted, marginBottom:10, display:"block" }}/>
             No stations found for "{search}"
           </div>
         )}
@@ -822,8 +769,8 @@ function Home({ go, stations, setStation, user, onMenu }) {
         display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}
         onClick={()=>go("detail")}>
         <div style={{ display:"flex", gap:6, flexShrink:0 }}>
-          <Icon name="bolt" size={22} color={T.green}/>
-          <Icon name="droplet" size={20} color={T.blue}/>
+          <i className="fa-solid fa-bolt" style={{ fontSize:22, color:T.green }}/>
+          <i className="fa-solid fa-droplet" style={{ fontSize:20, color:T.blue }}/>
         </div>
         <div style={{ flex:1 }}>
           <div style={{ fontWeight:700, fontSize:14, color:T.blue, marginBottom:4 }}>
@@ -831,7 +778,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
           </div>
           <div style={{ fontSize:12, color:T.muted }}>Clean energy for your ride. Clean water for life.</div>
         </div>
-        <Icon name="chevron-right" size={14} color={T.muted}/>
+        <i className="fa-solid fa-chevron-right" style={{ fontSize:14, color:T.muted }}/>
       </div>
 
       <NewNav active="Home" go={go}/>
@@ -850,12 +797,12 @@ function Detail({ go, station, stations, setStation }) {
         background:"linear-gradient(135deg,#0d1f0d,#091a14)",
         display:"flex", alignItems:"center", justifyContent:"center", gap:20 }}>
         <div style={{ textAlign:"center" }}>
-          <Icon name="solar-panel" size={36} color={T.yellow}/>
+          <i className="fa-solid fa-solar-panel" style={{ fontSize:36, color:T.yellow }}/>
           <div style={{ fontSize:11, color:T.green, fontWeight:700, marginTop:6 }}>{s.solar}% Solar</div>
         </div>
         <div style={{ width:1, height:50, background:T.border }}/>
         <div style={{ textAlign:"center" }}>
-          <Icon name="atom" size={36} color={T.blue}/>
+          <i className="fa-solid fa-atom" style={{ fontSize:36, color:T.blue }}/>
           <div style={{ fontSize:11, color:T.blue, fontWeight:700, marginTop:6 }}>{s.hydrogen}% H₂</div>
         </div>
         <div style={{ position:"absolute", bottom:10, left:14, display:"flex", gap:8 }}>
@@ -872,7 +819,7 @@ function Detail({ go, station, stations, setStation }) {
           ].map(x=>(
             <div key={x.label} style={{ background:T.card, borderRadius:12, padding:"12px 8px",
               border:`1px solid ${T.border}`, textAlign:"center" }}>
-              <Icon name={x.icon} size={14} color={x.color} style={{ marginBottom:6, display:"block" }}/>
+              <i className={`fa-solid fa-${x.icon}`} style={{ fontSize:14, color:x.color, marginBottom:6, display:"block" }}/>
               <div style={{ fontSize:9, color:T.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:0.5 }}>{x.label}</div>
               <div style={{ fontWeight:800, fontSize:17, color:x.color }}>{x.value}</div>
             </div>
@@ -892,7 +839,7 @@ function Detail({ go, station, stations, setStation }) {
             border:"none", borderRadius:14, padding:"15px", fontSize:15, fontWeight:700,
             color:"#000", cursor:"pointer", marginBottom:14, fontFamily:"inherit",
             display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-          <Icon name="bolt" size={16} color={T.muted}/> Charge Here — Select Vehicle
+          <i className="fa-solid fa-bolt" style={{ fontSize:16, color:T.muted }}/> Charge Here — Select Vehicle
         </button>
         <div style={{ fontSize:11, color:T.muted, fontWeight:700, letterSpacing:0.5, textTransform:"uppercase", marginBottom:8 }}>
           All Stations
@@ -906,7 +853,7 @@ function Detail({ go, station, stations, setStation }) {
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontWeight:600, color:T.text, fontSize:14, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{st.name}</div>
               <div style={{ color:T.muted, fontSize:11, marginTop:2 }}>
-                <Icon name="location-dot" size={16} color={T.muted} style={{ marginRight:4 }}/>{st.city} · {st.bays} bays
+                <i className="fa-solid fa-location-dot" style={{ fontSize:16, color:T.muted, marginRight:4 }}/>{st.city} · {st.bays} bays
               </div>
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
@@ -951,7 +898,7 @@ function Vehicles({ go, setVehicle, user }) {
               transition:"border-color .2s" }}>
             <div style={{ height:160, background:vehicleBgs[v.type],
               display:"flex", alignItems:"center", justifyContent:"center", position:"relative" }}>
-              <Icon name={vehicleIcons[v.type]} size={72} color={vehicleColors}/>
+              <i className={`fa-solid fa-${vehicleIcons[v.type]}`} style={{ fontSize:72, color:vehicleColors }}/>
               <div style={{ position:"absolute", bottom:10, left:14 }}>
                 <div style={{ fontWeight:800, fontSize:18, color:T.text }}>{v.type}</div>
                 <div style={{ fontSize:11, color:T.mutedLight, marginTop:2 }}>{v.desc}</div>
@@ -960,13 +907,13 @@ function Vehicles({ go, setVehicle, user }) {
                 <div style={{ position:"absolute", top:12, right:12, width:28, height:28,
                   borderRadius:"50%", background:T.green,
                   display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <Icon name="check" size={14} color={"#000"}/>
+                  <i className="fa-solid fa-check" style={{ fontSize:14, color:"#000" }}/>
                 </div>
               )}
               <div style={{ position:"absolute", bottom:10, right:14 }}>
                 <div style={{ background:`${T.green}22`, border:`1px solid ${T.greenDim}`,
                   borderRadius:8, padding:"4px 10px", display:"flex", alignItems:"center", gap:4 }}>
-                  <Icon name="solar-panel" size={10} color={T.green}/>
+                  <i className="fa-solid fa-solar-panel" style={{ fontSize:10, color:T.green }}/>
                   <span style={{ fontSize:10, color:T.green, fontWeight:600 }}>Solar</span>
                 </div>
               </div>
@@ -982,11 +929,11 @@ function Vehicles({ go, setVehicle, user }) {
             Included with every charge
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-            <Icon name="bolt" size={14} color={T.green}/>
+            <i className="fa-solid fa-bolt" style={{ fontSize:14, color:T.green }}/>
             <span style={{ fontSize:13, color:T.text }}>Full vehicle charge — solar powered</span>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <Icon name="droplet" size={14} color={T.blue}/>
+            <i className="fa-solid fa-droplet" style={{ fontSize:14, color:T.blue }}/>
             <span style={{ fontSize:13, color:T.text }}>20L clean desalinated water</span>
           </div>
         </div>
@@ -998,7 +945,7 @@ function Vehicles({ go, setVehicle, user }) {
             marginBottom:16, fontFamily:"inherit", transition:"all .2s",
             display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
           {sel
-            ? <><Icon name="arrow-right" size={16} color={T.muted}/> Continue with {sel.type}</>
+            ? <><i className="fa-solid fa-arrow-right" style={{ fontSize:16, color:T.muted }}/> Continue with {sel.type}</>
             : "Select a vehicle to continue"
           }
         </button>
@@ -1060,7 +1007,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
 
   const inp = (ph, val, set, type="text", icon="fa-user") => (
     <div style={{ position:"relative", marginBottom:10 }}>
-      <Icon name={icon} size={13} color={T.muted} style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)" }}/>
+      <i className={`fa-solid fa-${icon}`} style={{ fontSize:13, color:T.muted, position:"absolute", left:14, top:"50%", transform:"translateY(-50%)" }}/>
       <input type={type} placeholder={ph} value={val}
         onChange={e=>{ set(e.target.value); setErr(""); }}
         style={{ width:"100%", background:"#0c0f18", border:`1px solid ${T.border}`,
@@ -1082,13 +1029,13 @@ function Booking({ go, station, vehicle, user, setBooking }) {
             <div style={{ fontWeight:700, fontSize:15, color:T.text }}>{s.name}</div>
             <div style={{ fontSize:12, color:T.muted, marginTop:2 }}>{vehicle?.type||"Car"} · {s.city}</div>
           </div>
-          <Icon name={vehicle?.type==="Scooter"?"motorcycle":vehicle?.type==="Tricycle"?"truck-pickup":"car"} size={40} color={T.green}/>
+          <i className={`fa-solid fa-${vehicle?.type==="Scooter"?"motorcycle":vehicle?.type==="Tricycle"?"truck-pickup":"car"}`} style={{ fontSize:40, color:T.green }}/>
         </div>
 
         {/* Time slots */}
         <div className="fade1" style={{ background:T.card, borderRadius:16, padding:"14px 16px", marginBottom:12, border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700, fontSize:14, color:T.text, marginBottom:12 }}>
-            <Icon name="clock" size={16} color={T.green} style={{ marginRight:8 }}/> Select Time
+            <i className="fa-solid fa-clock" style={{ fontSize:16, color:T.green, marginRight:8 }}/> Select Time
           </div>
           <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
             {slots.slice(0,12).map((sl,i)=>(
@@ -1107,7 +1054,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
         {/* Duration */}
         <div className="fade1" style={{ background:T.card, borderRadius:16, padding:"14px 16px", marginBottom:12, border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700, fontSize:14, color:T.text, marginBottom:12 }}>
-            <Icon name="hourglass-half" size={16} color={T.green} style={{ marginRight:8 }}/> Charging Duration
+            <i className="fa-solid fa-hourglass-half" style={{ fontSize:16, color:T.green, marginRight:8 }}/> Charging Duration
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
             {DURATIONS.map((d,i)=>(
@@ -1125,7 +1072,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
         {/* Order summary */}
         <div className="fade2" style={{ background:T.card, borderRadius:16, padding:"14px 16px", marginBottom:12, border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700, fontSize:14, color:T.text, marginBottom:10 }}>
-            <Icon name="receipt" size={16} color={T.green} style={{ marginRight:8 }}/> Summary
+            <i className="fa-solid fa-receipt" style={{ fontSize:16, color:T.green, marginRight:8 }}/> Summary
           </div>
           <Divider/>
           {[
@@ -1149,7 +1096,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
         {/* Contact */}
         <div className="fade2" style={{ background:T.card, borderRadius:16, padding:"14px 16px", marginBottom:12, border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700, fontSize:14, color:T.text, marginBottom:12 }}>
-            <Icon name="address-card" size={16} color={T.green} style={{ marginRight:8 }}/> Your Details
+            <i className="fa-solid fa-address-card" style={{ fontSize:16, color:T.green, marginRight:8 }}/> Your Details
           </div>
           {inp("Full name",     name,  setName,  "text",  "fa-user"  )}
           {inp("Phone number",  phone, setPhone, "tel",   "fa-phone" )}
@@ -1159,7 +1106,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
         {/* Payment method */}
         <div className="fade3" style={{ background:T.card, borderRadius:16, padding:"14px 16px", marginBottom:14, border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700, fontSize:14, color:T.text, marginBottom:12 }}>
-            <Icon name="credit-card" size={16} color={T.green} style={{ marginRight:8 }}/> Payment
+            <i className="fa-solid fa-credit-card" style={{ fontSize:16, color:T.green, marginRight:8 }}/> Payment
           </div>
           {[
             { id:"now",    label:"Pay now to confirm", sub:"Instant booking via Paystack", icon:"fa-lock" },
@@ -1170,7 +1117,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
                 borderRadius:12, marginBottom:8, cursor:"pointer",
                 background: payHow===m.id ? "#132010" : "transparent",
                 border:`1px solid ${payHow===m.id ? T.greenDim : T.border}` }}>
-              <Icon name={m.icon} size={16} color={payHow}/>
+              <i className={`fa-solid fa-${m.icon}`} style={{ fontSize:16, color:payHow }}/>
               <div style={{ flex:1 }}>
                 <div style={{ color:T.text, fontSize:14, fontWeight:600 }}>{m.label}</div>
                 <div style={{ color:T.muted, fontSize:11, marginTop:2 }}>{m.sub}</div>
@@ -1188,7 +1135,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
           <div style={{ background:"rgba(248,113,113,.08)", border:"1px solid rgba(248,113,113,.2)",
             borderRadius:10, padding:"11px 14px", marginBottom:12, color:T.red, fontSize:12,
             display:"flex", alignItems:"center", gap:8 }}>
-            <Icon name="triangle-exclamation" size={16} color={T.muted}/> {error}
+            <i className="fa-solid fa-triangle-exclamation" style={{ fontSize:16, color:T.muted }}/> {error}
           </div>
         )}
 
@@ -1201,8 +1148,8 @@ function Booking({ go, station, vehicle, user, setBooking }) {
           {loading
             ? <><Spinner/> Processing…</>
             : payHow==="now"
-              ? <><Icon name="lock" size={16} color={T.muted}/> Pay GH₵{total} & Confirm</>
-              : <><Icon name="calendar-check" size={16} color={T.muted}/> Reserve Slot — Pay on Arrival</>
+              ? <><i className="fa-solid fa-lock" style={{ fontSize:16, color:T.muted }}/> Pay GH₵{total} & Confirm</>
+              : <><i className="fa-solid fa-calendar-check" style={{ fontSize:16, color:T.muted }}/> Reserve Slot — Pay on Arrival</>
           }
         </button>
       </div>
@@ -1225,14 +1172,14 @@ function QRScreen({ go, booking }) {
       <Header title="Charging Pass" onBack={()=>go("home")}/>
       <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:"20px" }}>
         <div style={{ textAlign:"center" }}>
-          <Icon name="ticket" size={56} color={T.muted} style={{ marginBottom:16, display:"block" }}/>
+          <i className="fa-solid fa-ticket" style={{ fontSize:56, color:T.muted, marginBottom:16, display:"block" }}/>
           <div style={{ fontWeight:700, fontSize:16, color:T.text, marginBottom:8 }}>No Active Booking</div>
           <div style={{ color:T.muted, fontSize:13, marginBottom:24 }}>Complete a booking to get your pass</div>
           <button onClick={()=>go("home")} className="tap"
             style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`, border:"none",
               borderRadius:12, padding:"12px 28px", fontSize:14, fontWeight:700, color:"#000",
               cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:8, margin:"0 auto" }}>
-            <Icon name="location-dot" size={16} color={T.muted}/> Find a Station
+            <i className="fa-solid fa-location-dot" style={{ fontSize:16, color:T.muted }}/> Find a Station
           </button>
         </div>
       </div>
@@ -1277,10 +1224,10 @@ function Verify({ go }) {
       <div style={{ flex:1, overflowY:"auto", padding:"20px 16px 80px" }}>
         <div style={{ background:T.card, borderRadius:16, padding:"16px", marginBottom:12, border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700, fontSize:14, color:T.text, marginBottom:12 }}>
-            <Icon name="magnifying-glass" size={16} color={T.green} style={{ marginRight:8 }}/> Enter Booking Reference
+            <i className="fa-solid fa-magnifying-glass" style={{ fontSize:16, color:T.green, marginRight:8 }}/> Enter Booking Reference
           </div>
           <div style={{ position:"relative", marginBottom:12 }}>
-            <Icon name="hashtag" size={14} color={T.muted}/>
+            <i className="fa-solid fa-hashtag" style={{ fontSize:14, color:T.muted }}/>
             <input placeholder="e.g. ECO-ABC123" value={code}
               onChange={e=>{ setCode(e.target.value.toUpperCase()); setErr(""); setResult(null); }}
               style={{ width:"100%", background:"#0c0f18", border:`1px solid ${T.border}`,
@@ -1292,14 +1239,14 @@ function Verify({ go }) {
               border:"none", borderRadius:12, padding:"14px", fontSize:15, fontWeight:700,
               color:"#000", cursor:"pointer", fontFamily:"inherit",
               display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
-            {loading ? <><Spinner/> Verifying…</> : <><Icon name="shield-halved" size={16} color={T.muted}/> Verify Booking</>}
+            {loading ? <><Spinner/> Verifying…</> : <><i className="fa-solid fa-shield-halved" style={{ fontSize:16, color:T.muted }}/> Verify Booking</>}
           </button>
         </div>
         {error && (
           <div style={{ background:"rgba(248,113,113,.08)", border:"1px solid rgba(248,113,113,.2)",
             borderRadius:12, padding:"12px 16px", marginBottom:12, color:T.red, fontSize:13,
             display:"flex", alignItems:"center", gap:8 }}>
-            <Icon name="triangle-exclamation" size={16} color={T.muted}/> {error}
+            <i className="fa-solid fa-triangle-exclamation" style={{ fontSize:16, color:T.muted }}/> {error}
           </div>
         )}
         {result && (
@@ -1308,7 +1255,7 @@ function Verify({ go }) {
             <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14 }}>
               <div style={{ width:48, height:48, borderRadius:"50%", background:T.green,
                 display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <Icon name="check" size={22} color={"#000"}/>
+                <i className="fa-solid fa-check" style={{ fontSize:22, color:"#000" }}/>
               </div>
               <div>
                 <div style={{ fontWeight:800, fontSize:16, color:T.green }}>Verified — Activate Charger</div>
@@ -1326,14 +1273,14 @@ function Verify({ go }) {
               <div key={r.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
                 marginBottom:8, paddingBottom:8, borderBottom:`1px solid ${T.border}30` }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <Icon name={r.icon} size={12} color={T.muted} style={{ width:14 }}/>
+                  <i className={`fa-solid fa-${r.icon}`} style={{ fontSize:12, color:T.muted, width:14 }}/>
                   <span style={{ color:T.muted, fontSize:13 }}>{r.label}</span>
                 </div>
                 <span style={{ color:T.text, fontWeight:600, fontSize:13 }}>{r.value}</span>
               </div>
             ))}
             <div style={{ background:T.green, borderRadius:12, padding:"14px", textAlign:"center", marginTop:8 }}>
-              <Icon name="bolt" size={18} color={"#000"} style={{ marginRight:8 }}/>
+              <i className="fa-solid fa-bolt" style={{ fontSize:18, color:"#000", marginRight:8 }}/>
               <span style={{ fontWeight:800, fontSize:16, color:"#000" }}>ACTIVATE CHARGER NOW</span>
             </div>
           </div>
@@ -1357,7 +1304,7 @@ function Profile({ go, user, setUser, onMenu }) {
               <div style={{ width:72, height:72, borderRadius:"50%",
                 background:`linear-gradient(135deg,${T.green},${T.greenDark})`,
                 display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
-                <Icon name="user" size={28} color={"#000"}/>
+                <i className="fa-solid fa-user" style={{ fontSize:28, color:"#000" }}/>
               </div>
               <div style={{ fontWeight:800, fontSize:20, color:T.text }}>{user.name||user.email}</div>
               <div style={{ fontSize:12, color:T.muted, marginTop:4, marginBottom:12 }}>{user.email}</div>
@@ -1372,7 +1319,7 @@ function Profile({ go, user, setUser, onMenu }) {
               ].map(s=>(
                 <div key={s.label} style={{ background:T.card, borderRadius:14, padding:"16px",
                   border:`1px solid ${T.border}`, textAlign:"center" }}>
-                  <Icon name={s.icon} size={20} color={s.color} style={{ marginBottom:8, display:"block" }}/>
+                  <i className={`fa-solid fa-${s.icon}`} style={{ fontSize:20, color:s.color, marginBottom:8, display:"block" }}/>
                   <div style={{ fontSize:10, color:T.muted, marginBottom:5, textTransform:"uppercase", letterSpacing:0.5 }}>{s.label}</div>
                   <div style={{ fontWeight:800, fontSize:22, color:s.color }}>{s.value}</div>
                 </div>
@@ -1383,12 +1330,12 @@ function Profile({ go, user, setUser, onMenu }) {
                 borderRadius:12, padding:"14px", fontSize:14, fontWeight:600, color:T.red,
                 cursor:"pointer", marginBottom:20, display:"flex", alignItems:"center",
                 justifyContent:"center", gap:8, fontFamily:"inherit" }}>
-              <Icon name="right-from-bracket" size={16} color={T.muted}/> Sign Out
+              <i className="fa-solid fa-right-from-bracket" style={{ fontSize:16, color:T.muted }}/> Sign Out
             </button>
           </>
         ) : (
           <div style={{ textAlign:"center", padding:"40px 16px" }}>
-            <Icon name="circle-user" size={80} color={T.muted} style={{ marginBottom:16, display:"block" }}/>
+            <i className="fa-solid fa-circle-user" style={{ fontSize:80, color:T.muted, marginBottom:16, display:"block" }}/>
             <div style={{ fontWeight:800, fontSize:22, color:T.text, marginBottom:8 }}>Your Profile</div>
             <div style={{ color:T.muted, fontSize:13, marginBottom:28, lineHeight:1.8 }}>
               Track charges, view bookings,<br/>and see your environmental impact.
@@ -1398,7 +1345,7 @@ function Profile({ go, user, setUser, onMenu }) {
                 border:"none", borderRadius:14, padding:"16px", fontSize:15, fontWeight:700,
                 color:"#000", cursor:"pointer", fontFamily:"inherit",
                 display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-              <Icon name="right-to-bracket" size={16} color={T.muted}/> Sign In / Register
+              <i className="fa-solid fa-right-to-bracket" style={{ fontSize:16, color:T.muted }}/> Sign In / Register
             </button>
           </div>
         )}
@@ -1429,7 +1376,7 @@ function About({ go, onMenu }) {
             marginBottom:12, border:`1px solid ${T.border}`, display:"flex", gap:14, alignItems:"flex-start" }}>
             <div style={{ width:44, height:44, borderRadius:12, flexShrink:0,
               background:`${item.color}18`, display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <Icon name={item.icon} size={18} color={item.color}/>
+              <i className={`fa-solid fa-${item.icon}`} style={{ fontSize:18, color:item.color }}/>
             </div>
             <div>
               <div style={{ fontWeight:700, fontSize:14, color:T.text, marginBottom:5 }}>{item.title}</div>
@@ -1442,7 +1389,7 @@ function About({ go, onMenu }) {
             border:"none", borderRadius:14, padding:"15px", fontSize:15, fontWeight:700,
             color:"#000", cursor:"pointer", marginBottom:20, fontFamily:"inherit",
             display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-          <Icon name="bolt" size={16} color={T.muted}/> Find a Station
+          <i className="fa-solid fa-bolt" style={{ fontSize:16, color:T.muted }}/> Find a Station
         </button>
       </div>
       <Nav active="More" go={go}/>
@@ -1485,44 +1432,35 @@ export default function App() {
     if (SUPABASE_URL) sb("stations?select=*&order=id").then(d=>{ if(d?.length) setStations(d); });
 
     // Handle Paystack redirect after payment
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const ref = params.get("reference")||params.get("trxref");
-      if (ref) {
-        window.history.replaceState({},"",window.location.pathname);
-
-        // Load booking from localStorage and mark as paid
-        try {
-          const saved = localStorage.getItem("eco_booking");
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            const updated = { ...parsed, status:"confirmed", pay_method:"now", reference: parsed.reference || ref };
-            setBooking(updated);
-            localStorage.setItem("eco_booking", JSON.stringify(updated));
-          }
-        } catch(e){ console.log("localStorage error", e); }
-
-        // Update Supabase status in background
-        if (SUPABASE_URL) {
-          sb(`bookings?reference=eq.${ref}&select=*`).then(data=>{
-            if (data&&data.length>0) {
-              const b = data[0];
-              sb(`bookings?id=eq.${b.id}`,{
-                method:"PATCH",
-                headers:{ Prefer:"return=minimal" },
-                body:JSON.stringify({ status:"confirmed", payment_confirmed:true }),
-              });
-              const updated = { ...b, status:"confirmed", pay_method:"now" };
-              setBooking(updated);
-              try { localStorage.setItem("eco_booking", JSON.stringify(updated)); } catch(e){}
-            }
-          }).catch(e=>{ console.log("Supabase error", e); });
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("reference")||params.get("trxref");
+    if (ref) {
+      window.history.replaceState({},"",window.location.pathname);
+      try {
+        const saved = localStorage.getItem("eco_booking");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const updated = { ...parsed, status:"confirmed", pay_method:"now" };
+          setBooking(updated);
+          localStorage.setItem("eco_booking", JSON.stringify(updated));
         }
-
-        // Always go to QR screen
-        setTimeout(()=>{ go("qr"); }, 100);
+      } catch(e){}
+      if (SUPABASE_URL) {
+        sb(`bookings?reference=eq.${ref}&select=*`).then(data=>{
+          if (data&&data.length>0) {
+            const b = data[0];
+            sb(`bookings?id=eq.${b.id}`,{
+              method:"PATCH", headers:{ Prefer:"return=minimal" },
+              body:JSON.stringify({ status:"confirmed", payment_confirmed:true }),
+            });
+            const updated = { ...b, status:"confirmed", pay_method:"now" };
+            setBooking(updated);
+            try { localStorage.setItem("eco_booking", JSON.stringify(updated)); } catch(e){}
+          }
+        });
       }
-    } catch(e){ console.log("Redirect handler error", e); }
+      setTimeout(()=>{ setScreen("qr"); }, 150);
+    }
   },[]);
 
   const props = {
