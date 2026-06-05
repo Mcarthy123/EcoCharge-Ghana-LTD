@@ -168,10 +168,10 @@ const NewNav = ({ active, go }) => (
             marginTop:-22, marginBottom:2,
             boxShadow:`0 4px 24px rgba(74,222,128,.45)`,
           }}>
-            <i className={`fa-solid fa-${"icon"}`} style={{ fontSize:20, color:"#000" }}/>
+            <i className={`fa-solid fa-${icon}`} style={{ fontSize:20, color:"#000" }}/>
           </div>
         ) : (
-          <i className={`fa-solid fa-${"icon"}`} style={{ fontSize:20, color:active }}/>
+          <i className={`fa-solid fa-${icon}`} style={{ fontSize:20, color:active }}/>
         )}
         <span style={{
           fontSize:10, fontWeight: active===label ? 700 : 500,
@@ -206,7 +206,7 @@ const Nav = ({ active, go }) => (
           display:"flex", flexDirection:"column", alignItems:"center",
           gap:4, minWidth:56, fontFamily:"inherit",
         }}>
-        <i className={`fa-solid fa-${"icon"}`} style={{ fontSize:20, color:active }}/>
+        <i className={`fa-solid fa-${icon}`} style={{ fontSize:20, color:active }}/>
         <span style={{
           fontSize:10, fontWeight: active===label ? 700 : 500,
           color: active===label ? T.green : T.muted,
@@ -285,7 +285,7 @@ const Drawer = ({ open, onClose, go, user, onLogout }) => (
         ].map(item=>(
           <div key={item.label} className="tap row" onClick={()=>{ go(item.screen); onClose(); }}
             style={{ display:"flex", alignItems:"center", gap:14, padding:"16px 20px", borderBottom:`1px solid ${T.border}20` }}>
-            <i className={`fa-solid fa-${"item.icon"}`} style={{ fontSize:16, color:item.color, width:20 }}/>
+            <i className={`fa-solid fa-${item.icon}`} style={{ fontSize:16, color:item.color, width:20 }}/>
             <span style={{ color:T.text, fontSize:14, fontWeight:500, flex:1 }}>{item.label}</span>
             <i className="fa-solid fa-chevron-right" style={{ fontSize:12, color:T.muted }}/>
           </div>
@@ -347,7 +347,7 @@ function Splash({ onLogin, onRegister, onGuest }) {
           { icon:"fa-leaf",        label:"Green",   color:T.green  },
         ].map(f=>(
           <div key={f.label} style={{ textAlign:"center" }}>
-            <i className={`fa-solid fa-${"f.icon"}`} style={{ fontSize:22, color:f.color }}/>
+            <i className={`fa-solid fa-${f.icon}`} style={{ fontSize:22, color:f.color }}/>
             <div style={{ fontSize:10, color:T.muted, marginTop:6 }}>{f.label}</div>
           </div>
         ))}
@@ -396,7 +396,7 @@ function Auth({ mode, onBack, onSuccess }) {
         onChange={e=>{ set(e.target.value); setErr(""); }}
         style={{ width:"100%", background:"#0c0f18", border:`1px solid ${T.border}`,
           borderRadius:10, padding:"13px 14px 13px 44px", color:T.text, fontSize:14 }}/>
-      <i className={`fa-solid fa-${"type==="email"?"envelope":type==="password"?"lock":"user""}`} style={{ fontSize:14, color:T.muted, position:"absolute", left:15, top:"50%", transform:"translateY(-50%)" }}/>
+      <i className={`fa-solid ${type==="email"?"fa-envelope":type==="password"?"fa-lock":"fa-user"}`} style={{ fontSize:14, color:T.muted, position:"absolute", left:15, top:"50%", transform:"translateY(-50%)" }}/>
     </div>
   );
 
@@ -426,7 +426,7 @@ function Auth({ mode, onBack, onSuccess }) {
               border:"none", borderRadius:12, padding:"14px", fontSize:15, fontWeight:700,
               color:"#000", cursor:"pointer", fontFamily:"inherit", opacity:loading?.7:1,
               display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
-            {loading ? <Spinner/> : <><i className={`fa-solid fa-${"mode==="login"?"right-to-bracket":"user-plus""}`} style={{ fontSize:16, color:T.muted }}/> {mode==="login"?"Sign In":"Create Account"}</>}
+            {loading ? <Spinner/> : <><i className={`fa-solid ${mode==="login"?"fa-right-to-bracket":"user-plus}`} style={{ fontSize:16, color:T.muted }}/> {mode==="login"?"Sign In":"Create Account"}</>}
           </button>
         </div>
         <div style={{ textAlign:"center", marginTop:20, paddingBottom:40 }}>
@@ -592,7 +592,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
         {/* Text */}
         <div style={{ position:"relative", zIndex:2, padding:"22px 20px 20px" }}>
           <div style={{ fontSize:13, color:"rgba(255,255,255,.6)", marginBottom:4, display:"flex", alignItems:"center", gap:6 }}>
-            <i className={`fa-solid fa-${"greetIcon"}`} style={{ fontSize:12, color:T.yellow }}/> {greeting}
+            <i className={`fa-solid fa-${greetIcon}`} style={{ fontSize:12, color:T.yellow }}/> {greeting}
           </div>
           <div style={{ fontWeight:800, fontSize:26, color:T.text, marginBottom:8, letterSpacing:-0.5 }}>
             {displayName}
@@ -819,7 +819,7 @@ function Detail({ go, station, stations, setStation }) {
           ].map(x=>(
             <div key={x.label} style={{ background:T.card, borderRadius:12, padding:"12px 8px",
               border:`1px solid ${T.border}`, textAlign:"center" }}>
-              <i className={`fa-solid fa-${"x.icon"}`} style={{ fontSize:14, color:x.color, marginBottom:6, display:"block" }}/>
+              <i className={`fa-solid fa-${x.icon}`} style={{ fontSize:14, color:x.color, marginBottom:6, display:"block" }}/>
               <div style={{ fontSize:9, color:T.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:0.5 }}>{x.label}</div>
               <div style={{ fontWeight:800, fontSize:17, color:x.color }}>{x.value}</div>
             </div>
@@ -1008,7 +1008,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
 
   const inp = (ph, val, set, type="text", icon="fa-user") => (
     <div style={{ position:"relative", marginBottom:10 }}>
-      <i className={`fa-solid fa-${"icon"}`} style={{ fontSize:13, color:T.muted, position:"absolute", left:14, top:"50%", transform:"translateY(-50%)" }}/>
+      <i className={`fa-solid fa-${icon}`} style={{ fontSize:13, color:T.muted, position:"absolute", left:14, top:"50%", transform:"translateY(-50%)" }}/>
       <input type={type} placeholder={ph} value={val}
         onChange={e=>{ set(e.target.value); setErr(""); }}
         style={{ width:"100%", background:"#0c0f18", border:`1px solid ${T.border}`,
@@ -1030,7 +1030,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
             <div style={{ fontWeight:700, fontSize:15, color:T.text }}>{s.name}</div>
             <div style={{ fontSize:12, color:T.muted, marginTop:2 }}>{vehicle?.type||"Car"} · {s.city}</div>
           </div>
-          <i className={`fa-solid fa-${"vehicle?.type==="Scooter"?"motorcycle":vehicle?.type==="Tricycle"?"truck-pickup":"car""}`} style={{ fontSize:40, color:T.green }}/>
+          <i className={`fa-solid ${vehicle?.type==="Scooter"?"fa-motorcycle":vehicle?.type==="Tricycle"?"fa-truck-pickup":"car}`} style={{ fontSize:40, color:T.green }}/>
         </div>
 
         {/* Time slots */}
@@ -1118,7 +1118,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
                 borderRadius:12, marginBottom:8, cursor:"pointer",
                 background: payHow===m.id ? "#132010" : "transparent",
                 border:`1px solid ${payHow===m.id ? T.greenDim : T.border}` }}>
-              <i className={`fa-solid fa-${"m.icon"}`} style={{ fontSize:16, color:payHow }}/>
+              <i className={`fa-solid fa-${m.icon}`} style={{ fontSize:16, color:payHow }}/>
               <div style={{ flex:1 }}>
                 <div style={{ color:T.text, fontSize:14, fontWeight:600 }}>{m.label}</div>
                 <div style={{ color:T.muted, fontSize:11, marginTop:2 }}>{m.sub}</div>
@@ -1274,7 +1274,7 @@ function Verify({ go }) {
               <div key={r.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
                 marginBottom:8, paddingBottom:8, borderBottom:`1px solid ${T.border}30` }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <i className={`fa-solid fa-${"r.icon"}`} style={{ fontSize:12, color:T.muted, width:14 }}/>
+                  <i className={`fa-solid fa-${r.icon}`} style={{ fontSize:12, color:T.muted, width:14 }}/>
                   <span style={{ color:T.muted, fontSize:13 }}>{r.label}</span>
                 </div>
                 <span style={{ color:T.text, fontWeight:600, fontSize:13 }}>{r.value}</span>
@@ -1320,7 +1320,7 @@ function Profile({ go, user, setUser, onMenu }) {
               ].map(s=>(
                 <div key={s.label} style={{ background:T.card, borderRadius:14, padding:"16px",
                   border:`1px solid ${T.border}`, textAlign:"center" }}>
-                  <i className={`fa-solid fa-${"s.icon"}`} style={{ fontSize:20, color:s.color, marginBottom:8, display:"block" }}/>
+                  <i className={`fa-solid fa-${s.icon}`} style={{ fontSize:20, color:s.color, marginBottom:8, display:"block" }}/>
                   <div style={{ fontSize:10, color:T.muted, marginBottom:5, textTransform:"uppercase", letterSpacing:0.5 }}>{s.label}</div>
                   <div style={{ fontWeight:800, fontSize:22, color:s.color }}>{s.value}</div>
                 </div>
@@ -1377,7 +1377,7 @@ function About({ go, onMenu }) {
             marginBottom:12, border:`1px solid ${T.border}`, display:"flex", gap:14, alignItems:"flex-start" }}>
             <div style={{ width:44, height:44, borderRadius:12, flexShrink:0,
               background:`${item.color}18`, display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <i className={`fa-solid fa-${"item.icon"}`} style={{ fontSize:18, color:item.color }}/>
+              <i className={`fa-solid fa-${item.icon}`} style={{ fontSize:18, color:item.color }}/>
             </div>
             <div>
               <div style={{ fontWeight:700, fontSize:14, color:T.text, marginBottom:5 }}>{item.title}</div>
