@@ -1030,7 +1030,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
             <div style={{ fontWeight:700, fontSize:15, color:T.text }}>{s.name}</div>
             <div style={{ fontSize:12, color:T.muted, marginTop:2 }}>{vehicle?.type||"Car"} · {s.city}</div>
           </div>
-          <i className={`fa-solid ${vehicle?.type==="Scooter"?"fa-motorcycle":vehicle?.type==="Tricycle"?"fa-truck-pickup":"car}`} style={{ fontSize:40, color:T.green }}/>
+          <i className={`fa-solid ${vehicle?.type==="Scooter"?"fa-motorcycle":vehicle?.type==="Tricycle"?"fa-truck-pickup":"fa-car"}`} style={{ fontSize:40, color:T.green }}/>
         </div>
 
         {/* Time slots */}
