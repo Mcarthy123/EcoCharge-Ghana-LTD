@@ -149,9 +149,9 @@ const NewNav = ({ active, go }) => (
   }}>
     {[
       { label:"Home",     screen:"home",    icon:"fa-house"          },
-      { label:"Stations", screen:"detail",  icon:"fa-charging-station"},
+      { label:"Stations", screen:"detail",  icon:"fa-plug"},
       { label:"Scan",     screen:"qr",      icon:"fa-qrcode", center:true },
-      { label:"Bookings", screen:"bookings",icon:"fa-calendar-check" },
+      { label:"Bookings", screen:"bookings",icon:"fa-calendar-alt" },
       { label:"Profile",  screen:"profile", icon:"fa-user"           },
     ].map(({ label, screen, icon, center })=>(
       <button key={label} onClick={()=>go(screen)} className="tap"
@@ -196,7 +196,7 @@ const Nav = ({ active, go }) => (
   }}>
     {[
       { label:"Home",     screen:"home",   icon:"fa-house"           },
-      { label:"Stations", screen:"detail", icon:"fa-charging-station" },
+      { label:"Stations", screen:"detail", icon:"fa-plug" },
       { label:"Profile",  screen:"profile",icon:"fa-user"            },
       { label:"More",     screen:"about",  icon:"fa-ellipsis"        },
     ].map(({ label, screen, icon })=>(
@@ -278,9 +278,9 @@ const Drawer = ({ open, onClose, go, user, onLogout }) => (
       <div style={{ flex:1, overflowY:"auto" }}>
         {[
           { icon:"fa-house",            label:"Find Stations",   screen:"home"    },
-          { icon:"fa-charging-station", label:"All Stations",    screen:"detail"  },
+          { icon:"fa-plug", label:"All Stations",    screen:"detail"  },
           { icon:"fa-user",             label:"My Profile",      screen:"profile" },
-          { icon:"fa-circle-info",      label:"About EcoCharge", screen:"about"   },
+          { icon:"fa-info-circle",      label:"About EcoCharge", screen:"about"   },
           { icon:"fa-bolt",             label:"Verify Booking",  screen:"verify", color:T.yellow },
         ].map(item=>(
           <div key={item.label} className="tap row" onClick={()=>{ go(item.screen); onClose(); }}
@@ -298,7 +298,7 @@ const Drawer = ({ open, onClose, go, user, onLogout }) => (
               borderRadius:10, padding:"11px", fontSize:13, fontWeight:600, color:T.red,
               cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
               gap:8, fontFamily:"inherit" }}>
-            <i className="fa-solid fa-right-from-bracket" style={{ fontSize:16, color:T.muted }}/> Sign Out
+            <i className="fa-solid fa-sign-out-alt" style={{ fontSize:16, color:T.muted }}/> Sign Out
           </button>
         </div>
       )}
@@ -325,7 +325,7 @@ function Splash({ onLogin, onRegister, onGuest }) {
             border:"none", borderRadius:14, padding:"16px", fontSize:16, fontWeight:700,
             color:"#000", cursor:"pointer", marginBottom:12, fontFamily:"inherit",
             display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
-          <i className="fa-solid fa-right-to-bracket" style={{ fontSize:16, color:T.muted }}/> Sign In
+          <i className="fa-solid fa-sign-in-alt" style={{ fontSize:16, color:T.muted }}/> Sign In
         </button>
         <button onClick={onRegister} className="tap"
           style={{ width:"100%", background:"transparent", border:`1px solid ${T.border}`,
@@ -342,7 +342,7 @@ function Splash({ onLogin, onRegister, onGuest }) {
       </div>
       <div className="fade2" style={{ marginTop:36, display:"flex", gap:32 }}>
         {[
-          { icon:"fa-solar-panel", label:"Solar",   color:T.yellow },
+          { icon:"fa-sun", label:"Solar",   color:T.yellow },
           { icon:"fa-droplet",     label:"Water",   color:T.blue   },
           { icon:"fa-leaf",        label:"Green",   color:T.green  },
         ].map(f=>(
@@ -426,7 +426,7 @@ function Auth({ mode, onBack, onSuccess }) {
               border:"none", borderRadius:12, padding:"14px", fontSize:15, fontWeight:700,
               color:"#000", cursor:"pointer", fontFamily:"inherit", opacity:loading?.7:1,
               display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
-            {loading ? <Spinner/> : <><i className={`fa-solid ${mode==="login"?"fa-right-to-bracket":"fa-user-plus"}`} style={{ fontSize:16, color:"#000" }}/> {mode==="login"?"Sign In":"Create Account"}</>}
+            {loading ? <Spinner/> : <><i className={`fa-solid ${mode==="login"?"fa-sign-in-alt":"fa-user-plus"}`} style={{ fontSize:16, color:"#000" }}/> {mode==="login"?"Sign In":"Create Account"}</>}
           </button>
         </div>
         <div style={{ textAlign:"center", marginTop:20, paddingBottom:40 }}>
@@ -489,7 +489,7 @@ function MapScreen({ go, stations, setStation, onMenu }) {
           background:"rgba(10,13,16,.85)", backdropFilter:"blur(8px)",
           borderRadius:20, padding:"5px 14px", fontSize:11, color:T.green,
           fontWeight:700, border:`1px solid ${T.border}` }}>
-          <i className="fa-solid fa-location-dot" style={{ fontSize:16, color:T.muted, marginRight:5 }}/>{stations.length} stations
+          <i className="fa-solid fa-map-marker-alt" style={{ fontSize:16, color:T.muted, marginRight:5 }}/>{stations.length} stations
         </div>
         <div style={{ position:"absolute", bottom:0, left:0, right:0, zIndex:10,
           background:"linear-gradient(0deg,rgba(9,14,26,.98) 0%,transparent 100%)",
@@ -502,7 +502,7 @@ function MapScreen({ go, stations, setStation, onMenu }) {
                   flexShrink:0, minWidth:150 }}>
                 <div style={{ fontWeight:700, fontSize:12, color:T.text, marginBottom:3 }}>{s.name}</div>
                 <div style={{ fontSize:11, color:T.green, fontWeight:600 }}>
-                  <i className="fa-solid fa-charging-station" style={{ fontSize:16, color:T.muted, marginRight:4 }}/>{s.open}/{s.bays} bays
+                  <i className="fa-solid fa-plug" style={{ fontSize:16, color:T.muted, marginRight:4 }}/>{s.open}/{s.bays} bays
                 </div>
                 <div style={{ fontSize:10, color:T.muted, marginTop:2 }}>
                   <i className="fa-solid fa-clock" style={{ fontSize:16, color:T.muted, marginRight:4 }}/>Wait: {s.time}
@@ -522,7 +522,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
   const [search, setSearch] = useState("");
   const hour      = new Date().getHours();
   const greeting  = hour<12 ? "Good morning" : hour<17 ? "Good afternoon" : "Good evening";
-  const greetIcon = hour<12 ? "fa-sun" : hour<17 ? "fa-cloud-sun" : "fa-moon";
+  const greetIcon = hour<12 ? "fa-sun" : hour<17 ? "fa-sun" : "fa-moon";
   const displayName = user?.name || user?.email?.split("@")[0] || "Welcome";
 
   const filtered = search
@@ -533,8 +533,8 @@ function Home({ go, stations, setStation, user, onMenu }) {
     : stations;
 
   const quickActions = [
-    { icon:"fa-location-dot",    label:"Find Stations", sub:"Nearby",          screen:"map",      bg:"rgba(74,222,128,0.12)", color:T.green },
-    { icon:"fa-calendar-check",  label:"My Bookings",   sub:"View all",        screen:"bookings", bg:"rgba(255,255,255,0.06)", color:T.mutedLight },
+    { icon:"fa-map-marker-alt",    label:"Find Stations", sub:"Nearby",          screen:"map",      bg:"rgba(74,222,128,0.12)", color:T.green },
+    { icon:"fa-calendar-alt",  label:"My Bookings",   sub:"View all",        screen:"bookings", bg:"rgba(255,255,255,0.06)", color:T.mutedLight },
     { icon:"fa-qrcode",          label:"Charging Pass", sub:"Show QR",         screen:"qr",       bg:"rgba(255,255,255,0.06)", color:T.mutedLight },
     { icon:"fa-droplet",         label:"Water Points",  sub:"Find clean water",screen:"detail",   bg:"rgba(56,189,248,0.10)", color:T.blue },
   ];
@@ -608,7 +608,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
               style={{ background:T.green, border:"none", borderRadius:10,
                 padding:"9px 18px", fontSize:13, fontWeight:700, color:"#000",
                 cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
-              <i className="fa-solid fa-location-dot" style={{ fontSize:16, color:T.muted }}/> Find Station
+              <i className="fa-solid fa-map-marker-alt" style={{ fontSize:16, color:T.muted }}/> Find Station
             </button>
             <button onClick={()=>go("qr")} className="tap"
               style={{ background:"rgba(255,255,255,.1)", border:`1px solid rgba(255,255,255,.15)`,
@@ -622,7 +622,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
 
       {/* SEARCH */}
       <div className="fade1" style={{ margin:"0 14px 16px", position:"relative" }}>
-        <i className="fa-solid fa-magnifying-glass" style={{ fontSize:14, color:T.muted }}/>
+        <i className="fa-solid fa-search" style={{ fontSize:14, color:T.muted }}/>
         <input placeholder="Search station or location" value={search}
           onChange={e=>setSearch(e.target.value)}
           style={{ width:"100%", background:T.card, border:`1px solid ${T.border}`,
@@ -682,7 +682,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
             </div>
           </div>
         </div>
-        <i className="fa-solid fa-earth-africa" style={{ fontSize:40, color:T.green }}/>
+        <i className="fa-solid fa-globe-africa" style={{ fontSize:40, color:T.green }}/>
       </div>
 
       {/* NEARBY STATIONS */}
@@ -714,7 +714,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
                 justifyContent:"center", border:`1px solid ${T.border}`, overflow:"hidden", position:"relative" }}>
                 <div style={{ position:"absolute", top:0, left:0, right:0, height:7,
                   background:"rgba(74,222,128,0.1)", borderBottom:"1px solid rgba(74,222,128,0.15)" }}/>
-                <i className="fa-solid fa-charging-station" style={{ fontSize:28, color:T.green }}/>
+                <i className="fa-solid fa-plug" style={{ fontSize:28, color:T.green }}/>
               </div>
               {/* Info */}
               <div style={{ flex:1, minWidth:0 }}>
@@ -748,7 +748,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
                     border:"none", borderRadius:9, cursor:"pointer",
                     display:"flex", alignItems:"center", justifyContent:"center",
                     boxShadow:`0 2px 8px rgba(74,222,128,.3)` }}>
-                  <i className="fa-solid fa-arrow-up-right-from-square" style={{ fontSize:12, color:"#000" }}/>
+                  <i className="fa-solid fa-external-link-alt" style={{ fontSize:12, color:"#000" }}/>
                 </button>
               </div>
             </div>
@@ -757,7 +757,7 @@ function Home({ go, stations, setStation, user, onMenu }) {
 
         {search && filtered.length===0 && (
           <div style={{ textAlign:"center", padding:"30px 0", color:T.muted, fontSize:13 }}>
-            <i className="fa-solid fa-magnifying-glass" style={{ fontSize:24, color:T.muted, marginBottom:10, display:"block" }}/>
+            <i className="fa-solid fa-search" style={{ fontSize:24, color:T.muted, marginBottom:10, display:"block" }}/>
             No stations found for "{search}"
           </div>
         )}
@@ -797,7 +797,7 @@ function Detail({ go, station, stations, setStation }) {
         background:"linear-gradient(135deg,#0d1f0d,#091a14)",
         display:"flex", alignItems:"center", justifyContent:"center", gap:20 }}>
         <div style={{ textAlign:"center" }}>
-          <i className="fa-solid fa-solar-panel" style={{ fontSize:36, color:T.yellow }}/>
+          <i className="fa-solid fa-sun" style={{ fontSize:36, color:T.yellow }}/>
           <div style={{ fontSize:11, color:T.green, fontWeight:700, marginTop:6 }}>{s.solar}% Solar</div>
         </div>
         <div style={{ width:1, height:50, background:T.border }}/>
@@ -813,9 +813,9 @@ function Detail({ go, station, stations, setStation }) {
       <div style={{ flex:1, overflowY:"auto", padding:"12px 12px 0" }}>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>
           {[
-            { label:"Bays Open", value:`${s.open}/${s.bays}`, color:T.green,  icon:"fa-charging-station" },
+            { label:"Bays Open", value:`${s.open}/${s.bays}`, color:T.green,  icon:"fa-plug" },
             { label:"Est. Wait", value:s.time,                color:T.yellow, icon:"fa-clock"            },
-            { label:"Solar",     value:`${s.solar}%`,         color:T.blue,   icon:"fa-solar-panel"      },
+            { label:"Solar",     value:`${s.solar}%`,         color:T.blue,   icon:"fa-sun"      },
           ].map(x=>(
             <div key={x.label} style={{ background:T.card, borderRadius:12, padding:"12px 8px",
               border:`1px solid ${T.border}`, textAlign:"center" }}>
@@ -853,7 +853,7 @@ function Detail({ go, station, stations, setStation }) {
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontWeight:600, color:T.text, fontSize:14, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{st.name}</div>
               <div style={{ color:T.muted, fontSize:11, marginTop:2 }}>
-                <i className="fa-solid fa-location-dot" style={{ fontSize:16, color:T.muted, marginRight:4 }}/>{st.city} · {st.bays} bays
+                <i className="fa-solid fa-map-marker-alt" style={{ fontSize:16, color:T.muted, marginRight:4 }}/>{st.city} · {st.bays} bays
               </div>
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
@@ -914,7 +914,7 @@ function Vehicles({ go, setVehicle, user }) {
               <div style={{ position:"absolute", bottom:10, right:14 }}>
                 <div style={{ background:`${T.green}22`, border:`1px solid ${T.greenDim}`,
                   borderRadius:8, padding:"4px 10px", display:"flex", alignItems:"center", gap:4 }}>
-                  <i className="fa-solid fa-solar-panel" style={{ fontSize:10, color:T.green }}/>
+                  <i className="fa-solid fa-sun" style={{ fontSize:10, color:T.green }}/>
                   <span style={{ fontSize:10, color:T.green, fontWeight:600 }}>Solar</span>
                 </div>
               </div>
@@ -1030,7 +1030,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
             <div style={{ fontWeight:700, fontSize:15, color:T.text }}>{s.name}</div>
             <div style={{ fontSize:12, color:T.muted, marginTop:2 }}>{vehicle?.type||"Car"} · {s.city}</div>
           </div>
-          <i className={`fa-solid ${vehicle?.type==="Scooter"?"fa-motorcycle":vehicle?.type==="Tricycle"?"fa-truck-pickup":"fa-car"}`} style={{ fontSize:40, color:T.green }}/>
+          <i className={`fa-solid ${vehicle?.type==="Scooter"?"fa-motorcycle":vehicle?.type==="Tricycle"?"fa-truck":"fa-car"}`} style={{ fontSize:40, color:T.green }}/>
         </div>
 
         {/* Time slots */}
@@ -1055,7 +1055,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
         {/* Duration */}
         <div className="fade1" style={{ background:T.card, borderRadius:16, padding:"14px 16px", marginBottom:12, border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700, fontSize:14, color:T.text, marginBottom:12 }}>
-            <i className="fa-solid fa-hourglass-half" style={{ fontSize:16, color:T.green, marginRight:8 }}/> Charging Duration
+            <i className="fa-solid fa-hourglass" style={{ fontSize:16, color:T.green, marginRight:8 }}/> Charging Duration
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
             {DURATIONS.map((d,i)=>(
@@ -1097,7 +1097,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
         {/* Contact */}
         <div className="fade2" style={{ background:T.card, borderRadius:16, padding:"14px 16px", marginBottom:12, border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700, fontSize:14, color:T.text, marginBottom:12 }}>
-            <i className="fa-solid fa-address-card" style={{ fontSize:16, color:T.green, marginRight:8 }}/> Your Details
+            <i className="fa-solid fa-id-card" style={{ fontSize:16, color:T.green, marginRight:8 }}/> Your Details
           </div>
           {inp("Full name",     name,  setName,  "text",  "fa-user"  )}
           {inp("Phone number",  phone, setPhone, "tel",   "fa-phone" )}
@@ -1136,7 +1136,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
           <div style={{ background:"rgba(248,113,113,.08)", border:"1px solid rgba(248,113,113,.2)",
             borderRadius:10, padding:"11px 14px", marginBottom:12, color:T.red, fontSize:12,
             display:"flex", alignItems:"center", gap:8 }}>
-            <i className="fa-solid fa-triangle-exclamation" style={{ fontSize:16, color:T.muted }}/> {error}
+            <i className="fa-solid fa-exclamation-triangle" style={{ fontSize:16, color:T.muted }}/> {error}
           </div>
         )}
 
@@ -1150,7 +1150,7 @@ function Booking({ go, station, vehicle, user, setBooking }) {
             ? <><Spinner/> Processing…</>
             : payHow==="now"
               ? <><i className="fa-solid fa-lock" style={{ fontSize:16, color:T.muted }}/> Pay GH₵{total} & Confirm</>
-              : <><i className="fa-solid fa-calendar-check" style={{ fontSize:16, color:T.muted }}/> Reserve Slot — Pay on Arrival</>
+              : <><i className="fa-solid fa-calendar-alt" style={{ fontSize:16, color:T.muted }}/> Reserve Slot — Pay on Arrival</>
           }
         </button>
       </div>
@@ -1180,7 +1180,7 @@ function QRScreen({ go, booking }) {
             style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`, border:"none",
               borderRadius:12, padding:"12px 28px", fontSize:14, fontWeight:700, color:"#000",
               cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:8, margin:"0 auto" }}>
-            <i className="fa-solid fa-location-dot" style={{ fontSize:16, color:T.muted }}/> Find a Station
+            <i className="fa-solid fa-map-marker-alt" style={{ fontSize:16, color:T.muted }}/> Find a Station
           </button>
         </div>
       </div>
@@ -1225,7 +1225,7 @@ function Verify({ go }) {
       <div style={{ flex:1, overflowY:"auto", padding:"20px 16px 80px" }}>
         <div style={{ background:T.card, borderRadius:16, padding:"16px", marginBottom:12, border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700, fontSize:14, color:T.text, marginBottom:12 }}>
-            <i className="fa-solid fa-magnifying-glass" style={{ fontSize:16, color:T.green, marginRight:8 }}/> Enter Booking Reference
+            <i className="fa-solid fa-search" style={{ fontSize:16, color:T.green, marginRight:8 }}/> Enter Booking Reference
           </div>
           <div style={{ position:"relative", marginBottom:12 }}>
             <i className="fa-solid fa-hashtag" style={{ fontSize:14, color:T.muted }}/>
@@ -1240,14 +1240,14 @@ function Verify({ go }) {
               border:"none", borderRadius:12, padding:"14px", fontSize:15, fontWeight:700,
               color:"#000", cursor:"pointer", fontFamily:"inherit",
               display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
-            {loading ? <><Spinner/> Verifying…</> : <><i className="fa-solid fa-shield-halved" style={{ fontSize:16, color:T.muted }}/> Verify Booking</>}
+            {loading ? <><Spinner/> Verifying…</> : <><i className="fa-solid fa-shield-alt" style={{ fontSize:16, color:T.muted }}/> Verify Booking</>}
           </button>
         </div>
         {error && (
           <div style={{ background:"rgba(248,113,113,.08)", border:"1px solid rgba(248,113,113,.2)",
             borderRadius:12, padding:"12px 16px", marginBottom:12, color:T.red, fontSize:13,
             display:"flex", alignItems:"center", gap:8 }}>
-            <i className="fa-solid fa-triangle-exclamation" style={{ fontSize:16, color:T.muted }}/> {error}
+            <i className="fa-solid fa-exclamation-triangle" style={{ fontSize:16, color:T.muted }}/> {error}
           </div>
         )}
         {result && (
@@ -1268,7 +1268,7 @@ function Verify({ go }) {
               { label:"Phone",    value:result.phone,   icon:"fa-phone"      },
               { label:"Vehicle",  value:result.vehicle, icon:"fa-car"        },
               { label:"Duration", value:`${result.duration_min} min`, icon:"fa-clock" },
-              { label:"Amount",   value:`GH₵${result.amount}`, icon:"fa-money-bill" },
+              { label:"Amount",   value:`GH₵${result.amount}`, icon:"fa-money-bill-alt-alt" },
               { label:"Payment",  value:result.pay_method==="now"?"PAID ✅":`Collect GH₵${result.amount}`, icon:"fa-credit-card" },
             ].map(r=>(
               <div key={r.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
@@ -1316,7 +1316,7 @@ function Profile({ go, user, setUser, onMenu }) {
                 { label:"Total Charges",  value:"0",    color:T.green,  icon:"fa-bolt"       },
                 { label:"CO₂ Saved",      value:"0 kg", color:T.green,  icon:"fa-leaf"       },
                 { label:"Water Received", value:"0 L",  color:T.blue,   icon:"fa-droplet"    },
-                { label:"Total Spent",    value:"GH₵0", color:T.yellow, icon:"fa-money-bill" },
+                { label:"Total Spent",    value:"GH₵0", color:T.yellow, icon:"fa-money-bill-alt-alt" },
               ].map(s=>(
                 <div key={s.label} style={{ background:T.card, borderRadius:14, padding:"16px",
                   border:`1px solid ${T.border}`, textAlign:"center" }}>
@@ -1331,12 +1331,12 @@ function Profile({ go, user, setUser, onMenu }) {
                 borderRadius:12, padding:"14px", fontSize:14, fontWeight:600, color:T.red,
                 cursor:"pointer", marginBottom:20, display:"flex", alignItems:"center",
                 justifyContent:"center", gap:8, fontFamily:"inherit" }}>
-              <i className="fa-solid fa-right-from-bracket" style={{ fontSize:16, color:T.muted }}/> Sign Out
+              <i className="fa-solid fa-sign-out-alt" style={{ fontSize:16, color:T.muted }}/> Sign Out
             </button>
           </>
         ) : (
           <div style={{ textAlign:"center", padding:"40px 16px" }}>
-            <i className="fa-solid fa-circle-user" style={{ fontSize:80, color:T.muted, marginBottom:16, display:"block" }}/>
+            <i className="fa-solid fa-user-circle" style={{ fontSize:80, color:T.muted, marginBottom:16, display:"block" }}/>
             <div style={{ fontWeight:800, fontSize:22, color:T.text, marginBottom:8 }}>Your Profile</div>
             <div style={{ color:T.muted, fontSize:13, marginBottom:28, lineHeight:1.8 }}>
               Track charges, view bookings,<br/>and see your environmental impact.
@@ -1346,7 +1346,7 @@ function Profile({ go, user, setUser, onMenu }) {
                 border:"none", borderRadius:14, padding:"16px", fontSize:15, fontWeight:700,
                 color:"#000", cursor:"pointer", fontFamily:"inherit",
                 display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-              <i className="fa-solid fa-right-to-bracket" style={{ fontSize:16, color:T.muted }}/> Sign In / Register
+              <i className="fa-solid fa-sign-in-alt" style={{ fontSize:16, color:T.muted }}/> Sign In / Register
             </button>
           </div>
         )}
@@ -1368,10 +1368,10 @@ function About({ go, onMenu }) {
           <div style={{ fontSize:13, color:T.muted, marginTop:6 }}>Solar Charging · Clean Water · Zero Emissions</div>
         </div>
         {[
-          { icon:"fa-solar-panel",  color:T.yellow,     title:"Solar EV Charging",   text:"100% solar-powered stations across Ghana providing clean, affordable EV charging." },
+          { icon:"fa-sun",  color:T.yellow,     title:"Solar EV Charging",   text:"100% solar-powered stations across Ghana providing clean, affordable EV charging." },
           { icon:"fa-droplet",      color:T.blue,        title:"Clean Water Access",  text:"Every charging session includes 20L of clean desalinated water for you and your family." },
           { icon:"fa-leaf",         color:T.green,       title:"Zero Emissions",      text:"Our stations run on solar and hydrogen energy — zero carbon footprint." },
-          { icon:"fa-people-group", color:T.mutedLight,  title:"Local Employment",    text:"We train and employ local Ghanaians at every station across the country." },
+          { icon:"fa-users", color:T.mutedLight,  title:"Local Employment",    text:"We train and employ local Ghanaians at every station across the country." },
         ].map((item,i)=>(
           <div key={i} style={{ background:T.card, borderRadius:14, padding:"16px",
             marginBottom:12, border:`1px solid ${T.border}`, display:"flex", gap:14, alignItems:"flex-start" }}>
