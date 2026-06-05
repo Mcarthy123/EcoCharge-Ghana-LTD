@@ -426,7 +426,7 @@ function Auth({ mode, onBack, onSuccess }) {
               border:"none", borderRadius:12, padding:"14px", fontSize:15, fontWeight:700,
               color:"#000", cursor:"pointer", fontFamily:"inherit", opacity:loading?.7:1,
               display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
-            {loading ? <Spinner/> : <><i className={`fa-solid ${mode==="login"?"fa-right-to-bracket":"user-plus}`} style={{ fontSize:16, color:T.muted }}/> {mode==="login"?"Sign In":"Create Account"}</>}
+            {loading ? <Spinner/> : <><i className={`fa-solid ${mode==="login"?"fa-right-to-bracket":"fa-user-plus"}`} style={{ fontSize:16, color:"#000" }}/> {mode==="login"?"Sign In":"Create Account"}</>}
           </button>
         </div>
         <div style={{ textAlign:"center", marginTop:20, paddingBottom:40 }}>
