@@ -231,19 +231,29 @@ function Splash({ onLogin,onRegister,onGuest }) {
 }
 
 function Auth({ mode,onBack,onSuccess }) {
-  const [name,setPname]   = useState("");
-  const [email,setEmail]  = useState("");
-  const [password,setPass]= useState("");
-  const [loading,setLoad] = useState(false);
-  const [error,setErr]    = useState("");
+  const [tab,setTab]         = useState("email"); // email | phone
+  const [name,setPname]      = useState("");
+  const [email,setEmail]     = useState("");
+  const [password,setPass]   = useState("");
+  const [phone,setPhone]     = useState("");
+  const [otp,setOtp]         = useState("");
+  const [otpSent,setOtpSent] = useState(false);
+  const [loading,setLoad]    = useState(false);
+  const [error,setErr]       = useState("");
+  const [success,setSuccess] = useState("");
 
   const call = async (ep,body) => {
     if (!SUPABASE_URL) return { access_token:"demo",id:"demo" };
-    const r = await fetch(`${SUPABASE_URL}/auth/v1/${ep}`,{ method:"POST",headers:{ apikey:SUPABASE_ANON,"Content-Type":"application/json" },body:JSON.stringify(body) });
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/${ep}`,{
+      method:"POST",
+      headers:{ apikey:SUPABASE_ANON,"Content-Type":"application/json" },
+      body:JSON.stringify(body),
+    });
     return r.json();
   };
 
-  const submit = async () => {
+  // Email/Password submit
+  const submitEmail = async () => {
     if (!email||!password) { setErr("Please fill in all fields"); return; }
     if (mode==="register"&&!name) { setErr("Please enter your name"); return; }
     if (password.length<6) { setErr("Password must be at least 6 characters"); return; }
@@ -252,50 +262,180 @@ function Auth({ mode,onBack,onSuccess }) {
       ? await call("token?grant_type=password",{ email,password })
       : await call("signup",{ email,password,data:{ full_name:name } });
     if (d.access_token||d.id||d.user) {
-      onSuccess({ email,name:name||email.split("@")[0],token:d.access_token||"demo" });
+      onSuccess({ email,name:name||email.split("@")[0],token:d.access_token||"demo",id:d.user?.id||"demo" });
     } else {
       setErr(d.error_description||d.msg||"Something went wrong. Try again.");
     }
     setLoad(false);
   };
 
+  // Phone OTP — send
+  const sendOtp = async () => {
+    if (!phone||phone.length<10) { setErr("Enter a valid Ghana phone number"); return; }
+    setLoad(true); setErr("");
+    // Format phone to international
+    const intl = phone.startsWith("+") ? phone : `+233${phone.replace(/^0/,"")}`;
+    const d = await call("otp",{ phone:intl });
+    if (d.error) {
+      setErr(d.error_description||"Could not send OTP. Check your number.");
+    } else {
+      setOtpSent(true);
+      setSuccess(`OTP sent to ${intl}`);
+    }
+    setLoad(false);
+  };
+
+  // Phone OTP — verify
+  const verifyOtp = async () => {
+    if (!otp||otp.length<6) { setErr("Enter the 6-digit OTP code"); return; }
+    setLoad(true); setErr("");
+    const intl = phone.startsWith("+") ? phone : `+233${phone.replace(/^0/,"")}`;
+    const d = await call("verify",{ phone:intl,token:otp,type:"sms" });
+    if (d.access_token||d.user) {
+      onSuccess({ phone:intl,name:intl,token:d.access_token||"demo",id:d.user?.id||"demo" });
+    } else {
+      setErr(d.error_description||"Invalid OTP. Try again.");
+    }
+    setLoad(false);
+  };
+
+  // Google Sign In
+  const googleSignIn = async () => {
+    if (!SUPABASE_URL) { setErr("Supabase not configured"); return; }
+    setLoad(true); setErr("");
+    try {
+      const r = await fetch(`${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin)}`,{
+        headers:{ apikey:SUPABASE_ANON },
+      });
+      // Redirect to Google
+      window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin)}`;
+    } catch(e) {
+      setErr("Google sign in failed. Try again.");
+      setLoad(false);
+    }
+  };
+
   const inp = (ph,val,set,type="text",icon="fa-user") => (
     <div style={{ position:"relative",marginBottom:12 }}>
       <input type={type} placeholder={ph} value={val} onChange={e=>{ set(e.target.value);setErr(""); }}
-        style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:10,padding:"13px 14px 13px 44px",color:T.text,fontSize:14 }}/>
+        style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 14px 14px 44px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
       <i className={`fas ${icon}`} style={{ position:"absolute",left:15,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:14 }}/>
     </div>
   );
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title={mode==="login"?"Sign In":"Create Account"} sub="EcoCharge Ghana" onBack={()=>onBack(null)}/>
-      <div style={{ flex:1,overflowY:"auto",padding:"30px 20px 0" }}>
+      <Header title={mode==="login"?"Welcome Back":"Create Account"} sub="EcoCharge Ghana" onBack={()=>onBack(null)}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"24px 20px 40px" }}>
+
+        {/* Logo */}
         <div style={{ textAlign:"center",marginBottom:24 }}>
           <Logo size={64}/>
-          <div style={{ fontWeight:800,fontSize:20,color:T.text,marginTop:12 }}>{mode==="login"?"Welcome Back!":"Join EcoCharge"}</div>
-          <div style={{ fontSize:12,color:T.muted,marginTop:4 }}>{mode==="login"?"Sign in to your account":"Create your free account"}</div>
+          <div style={{ fontWeight:800,fontSize:20,color:T.text,marginTop:12 }}>
+            {mode==="login"?"Sign in to EcoCharge":"Join EcoCharge Ghana"}
+          </div>
+          <div style={{ fontSize:12,color:T.muted,marginTop:4 }}>
+            {mode==="login"?"Access your charging account":"Start charging clean energy"}
+          </div>
         </div>
-        <div style={{ background:T.card,borderRadius:16,padding:"20px",border:`1px solid ${T.border}` }}>
-          {mode==="register"&&inp("Full name",name,setPname,"text","fa-user")}
-          {inp("Email address",email,setEmail,"email","fa-envelope")}
-          {inp("Password (min 6 chars)",password,setPass,"password","fa-lock")}
-          {error&&<div style={{ color:T.red,fontSize:12,marginBottom:12,background:"rgba(248,113,113,.08)",borderRadius:8,padding:"8px 12px" }}>{error}</div>}
-          <button onClick={submit} disabled={loading} className="tap"
-            style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",opacity:loading?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:10 }}>
-            {loading?<Spinner/>:<><i className={`fas ${mode==="login"?"fa-sign-in-alt":"fa-user-plus"}`}/> {mode==="login"?"Sign In":"Create Account"}</>}
-          </button>
+
+        {/* Google Button */}
+        <button onClick={googleSignIn} disabled={loading} className="tap"
+          style={{ width:"100%",background:"#fff",border:"none",borderRadius:14,padding:"14px",fontSize:15,fontWeight:700,color:"#1a1a1a",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:16,boxShadow:"0 2px 8px rgba(0,0,0,0.3)" }}>
+          <svg width="20" height="20" viewBox="0 0 24 24">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+          Continue with Google
+        </button>
+
+        {/* Divider */}
+        <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:16 }}>
+          <div style={{ flex:1,height:1,background:T.border }}/>
+          <span style={{ fontSize:12,color:T.muted }}>or continue with</span>
+          <div style={{ flex:1,height:1,background:T.border }}/>
         </div>
-        <div style={{ textAlign:"center",marginTop:20,paddingBottom:40 }}>
+
+        {/* Tab switcher */}
+        <div style={{ display:"flex",background:T.card,borderRadius:12,padding:4,marginBottom:16,border:`1px solid ${T.border}` }}>
+          {[{ id:"email",label:"Email",icon:"fa-envelope" },{ id:"phone",label:"Phone",icon:"fa-phone" }].map(t=>(
+            <button key={t.id} onClick={()=>{ setTab(t.id);setErr("");setSuccess(""); }} className="tap"
+              style={{ flex:1,background:tab===t.id?`linear-gradient(135deg,${T.green},${T.greenDark})`:"none",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,color:tab===t.id?"#000":T.muted,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+              <i className={`fas ${t.icon}`}/> {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Email form */}
+        {tab==="email" && (
+          <div style={{ background:T.card,borderRadius:16,padding:"18px",border:`1px solid ${T.border}` }}>
+            {mode==="register" && inp("Full name",name,setPname,"text","fa-user")}
+            {inp("Email address",email,setEmail,"email","fa-envelope")}
+            {inp("Password (min 6 chars)",password,setPass,"password","fa-lock")}
+            {error&&<div style={{ color:T.red,fontSize:12,marginBottom:12,background:"rgba(248,113,113,.08)",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8 }}><i className="fas fa-exclamation-circle"/>{error}</div>}
+            <button onClick={submitEmail} disabled={loading} className="tap"
+              style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:loading?.7:1 }}>
+              {loading?<Spinner/>:<><i className={`fas ${mode==="login"?"fa-sign-in-alt":"fa-user-plus"}`}/> {mode==="login"?"Sign In":"Create Account"}</>}
+            </button>
+          </div>
+        )}
+
+        {/* Phone OTP form */}
+        {tab==="phone" && (
+          <div style={{ background:T.card,borderRadius:16,padding:"18px",border:`1px solid ${T.border}` }}>
+            {!otpSent ? (
+              <>
+                <div style={{ position:"relative",marginBottom:12 }}>
+                  <div style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",display:"flex",alignItems:"center",gap:6 }}>
+                    <span style={{ fontSize:13,color:T.muted,fontWeight:600 }}>🇬🇭</span>
+                    <span style={{ fontSize:13,color:T.muted }}>+233</span>
+                    <div style={{ width:1,height:16,background:T.border,marginLeft:4 }}/>
+                  </div>
+                  <input type="tel" placeholder="XX XXX XXXX" value={phone} onChange={e=>{ setPhone(e.target.value);setErr(""); }}
+                    style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 14px 14px 90px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+                </div>
+                {error&&<div style={{ color:T.red,fontSize:12,marginBottom:12,background:"rgba(248,113,113,.08)",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8 }}><i className="fas fa-exclamation-circle"/> {error}</div>}
+                <button onClick={sendOtp} disabled={loading} className="tap"
+                  style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:loading?.7:1 }}>
+                  {loading?<Spinner/>:<><i className="fas fa-sms"/> Send OTP Code</>}
+                </button>
+              </>
+            ) : (
+              <>
+                {success&&<div style={{ color:T.green,fontSize:12,marginBottom:12,background:"rgba(74,222,128,.08)",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8 }}><i className="fas fa-check-circle"/> {success}</div>}
+                <div style={{ fontSize:13,color:T.muted,marginBottom:12 }}>Enter the 6-digit code sent to your phone</div>
+                <input type="number" placeholder="000000" value={otp} onChange={e=>{ setOtp(e.target.value);setErr(""); }}
+                  style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:12,padding:"14px",color:T.text,fontSize:24,fontFamily:"monospace",letterSpacing:8,textAlign:"center",marginBottom:12 }}/>
+                {error&&<div style={{ color:T.red,fontSize:12,marginBottom:12,background:"rgba(248,113,113,.08)",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8 }}><i className="fas fa-exclamation-circle"/> {error}</div>}
+                <button onClick={verifyOtp} disabled={loading} className="tap"
+                  style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:loading?.7:1,marginBottom:10 }}>
+                  {loading?<Spinner/>:<><i className="fas fa-shield-alt"/> Verify OTP</>}
+                </button>
+                <button onClick={()=>{ setOtpSent(false);setOtp("");setErr("");setSuccess(""); }} className="tap"
+                  style={{ width:"100%",background:"none",border:"none",color:T.muted,fontSize:13,cursor:"pointer",fontFamily:"inherit" }}>
+                  ← Change number
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Switch mode */}
+        <div style={{ textAlign:"center",marginTop:20 }}>
           <span style={{ color:T.muted,fontSize:13 }}>{mode==="login"?"No account? ":"Already registered? "}</span>
-          <button onClick={()=>onBack(mode==="login"?"register":"login")} style={{ background:"none",border:"none",color:T.green,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit" }}>
-            {mode==="login"?"Register":"Sign In"}
+          <button onClick={()=>onBack(mode==="login"?"register":"login")}
+            style={{ background:"none",border:"none",color:T.green,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit" }}>
+            {mode==="login"?"Register free":"Sign In"}
           </button>
         </div>
+
       </div>
     </div>
   );
 }
+
 
 function MapScreen({ go,stations,setStation }) {
   const mapRef  = useRef(null);
@@ -997,6 +1137,150 @@ function About({ go,onMenu }) {
   );
 }
 
+
+function Bookings({ go, booking, user }) {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(()=>{
+    const t = setInterval(()=>setNow(new Date()), 1000);
+    return ()=>clearInterval(t);
+  },[]);
+
+  // Try localStorage
+  let b = booking;
+  if (!b) {
+    try {
+      const s = localStorage.getItem("eco_booking");
+      if (s) b = JSON.parse(s);
+    } catch(e){}
+  }
+
+  // Countdown calculation
+  const getCountdown = (b) => {
+    if (!b?.slot_time || !b?.duration_min) return null;
+    const start = new Date(b.slot_time);
+    const end   = new Date(start.getTime() + b.duration_min * 60000);
+    const diff  = end - now;
+    if (diff <= 0) return { done:true, pct:100 };
+    const started = now >= start;
+    if (!started) {
+      const wait = start - now;
+      const wm = Math.floor(wait/60000);
+      const ws = Math.floor((wait%60000)/1000);
+      return { waiting:true, label:`Starts in ${wm}m ${ws}s`, pct:0 };
+    }
+    const elapsed = now - start;
+    const total   = b.duration_min * 60000;
+    const pct     = Math.min(100, Math.round((elapsed/total)*100));
+    const rem     = end - now;
+    const rm = Math.floor(rem/60000);
+    const rs = Math.floor((rem%60000)/1000);
+    return { active:true, label:`${rm}m ${rs}s remaining`, pct };
+  };
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="My Bookings" sub="Your charging sessions" onBack={()=>go("home")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"20px 14px 100px" }}>
+        {b ? (
+          <>
+            {/* Active booking card */}
+            {(()=>{
+              const cd = getCountdown(b);
+              return (
+                <div className="fade" style={{ background:"linear-gradient(135deg,#0a1f12,#0d2d1a)",borderRadius:18,padding:"18px",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14 }}>
+                    <div>
+                      <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Active Booking</div>
+                      <div style={{ fontWeight:800,fontSize:18,color:T.text }}>{b.station}</div>
+                      <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>{b.vehicle} · {b.duration_min} min session</div>
+                    </div>
+                    <div style={{ background:b.status==="confirmed"?"rgba(74,222,128,0.15)":"rgba(251,191,36,0.15)",borderRadius:10,padding:"5px 12px" }}>
+                      <span style={{ fontSize:11,fontWeight:700,color:b.status==="confirmed"?T.green:T.yellow }}>
+                        {b.status==="confirmed"?"✓ Confirmed":"Pending"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Countdown */}
+                  {cd && (
+                    <div style={{ marginBottom:14 }}>
+                      <div style={{ display:"flex",justifyContent:"space-between",marginBottom:8 }}>
+                        <span style={{ fontSize:12,color:T.muted }}>
+                          {cd.done?"Session complete":cd.waiting?cd.label:"Time remaining"}
+                        </span>
+                        <span style={{ fontSize:12,fontWeight:700,color:T.green }}>
+                          {cd.done?"Done ✅":cd.active?cd.label:""}
+                        </span>
+                      </div>
+                      <div style={{ height:8,borderRadius:4,background:"rgba(255,255,255,0.08)",overflow:"hidden" }}>
+                        <div style={{ height:"100%",width:`${cd.pct}%`,background:`linear-gradient(90deg,${T.green},${T.blue})`,transition:"width 1s linear",borderRadius:4 }}/>
+                      </div>
+                      {cd.active && (
+                        <div style={{ textAlign:"center",marginTop:12 }}>
+                          <div style={{ fontWeight:900,fontSize:36,color:T.green,fontFamily:"monospace",letterSpacing:2 }}>{cd.label}</div>
+                          <div style={{ fontSize:11,color:T.muted,marginTop:4 }}>charging in progress</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Details */}
+                  {[
+                    { label:"Reference", value:b.reference },
+                    { label:"Amount",    value:`GH₵${b.amount}` },
+                    { label:"Payment",   value:b.pay_method==="now"?"Paid ✅":"Pay on Arrival" },
+                    { label:"Water",     value:"20L included 💧" },
+                  ].map(r=>(
+                    <div key={r.label} style={{ display:"flex",justifyContent:"space-between",marginBottom:8,paddingBottom:8,borderBottom:`1px solid rgba(255,255,255,0.06)` }}>
+                      <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
+                      <span style={{ color:T.text,fontWeight:600,fontSize:13 }}>{r.value}</span>
+                    </div>
+                  ))}
+
+                  <button onClick={()=>go("qr")} className="tap"
+                    style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:8 }}>
+                    <i className="fas fa-qrcode"/> View Charging Pass
+                  </button>
+                </div>
+              );
+            })()}
+
+            {/* Rewards teaser */}
+            <div style={{ background:"linear-gradient(135deg,#1a1000,#2d1a00)",borderRadius:16,padding:"16px",border:`1px solid rgba(251,191,36,0.2)`,marginBottom:16 }}>
+              <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:10 }}>
+                <div style={{ width:40,height:40,borderRadius:"50%",background:"rgba(251,191,36,0.15)",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                  <i className="fas fa-star" style={{ fontSize:18,color:T.yellow }}/>
+                </div>
+                <div>
+                  <div style={{ fontWeight:700,fontSize:14,color:T.text }}>EcoCharge Rewards</div>
+                  <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Coming soon — earn credits for charging</div>
+                </div>
+              </div>
+              <div style={{ fontSize:12,color:T.muted,lineHeight:1.7 }}>
+                Every charge earns you points. Redeem for <span style={{ color:T.yellow,fontWeight:600 }}>airtime</span>, <span style={{ color:T.green,fontWeight:600 }}>discounted charging</span>, and more!
+              </div>
+            </div>
+          </>
+        ) : (
+          <div style={{ textAlign:"center",padding:"50px 20px" }}>
+            <i className="fas fa-calendar-times" style={{ fontSize:56,color:T.muted,marginBottom:16,display:"block" }}/>
+            <div style={{ fontWeight:700,fontSize:18,color:T.text,marginBottom:8 }}>No Bookings Yet</div>
+            <div style={{ color:T.muted,fontSize:13,marginBottom:28,lineHeight:1.8 }}>
+              Find a station and book your<br/>first charging session
+            </div>
+            <button onClick={()=>go("map")} className="tap"
+              style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"14px 28px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:8,margin:"0 auto" }}>
+              <i className="fas fa-map-marker-alt"/> Find a Station
+            </button>
+          </div>
+        )}
+      </div>
+      <Nav active="Home" go={go}/>
+    </div>
+  );
+}
+
 export default function App() {
   const [screen,setScreen]   = useState(()=>{ try { return localStorage.getItem("eco_user")?"home":"splash"; } catch(e){ return "splash"; } });
   const [authMode,setAuthMode]= useState("login");
@@ -1047,7 +1331,7 @@ export default function App() {
   if (screen==="splash") return <><style>{CSS}</style><Splash onLogin={()=>{ setAuthMode("login");go("auth"); }} onRegister={()=>{ setAuthMode("register");go("auth"); }} onGuest={()=>go("home")}/></>;
   if (screen==="auth") return <><style>{CSS}</style><Auth mode={authMode} onBack={(mode)=>{ if(mode){ setAuthMode(mode); } else { go("splash"); } }} onSuccess={(u)=>{ setUser(u);go("home"); }}/></>;
 
-  const views={ home:<Home {...props}/>,map:<MapScreen {...props}/>,detail:<Detail {...props}/>,vehicles:<Vehicles {...props}/>,booking:<Booking {...props}/>,qr:<QRScreen {...props}/>,verify:<Verify {...props}/>,profile:<Profile {...props}/>,about:<About {...props}/> };
+  const views={ home:<Home {...props}/>,map:<MapScreen {...props}/>,detail:<Detail {...props}/>,vehicles:<Vehicles {...props}/>,booking:<Booking {...props}/>,bookings:<Bookings {...props}/>,qr:<QRScreen {...props}/>,verify:<Verify {...props}/>,profile:<Profile {...props}/>,about:<About {...props}/> };
 
   return (
     <><style>{CSS}</style>
