@@ -353,18 +353,22 @@ function Home({ go,stations,setStation,user,onMenu }) {
   },[]);
   const hour=new Date().getHours();
   const greeting=hour<12?"Good morning":hour<17?"Good afternoon":"Good evening";
-  const greetIcon=hour<12?"fa-sun":hour<17?"fa-sun":"fa-moon";
+  const greetEmoji=hour<12?"👋":hour<17?"☀️":"🌙";
   const displayName=user?.name||user?.email?.split("@")[0]||"Welcome";
   const filtered=search?stations.filter(s=>s.name.toLowerCase().includes(search.toLowerCase())||s.city.toLowerCase().includes(search.toLowerCase())):stations;
+
   const quickActions=[
-    { icon:"fa-map-marker-alt",label:"Find Stations",sub:"Nearby",         screen:"map",     bg:"rgba(74,222,128,0.12)",color:T.green },
-    { icon:"fa-calendar-alt",  label:"My Bookings", sub:"View all",        screen:"bookings",bg:"rgba(255,255,255,0.06)",color:T.mutedLight },
-    { icon:"fa-qrcode",        label:"Charging Pass",sub:"Show QR",        screen:"qr",      bg:"rgba(255,255,255,0.06)",color:T.mutedLight },
-    { icon:"fa-tint",          label:"Water Points", sub:"Find clean water",screen:"detail", bg:"rgba(56,189,248,0.10)",color:T.blue },
+    { icon:"fa-bolt",      label:"Find Stations", sub:"Nearby",          screen:"map",     bg:`linear-gradient(135deg,${T.green},${T.greenDark})`,  color:"#000" },
+    { icon:"fa-calendar",  label:"My Bookings",   sub:"View all",        screen:"bookings",bg:"rgba(255,255,255,0.12)",                               color:T.mutedLight },
+    { icon:"fa-qrcode",    label:"Charging Pass", sub:"Show QR",         screen:"qr",      bg:"rgba(255,255,255,0.12)",                               color:T.mutedLight },
+    { icon:"fa-tint",      label:"Water Points",  sub:"Find clean water",screen:"detail",  bg:"rgba(56,189,248,0.18)",                               color:T.blue },
   ];
+
   return (
-    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,overflowY:"auto" }}>
-      <div className="fade" style={{ padding:"48px 18px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0 }}>
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:"#080d10",overflowY:"auto" }}>
+
+      {/* HEADER */}
+      <div style={{ padding:"48px 18px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0 }}>
         <button onClick={onMenu} className="tap" style={{ background:"rgba(255,255,255,.07)",border:`1px solid ${T.border}`,borderRadius:12,width:40,height:40,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
           <i className="fas fa-bars" style={{ fontSize:16,color:T.mutedLight }}/>
         </button>
@@ -372,53 +376,63 @@ function Home({ go,stations,setStation,user,onMenu }) {
           <Logo size={30}/>
           <div>
             <div style={{ fontWeight:800,fontSize:16,color:T.text,lineHeight:1.1,letterSpacing:-0.3 }}>EcoCharge</div>
-            <div style={{ fontSize:10,color:T.green,fontWeight:700,letterSpacing:1 }}>GHANA</div>
+            <div style={{ fontSize:10,color:T.green,fontWeight:700,letterSpacing:1 }}>Ghana</div>
           </div>
         </div>
         <div style={{ position:"relative" }}>
           <button className="tap" style={{ background:"rgba(255,255,255,.07)",border:`1px solid ${T.border}`,borderRadius:12,width:40,height:40,display:"flex",alignItems:"center",justifyContent:"center" }}>
             <i className="fas fa-bell" style={{ fontSize:16,color:T.mutedLight }}/>
           </button>
-          <div style={{ position:"absolute",top:-2,right:-2,width:10,height:10,borderRadius:"50%",background:T.green,border:`2px solid ${T.bg}` }}/>
+          <div style={{ position:"absolute",top:-2,right:-2,width:10,height:10,borderRadius:"50%",background:T.green,border:`2px solid #080d10` }}/>
         </div>
       </div>
-      <div className="fade" style={{ margin:"0 14px 16px",borderRadius:22,overflow:"hidden",position:"relative",minHeight:188,background:"linear-gradient(135deg,#071a09 0%,#0a2510 60%,#061f0c 100%)",border:`1px solid rgba(74,222,128,0.15)` }}>
-        <div style={{ position:"absolute",right:0,top:0,bottom:0,width:"55%",overflow:"hidden" }}>
-          {slides.map((src,i)=>(
-            <img key={src} src={src} alt="station"
-              style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",
-                opacity:i===slideIdx?1:0,transition:"opacity 1s ease",
-                filter:"brightness(0.55) saturate(1.2)" }}
-              onError={e=>{ e.target.style.display="none"; }}/>
-          ))}
-          <div style={{ position:"absolute",inset:0,background:"linear-gradient(to right,rgba(7,26,9,1) 0%,transparent 40%)" }}/>
-          {/* Slide dots */}
-          <div style={{ position:"absolute",bottom:10,right:10,display:"flex",gap:5 }}>
-            {slides.map((_,i)=>(
-              <div key={i} onClick={()=>setSlideIdx(i)}
-                style={{ width:i===slideIdx?16:6,height:6,borderRadius:3,background:i===slideIdx?T.green:"rgba(255,255,255,0.3)",transition:"all .3s",cursor:"pointer" }}/>
-            ))}
-          </div>
-        </div>
+
+      {/* HERO — full bleed image with text overlay */}
+      <div style={{ margin:"0 14px 16px",borderRadius:22,overflow:"hidden",position:"relative",minHeight:200 }}>
+        {/* Sliding images */}
+        {slides.map((src,i)=>(
+          <img key={src} src={src} alt="station"
+            style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:i===slideIdx?1:0,transition:"opacity 1.2s ease",filter:"brightness(0.5) saturate(1.1)" }}
+            onError={e=>{ e.target.style.display="none"; }}/>
+        ))}
+        {/* Dark gradient overlay */}
+        <div style={{ position:"absolute",inset:0,background:"linear-gradient(135deg,rgba(5,20,8,0.92) 0%,rgba(5,20,8,0.5) 55%,rgba(0,0,0,0.1) 100%)" }}/>
+        {/* Text content */}
         <div style={{ position:"relative",zIndex:2,padding:"22px 20px 20px" }}>
-          <div style={{ fontSize:13,color:"rgba(255,255,255,.6)",marginBottom:4,display:"flex",alignItems:"center",gap:6 }}>
-            <i className={`fas ${greetIcon}`} style={{ color:T.yellow,fontSize:12 }}/> {greeting}
+          <div style={{ fontSize:14,color:"rgba(255,255,255,.7)",marginBottom:4 }}>
+            {greeting} {greetEmoji}
           </div>
-          <div style={{ fontWeight:800,fontSize:26,color:T.text,marginBottom:8,letterSpacing:-0.5 }}>{displayName}</div>
-          <div style={{ fontSize:12,color:T.muted,lineHeight:1.8 }}>
-            Powering Ghana with <span style={{ color:T.green,fontWeight:700 }}>clean energy</span> and <span style={{ color:T.blue,fontWeight:700 }}>clean water</span>
+          <div style={{ fontWeight:800,fontSize:28,color:T.text,marginBottom:8,letterSpacing:-0.5 }}>
+            {displayName}
           </div>
-          <div style={{ marginTop:14,display:"flex",gap:8 }}>
-            <button onClick={()=>go("map")} className="tap" style={{ background:T.green,border:"none",borderRadius:10,padding:"9px 18px",fontSize:13,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}>
+          <div style={{ fontSize:13,color:"rgba(255,255,255,0.65)",lineHeight:1.7,marginBottom:16 }}>
+            Powering Ghana with{" "}
+            <span style={{ color:T.green,fontWeight:700 }}>clean energy</span>
+            {" "}and{" "}
+            <span style={{ color:T.blue,fontWeight:700 }}>clean water</span>
+          </div>
+          <div style={{ display:"flex",gap:10 }}>
+            <button onClick={()=>go("map")} className="tap"
+              style={{ background:T.green,border:"none",borderRadius:12,padding:"10px 20px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}>
               <i className="fas fa-map-marker-alt"/> Find Station
             </button>
-            <button onClick={()=>go("qr")} className="tap" style={{ background:"rgba(255,255,255,.1)",border:`1px solid rgba(255,255,255,.15)`,borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}>
+            <button onClick={()=>go("qr")} className="tap"
+              style={{ background:"rgba(255,255,255,.12)",border:"1px solid rgba(255,255,255,.2)",borderRadius:12,padding:"10px 18px",fontSize:14,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}>
               <i className="fas fa-qrcode"/> My Pass
             </button>
           </div>
         </div>
+        {/* Slide dots */}
+        <div style={{ position:"absolute",bottom:12,right:14,display:"flex",gap:5,zIndex:3 }}>
+          {slides.map((_,i)=>(
+            <div key={i} onClick={()=>setSlideIdx(i)}
+              style={{ width:i===slideIdx?20:6,height:6,borderRadius:3,background:i===slideIdx?T.green:"rgba(255,255,255,0.35)",transition:"all .3s",cursor:"pointer" }}/>
+          ))}
+        </div>
       </div>
-      <div className="fade1" style={{ margin:"0 14px 16px",position:"relative" }}>
+
+      {/* SEARCH */}
+      <div style={{ margin:"0 14px 16px",position:"relative" }}>
         <i className="fas fa-search" style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:14 }}/>
         <input placeholder="Search station or location" value={search} onChange={e=>setSearch(e.target.value)}
           style={{ width:"100%",background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"13px 48px 13px 42px",fontSize:14,fontFamily:"inherit" }}/>
@@ -426,21 +440,25 @@ function Home({ go,stations,setStation,user,onMenu }) {
           <i className="fas fa-sliders-h" style={{ fontSize:13,color:T.mutedLight }}/>
         </div>
       </div>
-      <div className="fade1" style={{ margin:"0 14px 16px",background:T.card,borderRadius:18,border:`1px solid ${T.border}`,display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr" }}>
+
+      {/* QUICK ACTIONS */}
+      <div style={{ margin:"0 14px 16px",background:T.card,borderRadius:18,border:`1px solid ${T.border}`,display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr" }}>
         {quickActions.map((a,i)=>(
           <button key={a.label} onClick={()=>go(a.screen)} className="tap"
-            style={{ background:"none",border:"none",cursor:"pointer",padding:"14px 6px",display:"flex",flexDirection:"column",alignItems:"center",gap:7,borderRight:i<3?`1px solid ${T.border}`:"none",fontFamily:"inherit" }}>
-            <div style={{ width:40,height:40,borderRadius:12,background:a.bg,display:"flex",alignItems:"center",justifyContent:"center" }}>
-              <i className={`fas ${a.icon}`} style={{ fontSize:17,color:a.color }}/>
+            style={{ background:"none",border:"none",cursor:"pointer",padding:"16px 6px",display:"flex",flexDirection:"column",alignItems:"center",gap:8,borderRight:i<3?`1px solid ${T.border}`:"none",fontFamily:"inherit" }}>
+            <div style={{ width:44,height:44,borderRadius:"50%",background:a.bg,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:i===0?`0 4px 12px rgba(74,222,128,0.4)`:"none" }}>
+              <i className={`fas ${a.icon}`} style={{ fontSize:18,color:a.color }}/>
             </div>
             <div style={{ textAlign:"center" }}>
-              <div style={{ fontSize:10,fontWeight:700,color:T.text,lineHeight:1.3 }}>{a.label}</div>
+              <div style={{ fontSize:11,fontWeight:700,color:T.text,lineHeight:1.3 }}>{a.label}</div>
               <div style={{ fontSize:9,color:T.muted,marginTop:2 }}>{a.sub}</div>
             </div>
           </button>
         ))}
       </div>
-      <div className="fade2" style={{ margin:"0 14px 16px",background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:18,padding:"16px",border:`1px solid rgba(74,222,128,0.2)`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+
+      {/* IMPACT CARD */}
+      <div style={{ margin:"0 14px 16px",background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:18,padding:"16px",border:`1px solid rgba(74,222,128,0.2)`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
         <div style={{ display:"flex",gap:12,alignItems:"center" }}>
           <div style={{ width:44,height:44,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
             <i className="fas fa-leaf" style={{ fontSize:18,color:"#000" }}/>
@@ -453,38 +471,45 @@ function Home({ go,stations,setStation,user,onMenu }) {
         </div>
         <i className="fas fa-globe-africa" style={{ fontSize:40,color:T.green,opacity:0.6 }}/>
       </div>
-      <div className="fade3" style={{ margin:"0 14px 14px" }}>
+
+      {/* NEARBY STATIONS */}
+      <div style={{ margin:"0 14px 14px" }}>
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
-          <div style={{ fontWeight:800,fontSize:16,color:T.text,letterSpacing:-0.3 }}>Nearby Stations</div>
+          <div style={{ fontWeight:800,fontSize:16,color:T.text }}>Nearby Stations</div>
           <button onClick={()=>go("detail")} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
             View all <i className="fas fa-arrow-right" style={{ fontSize:11 }}/>
           </button>
         </div>
         {(search?filtered:stations).slice(0,3).map((s,idx)=>{
           const kw=Math.round((s.solar||80)*1.5);
-          const bgs=["linear-gradient(135deg,#0a2010,#0d3018)","linear-gradient(135deg,#0a1a30,#0d2a3d)","linear-gradient(135deg,#1a1000,#2d1800)"];
+          const stationImgs=["/station1.jpg","/station2.jpg","/station3.jpg"];
           return (
             <div key={s.id} className="tap row" onClick={()=>{ setStation(s);go("detail"); }}
-              style={{ background:T.card,borderRadius:18,border:`1px solid ${T.border}`,marginBottom:10,display:"flex",gap:12,alignItems:"flex-start",padding:14 }}>
-              <div style={{ width:80,height:80,borderRadius:12,flexShrink:0,background:bgs[idx%3],display:"flex",alignItems:"center",justifyContent:"center",border:`1px solid ${T.border}`,overflow:"hidden",position:"relative" }}>
-                <div style={{ position:"absolute",top:0,left:0,right:0,height:7,background:"rgba(74,222,128,0.1)",borderBottom:"1px solid rgba(74,222,128,0.15)" }}/>
-                <i className="fas fa-plug" style={{ fontSize:28,color:T.green,opacity:0.8 }}/>
+              style={{ background:T.card,borderRadius:18,border:`1px solid ${T.border}`,marginBottom:10,display:"flex",gap:0,alignItems:"stretch",overflow:"hidden" }}>
+              {/* Station photo */}
+              <div style={{ width:90,flexShrink:0,position:"relative",overflow:"hidden" }}>
+                <img src={stationImgs[idx%3]} alt="station"
+                  style={{ width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.75) saturate(1.1)" }}
+                  onError={e=>{ e.target.parentElement.style.background="linear-gradient(135deg,#0a2010,#0d3018)"; e.target.style.display="none"; }}/>
+                <div style={{ position:"absolute",inset:0,background:"linear-gradient(to right,transparent 60%,rgba(19,23,31,0.8))" }}/>
               </div>
-              <div style={{ flex:1,minWidth:0 }}>
+              {/* Info */}
+              <div style={{ flex:1,padding:"12px 10px",minWidth:0 }}>
                 <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{s.name}</div>
                 <div style={{ fontSize:11,color:T.muted,marginBottom:8 }}><i className="fas fa-clock" style={{ marginRight:4 }}/>{s.time} away · {s.city}</div>
                 <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
-                  <div style={{ background:"rgba(255,255,255,.05)",borderRadius:6,padding:"3px 8px",display:"flex",alignItems:"center",gap:4 }}>
+                  <div style={{ background:"rgba(255,255,255,.06)",borderRadius:6,padding:"3px 8px",display:"flex",alignItems:"center",gap:3 }}>
                     <i className="fas fa-bolt" style={{ fontSize:9,color:T.mutedLight }}/><span style={{ fontSize:10,color:T.mutedLight }}>{kw} kW Max</span>
                   </div>
-                  <div style={{ background:"rgba(255,255,255,.05)",borderRadius:6,padding:"3px 8px",display:"flex",alignItems:"center",gap:4 }}>
+                  <div style={{ background:"rgba(255,255,255,.06)",borderRadius:6,padding:"3px 8px",display:"flex",alignItems:"center",gap:3 }}>
                     <i className="fas fa-sun" style={{ fontSize:9,color:T.yellow }}/><span style={{ fontSize:10,color:T.mutedLight }}>{s.solar}% Solar</span>
                   </div>
                 </div>
               </div>
-              <div style={{ flexShrink:0,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8 }}>
-                <div style={{ background:"rgba(74,222,128,0.10)",border:`1px solid rgba(74,222,128,0.22)`,borderRadius:10,padding:"5px 10px",textAlign:"center" }}>
-                  <div style={{ fontWeight:800,fontSize:15,color:T.green,lineHeight:1 }}>{s.open}/{s.bays}</div>
+              {/* Right */}
+              <div style={{ flexShrink:0,display:"flex",flexDirection:"column",alignItems:"flex-end",justifyContent:"space-between",padding:"12px 12px" }}>
+                <div style={{ background:"rgba(74,222,128,0.12)",border:`1px solid rgba(74,222,128,0.25)`,borderRadius:10,padding:"5px 10px",textAlign:"center" }}>
+                  <div style={{ fontWeight:800,fontSize:14,color:T.green,lineHeight:1 }}>{s.open}/{s.bays}</div>
                   <div style={{ fontSize:9,color:T.green,marginTop:2 }}>Bays avail.</div>
                 </div>
                 <button onClick={e=>{ e.stopPropagation();setStation(s);go("detail"); }} className="tap"
@@ -502,21 +527,29 @@ function Home({ go,stations,setStation,user,onMenu }) {
           </div>
         )}
       </div>
-      <div style={{ margin:"0 14px 110px",background:"linear-gradient(135deg,#061520,#09202e)",borderRadius:18,padding:"16px",border:`1px solid rgba(56,189,248,0.2)`,display:"flex",alignItems:"center",gap:14,cursor:"pointer" }} onClick={()=>go("detail")}>
-        <div style={{ display:"flex",gap:6,flexShrink:0 }}>
-          <i className="fas fa-bolt" style={{ fontSize:22,color:T.green }}/>
-          <i className="fas fa-tint" style={{ fontSize:20,color:T.blue }}/>
+
+      {/* WATER BANNER */}
+      <div style={{ margin:"0 14px 110px",background:"linear-gradient(135deg,#061520,#09202e)",borderRadius:18,overflow:"hidden",border:`1px solid rgba(56,189,248,0.2)`,display:"flex",alignItems:"center",cursor:"pointer",position:"relative",minHeight:80 }}
+        onClick={()=>go("detail")}>
+        <div style={{ position:"absolute",left:0,top:0,bottom:0,width:80,overflow:"hidden" }}>
+          <img src="/station3.jpg" alt="water" style={{ width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.5) hue-rotate(180deg) saturate(1.5)" }}
+            onError={e=>{ e.target.style.display="none"; }}/>
+          <div style={{ position:"absolute",inset:0,background:"linear-gradient(to right,transparent,rgba(6,21,32,0.9))" }}/>
         </div>
-        <div style={{ flex:1 }}>
-          <div style={{ fontWeight:700,fontSize:14,color:T.blue,marginBottom:4 }}>Every charge includes 20L Clean Water</div>
+        <div style={{ flex:1,padding:"16px 16px 16px 90px" }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.blue,marginBottom:4 }}>
+            Every charge includes <span style={{ color:T.blue }}>20L Clean Water</span>
+          </div>
           <div style={{ fontSize:12,color:T.muted }}>Clean energy for your ride. Clean water for life.</div>
         </div>
-        <i className="fas fa-chevron-right" style={{ color:T.muted,fontSize:14 }}/>
+        <i className="fas fa-chevron-right" style={{ color:T.muted,fontSize:14,marginRight:16 }}/>
       </div>
+
       <NewNav active="Home" go={go}/>
     </div>
   );
 }
+
 
 function Detail({ go,station,stations,setStation }) {
   const s=station||stations[0];
