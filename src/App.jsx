@@ -345,6 +345,12 @@ function MapScreen({ go,stations,setStation }) {
 
 function Home({ go,stations,setStation,user,onMenu }) {
   const [search,setSearch] = useState("");
+  const [slideIdx,setSlideIdx] = useState(0);
+  const slides = ["/station1.jpg","/station2.jpg","/station3.jpg"];
+  useEffect(()=>{
+    const timer = setInterval(()=>{ setSlideIdx(i=>(i+1)%slides.length); },3500);
+    return ()=>clearInterval(timer);
+  },[]);
   const hour=new Date().getHours();
   const greeting=hour<12?"Good morning":hour<17?"Good afternoon":"Good evening";
   const greetIcon=hour<12?"fa-sun":hour<17?"fa-sun":"fa-moon";
@@ -377,12 +383,20 @@ function Home({ go,stations,setStation,user,onMenu }) {
         </div>
       </div>
       <div className="fade" style={{ margin:"0 14px 16px",borderRadius:22,overflow:"hidden",position:"relative",minHeight:188,background:"linear-gradient(135deg,#071a09 0%,#0a2510 60%,#061f0c 100%)",border:`1px solid rgba(74,222,128,0.15)` }}>
-        <div style={{ position:"absolute",right:0,top:0,bottom:0,width:"50%",overflow:"hidden" }}>
-          <div style={{ position:"absolute",bottom:0,right:12,display:"flex",gap:10,alignItems:"flex-end" }}>
-            {[52,66,48].map((h,i)=>(
-              <div key={i} style={{ width:12,height:h,background:"rgba(74,222,128,0.10)",borderRadius:"4px 4px 0 0",border:"1px solid rgba(74,222,128,0.18)",position:"relative" }}>
-                <div style={{ position:"absolute",top:8,left:"50%",transform:"translateX(-50%)",width:4,height:4,borderRadius:"50%",background:T.green,boxShadow:`0 0 5px ${T.green}` }}/>
-              </div>
+        <div style={{ position:"absolute",right:0,top:0,bottom:0,width:"55%",overflow:"hidden" }}>
+          {slides.map((src,i)=>(
+            <img key={src} src={src} alt="station"
+              style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",
+                opacity:i===slideIdx?1:0,transition:"opacity 1s ease",
+                filter:"brightness(0.55) saturate(1.2)" }}
+              onError={e=>{ e.target.style.display="none"; }}/>
+          ))}
+          <div style={{ position:"absolute",inset:0,background:"linear-gradient(to right,rgba(7,26,9,1) 0%,transparent 40%)" }}/>
+          {/* Slide dots */}
+          <div style={{ position:"absolute",bottom:10,right:10,display:"flex",gap:5 }}>
+            {slides.map((_,i)=>(
+              <div key={i} onClick={()=>setSlideIdx(i)}
+                style={{ width:i===slideIdx?16:6,height:6,borderRadius:3,background:i===slideIdx?T.green:"rgba(255,255,255,0.3)",transition:"all .3s",cursor:"pointer" }}/>
             ))}
           </div>
         </div>
@@ -509,15 +523,21 @@ function Detail({ go,station,stations,setStation }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title={s.name} sub={`${s.city} · Solar & Hydrogen`} onBack={()=>go("home")}/>
-      <div style={{ margin:"12px 12px 0",borderRadius:16,overflow:"hidden",height:150,position:"relative",flexShrink:0,background:"linear-gradient(135deg,#0d1f0d,#091a14)",display:"flex",alignItems:"center",justifyContent:"center",gap:20 }}>
-        <div style={{ textAlign:"center" }}>
-          <i className="fas fa-sun" style={{ fontSize:36,color:T.yellow }}/>
-          <div style={{ fontSize:11,color:T.green,fontWeight:700,marginTop:6 }}>{s.solar}% Solar</div>
-        </div>
-        <div style={{ width:1,height:50,background:T.border }}/>
-        <div style={{ textAlign:"center" }}>
-          <i className="fas fa-atom" style={{ fontSize:36,color:T.blue }}/>
-          <div style={{ fontSize:11,color:T.blue,fontWeight:700,marginTop:6 }}>{s.hydrogen}% H₂</div>
+      <div style={{ margin:"12px 12px 0",borderRadius:16,overflow:"hidden",height:160,position:"relative",flexShrink:0 }}>
+        <img src="/station2.jpg" alt="station"
+          style={{ width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.6) saturate(1.2)" }}
+          onError={e=>{ e.target.style.background="linear-gradient(135deg,#0d1f0d,#091a14)"; }}/>
+        <div style={{ position:"absolute",inset:0,background:"linear-gradient(135deg,rgba(0,0,0,0.5),rgba(0,0,0,0.2))" }}/>
+        <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",gap:24 }}>
+          <div style={{ textAlign:"center" }}>
+            <i className="fas fa-sun" style={{ fontSize:32,color:T.yellow }}/>
+            <div style={{ fontSize:12,color:"#fff",fontWeight:700,marginTop:6 }}>{s.solar}% Solar</div>
+          </div>
+          <div style={{ width:1,height:50,background:"rgba(255,255,255,0.3)" }}/>
+          <div style={{ textAlign:"center" }}>
+            <i className="fas fa-atom" style={{ fontSize:32,color:T.blue }}/>
+            <div style={{ fontSize:12,color:"#fff",fontWeight:700,marginTop:6 }}>{s.hydrogen}% H₂</div>
+          </div>
         </div>
         <div style={{ position:"absolute",bottom:10,left:14,display:"flex",gap:8 }}>
           <Badge label={`${s.open}/${s.bays} Open`} color={T.green}/>
