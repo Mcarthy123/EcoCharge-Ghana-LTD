@@ -523,23 +523,23 @@ function Detail({ go,station,stations,setStation }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title={s.name} sub={`${s.city} · Solar & Hydrogen`} onBack={()=>go("home")}/>
-      <div style={{ margin:"12px 12px 0",borderRadius:16,overflow:"hidden",height:160,position:"relative",flexShrink:0 }}>
+      <div style={{ margin:"0",borderRadius:0,overflow:"hidden",height:200,position:"relative",flexShrink:0 }}>
         <img src="/station2.jpg" alt="station"
-          style={{ width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.6) saturate(1.2)" }}
-          onError={e=>{ e.target.style.background="linear-gradient(135deg,#0d1f0d,#091a14)"; }}/>
-        <div style={{ position:"absolute",inset:0,background:"linear-gradient(135deg,rgba(0,0,0,0.5),rgba(0,0,0,0.2))" }}/>
-        <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",gap:24 }}>
+          style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",objectPosition:"center",filter:"brightness(0.55) saturate(1.3)" }}
+          onError={e=>{ e.target.style.display="none"; }}/>
+        <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.2) 0%,rgba(0,0,0,0.5) 100%)" }}/>
+        <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",gap:32 }}>
           <div style={{ textAlign:"center" }}>
-            <i className="fas fa-sun" style={{ fontSize:32,color:T.yellow }}/>
-            <div style={{ fontSize:12,color:"#fff",fontWeight:700,marginTop:6 }}>{s.solar}% Solar</div>
+            <i className="fas fa-sun" style={{ fontSize:36,color:T.yellow,filter:"drop-shadow(0 2px 8px rgba(251,191,36,0.5))" }}/>
+            <div style={{ fontSize:13,color:"#fff",fontWeight:800,marginTop:8,textShadow:"0 1px 4px rgba(0,0,0,0.8)" }}>{s.solar}% Solar</div>
           </div>
-          <div style={{ width:1,height:50,background:"rgba(255,255,255,0.3)" }}/>
+          <div style={{ width:1,height:60,background:"rgba(255,255,255,0.25)" }}/>
           <div style={{ textAlign:"center" }}>
-            <i className="fas fa-atom" style={{ fontSize:32,color:T.blue }}/>
-            <div style={{ fontSize:12,color:"#fff",fontWeight:700,marginTop:6 }}>{s.hydrogen}% H₂</div>
+            <i className="fas fa-atom" style={{ fontSize:36,color:T.blue,filter:"drop-shadow(0 2px 8px rgba(56,189,248,0.5))" }}/>
+            <div style={{ fontSize:13,color:"#fff",fontWeight:800,marginTop:8,textShadow:"0 1px 4px rgba(0,0,0,0.8)" }}>{s.hydrogen}% H₂</div>
           </div>
         </div>
-        <div style={{ position:"absolute",bottom:10,left:14,display:"flex",gap:8 }}>
+        <div style={{ position:"absolute",bottom:12,left:16,display:"flex",gap:8 }}>
           <Badge label={`${s.open}/${s.bays} Open`} color={T.green}/>
           <Badge label={`Wait: ${s.time}`} color={T.yellow}/>
         </div>
