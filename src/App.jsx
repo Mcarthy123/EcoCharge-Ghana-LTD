@@ -51,6 +51,40 @@ const DURATIONS = [
   { label:"3 hours", value:180, extra:15 },
 ];
 
+// ── LIVE SOLAR DATA (Open-Meteo API — Free, no key needed) ────
+const useSolarData = (lat=7.9465, lng=-1.0232) => {
+  const [solar, setSolar] = useState(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(()=>{
+    const fetchSolar = async () => {
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=shortwave_radiation,direct_radiation,diffuse_radiation,sunshine_duration,cloud_cover&timezone=Africa%2FAccra&forecast_days=1`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const c = data.current;
+        setSolar({
+          radiation:  Math.round(c.shortwave_radiation||0),
+          direct:     Math.round(c.direct_radiation||0),
+          diffuse:    Math.round(c.diffuse_radiation||0),
+          cloudCover: Math.round(c.cloud_cover||0),
+          sunshine:   Math.round(c.sunshine_duration||0),
+          efficiency: Math.min(100,Math.round((c.shortwave_radiation||0)/10)),
+          updated:    new Date().toLocaleTimeString("en-GH",{ hour:"2-digit",minute:"2-digit" }),
+        });
+      } catch(e) {
+        setSolar({ radiation:650,direct:500,diffuse:150,cloudCover:20,sunshine:45,efficiency:65,updated:"--:--" });
+      }
+      setLoading(false);
+    };
+    fetchSolar();
+    const interval = setInterval(fetchSolar, 600000);
+    return ()=>clearInterval(interval);
+  },[]);
+  return { solar, loading };
+};
+
+
+
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -327,7 +361,8 @@ function Auth({ mode, onBack, onSuccess }) {
 
   const googleSignIn = () => {
     if (!SUPABASE_URL) { setErr("Supabase not configured"); return; }
-    window.location.href=`${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin)}`;
+    const redirectTo = encodeURIComponent(window.location.origin);
+    window.location.href=`${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${redirectTo}&scopes=email%20profile`;
   };
 
   const inp = (ph,val,set,type="text",icon="fa-user",extra=null) => (
@@ -715,6 +750,81 @@ function MapScreen({ go,stations,setStation }) {
   );
 }
 
+
+// ── SOLAR WIDGET COMPONENT ────────────────────────────────────
+function SolarWidget() {
+  const { solar, loading } = useSolarData(7.9465, -1.0232); // Ghana center
+
+  const getStrength = (r) => {
+    if (r > 700) return { label:"Excellent", color:"#4ade80" };
+    if (r > 400) return { label:"Good",      color:"#fbbf24" };
+    if (r > 200) return { label:"Moderate",  color:"#f97316" };
+    return { label:"Low", color:"#6b7280" };
+  };
+
+  const strength = solar ? getStrength(solar.radiation) : null;
+
+  return (
+    <div style={{ margin:"0 14px 16px", background:"linear-gradient(135deg,#1a1000,#2d1a00)", borderRadius:18, padding:"16px", border:`1px solid rgba(251,191,36,0.2)` }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <div style={{ width:36, height:36, borderRadius:"50%", background:"rgba(251,191,36,0.15)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <i className="fas fa-sun" style={{ fontSize:16, color:T.yellow }}/>
+          </div>
+          <div>
+            <div style={{ fontWeight:700, fontSize:13, color:T.text }}>Live Solar Radiation</div>
+            <div style={{ fontSize:10, color:T.muted }}>Ghana · Updated {solar?.updated||"--:--"}</div>
+          </div>
+        </div>
+        {strength && (
+          <div style={{ background:`${strength.color}22`, borderRadius:10, padding:"4px 10px", border:`1px solid ${strength.color}44` }}>
+            <span style={{ fontSize:11, fontWeight:700, color:strength.color }}>{strength.label}</span>
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign:"center", padding:"10px 0", color:T.muted, fontSize:13 }}>
+          <Spinner/> <span style={{ marginLeft:8 }}>Fetching live data...</span>
+        </div>
+      ) : (
+        <>
+          {/* Main radiation value */}
+          <div style={{ display:"flex", alignItems:"flex-end", gap:6, marginBottom:12 }}>
+            <div style={{ fontWeight:900, fontSize:36, color:T.yellow, lineHeight:1 }}>{solar?.radiation}</div>
+            <div style={{ fontSize:13, color:T.muted, marginBottom:4 }}>W/m²</div>
+            <div style={{ flex:1 }}/>
+            <div style={{ textAlign:"right" }}>
+              <div style={{ fontSize:11, color:T.muted }}>Efficiency</div>
+              <div style={{ fontWeight:800, fontSize:18, color:T.green }}>{solar?.efficiency}%</div>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div style={{ height:6, borderRadius:3, background:"rgba(255,255,255,0.08)", overflow:"hidden", marginBottom:12 }}>
+            <div style={{ height:"100%", width:`${solar?.efficiency}%`, background:`linear-gradient(90deg,${T.yellow},${T.green})`, borderRadius:3, transition:"width 1s ease" }}/>
+          </div>
+
+          {/* Stats row */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
+            {[
+              { label:"Direct",     value:`${solar?.direct}`,    unit:"W/m²", icon:"fa-sun",   color:T.yellow },
+              { label:"Cloud Cover",value:`${solar?.cloudCover}`,unit:"%",    icon:"fa-cloud", color:T.mutedLight },
+              { label:"Sunshine",   value:`${solar?.sunshine}`,  unit:"min",  icon:"fa-clock", color:T.blue },
+            ].map(s=>(
+              <div key={s.label} style={{ background:"rgba(0,0,0,0.2)", borderRadius:10, padding:"10px 8px", textAlign:"center" }}>
+                <i className={`fas ${s.icon}`} style={{ fontSize:12, color:s.color, marginBottom:4, display:"block" }}/>
+                <div style={{ fontWeight:800, fontSize:14, color:T.text }}>{s.value}<span style={{ fontSize:10, color:T.muted, fontWeight:400 }}> {s.unit}</span></div>
+                <div style={{ fontSize:9, color:T.muted, marginTop:2, textTransform:"uppercase", letterSpacing:0.3 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Home({ go,stations,setStation,user,onMenu }) {
   const [search,setSearch] = useState("");
   const [slideIdx,setSlideIdx] = useState(0);
@@ -843,6 +953,9 @@ function Home({ go,stations,setStation,user,onMenu }) {
         </div>
         <i className="fas fa-globe-africa" style={{ fontSize:40,color:T.green,opacity:0.6 }}/>
       </div>
+
+      {/* LIVE SOLAR DATA */}
+      <SolarWidget/>
 
       {/* NEARBY STATIONS */}
       <div style={{ margin:"0 14px 14px" }}>
@@ -1926,6 +2039,26 @@ export default function App() {
 
   useEffect(()=>{
     if (SUPABASE_URL) sb("stations?select=*&order=id").then(d=>{ if(d?.length) setStations(d); });
+
+    // Handle Google OAuth callback
+    const hash = window.location.hash;
+    if (hash && hash.includes("access_token")) {
+      const hp = new URLSearchParams(hash.replace("#",""));
+      const token = hp.get("access_token");
+      if (token && SUPABASE_URL) {
+        fetch(`${SUPABASE_URL}/auth/v1/user`,{ headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${token}` } })
+          .then(r=>r.json())
+          .then(u=>{ 
+            if (u?.email) {
+              const usr = { email:u.email, name:u.user_metadata?.full_name||u.email.split("@")[0], token, id:u.id };
+              setUser(usr);
+              window.history.replaceState({},"",window.location.pathname);
+              setScreen("home");
+            }
+          }).catch(()=>{});
+      }
+    }
+
     // Handle Paystack redirect after payment
     const params=new URLSearchParams(window.location.search);
     const ref=params.get("reference")||params.get("trxref");
