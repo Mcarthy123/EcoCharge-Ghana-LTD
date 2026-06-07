@@ -497,7 +497,7 @@ function Auth({ mode, onBack, onSuccess }) {
   );
 }
 
-) {
+function Auth({ mode, onBack, onSuccess }) {
   const [tab,setTab]         = useState("email"); // email | phone
   const [name,setPname]      = useState("");
   const [email,setEmail]     = useState("");
@@ -1458,7 +1458,7 @@ function QRScreen({ go, booking, setBooking }) {
   );
 }
 
-) {
+function QRScreen({ go, booking, setBooking }) {
   let b=booking;
   if (!b) { try { const s=localStorage.getItem("eco_booking"); if(s) b=JSON.parse(s); } catch(e){} }
   if (!b) return (
@@ -1616,7 +1616,7 @@ function Verify({ go }) {
   );
 }
 
-) {
+function Verify({ go }) {
   const [code,setCode]=useState("");
   const [result,setResult]=useState(null);
   const [loading,setLoad]=useState(false);
@@ -1802,7 +1802,7 @@ function Profile({ go, user, setUser, onMenu }) {
   );
 }
 
-) {
+function Profile({ go, user, setUser, onMenu }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="My Profile" sub="Account & activity" onMenu={onMenu}/>
