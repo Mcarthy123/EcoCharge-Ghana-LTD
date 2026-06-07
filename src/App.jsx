@@ -271,9 +271,9 @@ function Splash({ onLogin, onRegister, onGuest }) {
   );
 }
 
-) {
+function Splash({ onLogin, onRegister, onGuest }) {
   return (
-    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,alignItems:"center",justifyContent:"center",padding:"40px 28px" }}>
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:"#050a06",position:"relative",overflow:"hidden" }}>
       <div className="fade" style={{ textAlign:"center",marginBottom:40 }}>
         <Logo size={90}/>
         <div style={{ fontWeight:900,fontSize:32,color:T.text,marginTop:16,letterSpacing:-1 }}>EcoCharge</div>
