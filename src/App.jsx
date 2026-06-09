@@ -208,6 +208,7 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => (
           { icon:"fa-user",         label:"My Profile",      screen:"profile" },
           { icon:"fa-info-circle",  label:"About EcoCharge", screen:"about"   },
           { icon:"fa-bolt",         label:"Verify Booking",  screen:"verify", color:T.yellow },
+          { icon:"fa-charging-station", label:"Charger Admin", screen:"chargers", color:T.blue },
         ].map(item=>(
           <div key={item.label} className="tap row" onClick={()=>{ go(item.screen);onClose(); }}
             style={{ display:"flex",alignItems:"center",gap:14,padding:"16px 20px",borderBottom:`1px solid ${T.border}20` }}>
@@ -1295,6 +1296,260 @@ function Bookings({ go,booking,user }) {
   );
 }
 
+
+// ── OCPP API HELPER ───────────────────────────────────────────
+const OCPP_URL = import.meta.env.VITE_OCPP_SERVER_URL || "";
+const OCPP_KEY = import.meta.env.VITE_OCPP_API_KEY    || "";
+
+const ocppApi = async (path, method = "GET", body = null) => {
+  if (!OCPP_URL) return null;
+  try {
+    const res = await fetch(`${OCPP_URL}${path}`, {
+      method,
+      headers: { "x-api-key": OCPP_KEY, "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return res.ok ? res.json() : null;
+  } catch(e) { return null; }
+};
+
+// ── CHARGER ADMIN SCREEN ──────────────────────────────────────
+function ChargerAdmin({ go }) {
+  const [chargers,setChargers]       = useState([]);
+  const [sessions,setSessions]       = useState([]);
+  const [selected,setSelected]       = useState(null);
+  const [loading,setLoading]         = useState(false);
+  const [cmdLoading,setCmdLoading]   = useState("");
+  const [cmdResult,setCmdResult]     = useState(null);
+  const [tab,setTab]                 = useState("chargers");
+
+  const loadChargers = async () => {
+    setLoading(true);
+    const data = await ocppApi("/api/chargers");
+    if (data?.chargers) setChargers(data.chargers);
+    setLoading(false);
+  };
+
+  const loadSessions = async () => {
+    const data = await ocppApi("/api/sessions");
+    if (data?.sessions) setSessions(data.sessions);
+  };
+
+  useEffect(()=>{
+    loadChargers();
+    loadSessions();
+    const t = setInterval(()=>loadChargers(), 10000);
+    return ()=>clearInterval(t);
+  },[]);
+
+  const sendCmd = async (chargerId, action, body = {}) => {
+    setCmdLoading(action);
+    setCmdResult(null);
+    const pathMap = {
+      "RemoteStart":        `/api/chargers/${chargerId}/remote-start`,
+      "RemoteStop":         `/api/chargers/${chargerId}/remote-stop`,
+      "Reset":              `/api/chargers/${chargerId}/reset`,
+      "Unlock":             `/api/chargers/${chargerId}/unlock`,
+      "ChangeAvailability": `/api/chargers/${chargerId}/change-availability`,
+      "ClearCache":         `/api/chargers/${chargerId}/clear-cache`,
+    };
+    const result = await ocppApi(pathMap[action], "POST", body);
+    setCmdResult(result);
+    setCmdLoading("");
+    if (result?.success) loadChargers();
+  };
+
+  const statusColor = (s) => {
+    if (s === "Available")   return T.green;
+    if (s === "Charging")    return T.blue;
+    if (s === "Faulted")     return T.red;
+    if (s === "Unavailable") return T.muted;
+    return T.yellow;
+  };
+
+  const statusIcon = (s) => {
+    if (s === "Available")   return "fa-check-circle";
+    if (s === "Charging")    return "fa-bolt";
+    if (s === "Faulted")     return "fa-exclamation-triangle";
+    if (s === "Unavailable") return "fa-times-circle";
+    return "fa-circle";
+  };
+
+  if (!OCPP_URL) return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Charger Admin" sub="OCPP Management" onBack={()=>go("home")}/>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:24 }}>
+        <div style={{ textAlign:"center" }}>
+          <i className="fas fa-server" style={{ fontSize:56,color:T.muted,marginBottom:16,display:"block" }}/>
+          <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>OCPP Server Not Configured</div>
+          <div style={{ color:T.muted,fontSize:13,marginBottom:16,lineHeight:1.7 }}>Add VITE_OCPP_SERVER_URL and VITE_OCPP_API_KEY to your Vercel environment variables.</div>
+          <div style={{ background:T.card,borderRadius:12,padding:14,border:`1px solid ${T.border}`,textAlign:"left",fontSize:12,color:T.mutedLight,fontFamily:"monospace",lineHeight:2 }}>
+            VITE_OCPP_SERVER_URL=https://...<br/>
+            VITE_OCPP_API_KEY=ecocharge-ocpp-2024
+          </div>
+        </div>
+      </div>
+      <Nav active="More" go={go}/>
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Charger Admin" sub="OCPP 1.6J Management" onBack={()=>go("home")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"12px 14px 100px" }}>
+
+        {/* Tab Bar */}
+        <div style={{ display:"flex",background:T.card,borderRadius:12,padding:4,marginBottom:16,border:`1px solid ${T.border}` }}>
+          {[{ id:"chargers",label:"Chargers",icon:"fa-charging-station" },{ id:"sessions",label:"Sessions",icon:"fa-list" }].map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} className="tap"
+              style={{ flex:1,background:tab===t.id?`linear-gradient(135deg,${T.green},${T.greenDark})`:"none",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:700,color:tab===t.id?"#000":T.muted,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+              <i className={`fas ${t.icon}`}/> {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* CHARGERS TAB */}
+        {tab==="chargers"&&(
+          <>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
+              <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{chargers.length} Charger{chargers.length!==1?"s":""}</div>
+              <button onClick={loadChargers} className="tap"
+                style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 14px",fontSize:12,color:T.green,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}>
+                <i className={`fas fa-sync${loading?" fa-spin":""}`}/> Refresh
+              </button>
+            </div>
+
+            {loading&&chargers.length===0&&(
+              <div style={{ textAlign:"center",padding:"30px 0",color:T.muted,fontSize:13 }}><Spinner/> <span style={{ marginLeft:8 }}>Connecting to OCPP server...</span></div>
+            )}
+
+            {chargers.map(c=>(
+              <div key={c.id} style={{ background:T.card,borderRadius:16,border:`1px solid ${selected?.id===c.id?T.green:T.border}`,marginBottom:12,overflow:"hidden" }}>
+                <div className="tap" onClick={()=>setSelected(selected?.id===c.id?null:c)}
+                  style={{ padding:"14px 16px",display:"flex",alignItems:"center",gap:12 }}>
+                  <div style={{ width:44,height:44,borderRadius:12,background:`${statusColor(c.status)}18`,border:`1px solid ${statusColor(c.status)}44`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                    <i className={`fas ${statusIcon(c.status)}`} style={{ fontSize:18,color:statusColor(c.status) }}/>
+                  </div>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{c.id}</div>
+                    <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{c.info?.chargePointModel||"Unknown model"} · {c.info?.chargePointVendor||""}</div>
+                  </div>
+                  <div style={{ display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4 }}>
+                    <div style={{ background:`${statusColor(c.status)}18`,borderRadius:8,padding:"3px 10px" }}>
+                      <span style={{ fontSize:11,fontWeight:700,color:statusColor(c.status) }}>{c.status||"Unknown"}</span>
+                    </div>
+                    <div style={{ fontSize:10,color:c.connected?T.green:T.muted,display:"flex",alignItems:"center",gap:4 }}>
+                      <div style={{ width:6,height:6,borderRadius:"50%",background:c.connected?T.green:T.muted }}/>
+                      {c.connected?"Online":"Offline"}
+                    </div>
+                  </div>
+                </div>
+
+                {selected?.id===c.id&&(
+                  <div style={{ borderTop:`1px solid ${T.border}`,padding:"14px 16px" }}>
+                    <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14 }}>
+                      {[
+                        { label:"Firmware",  value:c.info?.firmwareVersion||"Unknown" },
+                        { label:"Serial",    value:c.info?.chargePointSerialNumber||"Unknown" },
+                        { label:"Last Beat", value:c.lastHeartbeat?new Date(c.lastHeartbeat).toLocaleTimeString("en-GH",{ hour:"2-digit",minute:"2-digit" }):"--" },
+                        { label:"Active TX", value:c.activeTransactions||0 },
+                      ].map(r=>(
+                        <div key={r.label} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"8px 10px" }}>
+                          <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.5 }}>{r.label}</div>
+                          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginTop:3 }}>{r.value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {cmdResult&&(
+                      <div style={{ background:cmdResult.success?"rgba(74,222,128,0.08)":"rgba(248,113,113,0.08)",border:`1px solid ${cmdResult.success?T.greenDim:"rgba(248,113,113,0.2)"}`,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:cmdResult.success?T.green:T.red,display:"flex",alignItems:"center",gap:8 }}>
+                        <i className={`fas ${cmdResult.success?"fa-check-circle":"fa-exclamation-circle"}`}/>
+                        {cmdResult.success?"Command accepted by charger":"Failed: "+(cmdResult.error||"Unknown error")}
+                      </div>
+                    )}
+
+                    <div style={{ fontWeight:700,fontSize:11,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8 }}>Remote Commands</div>
+                    <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+                      {[
+                        { action:"RemoteStart",        label:"Start Charge", icon:"fa-play",    color:T.green,  body:{ idTag:`APP-${Date.now()}`,connectorId:1 } },
+                        { action:"RemoteStop",         label:"Stop Charge",  icon:"fa-stop",    color:T.red,    body:{ transactionId:0 } },
+                        { action:"Reset",              label:"Soft Reset",   icon:"fa-redo",    color:T.yellow, body:{ type:"Soft" } },
+                        { action:"Unlock",             label:"Unlock Cable", icon:"fa-unlock",  color:T.blue,   body:{ connectorId:1 } },
+                        { action:"ChangeAvailability", label:"Disable",      icon:"fa-ban",     color:T.muted,  body:{ connectorId:0,type:"Inoperative" } },
+                        { action:"ClearCache",         label:"Clear Cache",  icon:"fa-trash",   color:T.muted,  body:{} },
+                      ].map(cmd=>(
+                        <button key={cmd.action} onClick={()=>sendCmd(c.id,cmd.action,cmd.body)} disabled={!!cmdLoading} className="tap"
+                          style={{ background:`${cmd.color}12`,border:`1px solid ${cmd.color}30`,borderRadius:10,padding:"10px 8px",fontSize:12,fontWeight:600,color:cmd.color,cursor:cmdLoading?"default":"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6,opacity:cmdLoading===cmd.action?0.5:1 }}>
+                          {cmdLoading===cmd.action?<Spinner/>:<><i className={`fas ${cmd.icon}`}/> {cmd.label}</>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {!loading&&chargers.length===0&&(
+              <div style={{ textAlign:"center",padding:"40px 0",color:T.muted,fontSize:13 }}>
+                <i className="fas fa-charging-station" style={{ fontSize:48,marginBottom:16,display:"block",opacity:0.4 }}/>
+                <div style={{ fontWeight:700,fontSize:15,color:T.text,marginBottom:8 }}>No Chargers Connected</div>
+                <div style={{ lineHeight:1.8,fontSize:12 }}>Configure your smart charger to connect to:<br/>
+                  <span style={{ color:T.green,fontFamily:"monospace" }}>{OCPP_URL}/ocpp/YOUR-CHARGER-ID</span>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* SESSIONS TAB */}
+        {tab==="sessions"&&(
+          <>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
+              <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{sessions.length} Session{sessions.length!==1?"s":""}</div>
+              <button onClick={loadSessions} className="tap"
+                style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 14px",fontSize:12,color:T.green,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}>
+                <i className="fas fa-sync"/> Refresh
+              </button>
+            </div>
+            {sessions.length===0&&(
+              <div style={{ textAlign:"center",padding:"40px 0",color:T.muted,fontSize:13 }}>
+                <i className="fas fa-history" style={{ fontSize:48,marginBottom:16,display:"block",opacity:0.4 }}/>
+                <div style={{ fontWeight:700,fontSize:15,color:T.text,marginBottom:8 }}>No Sessions Yet</div>
+                Start a charging session to see it here.
+              </div>
+            )}
+            {sessions.map(s=>(
+              <div key={s.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px 16px",marginBottom:10 }}>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
+                  <div>
+                    <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{s.charger_id}</div>
+                    <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Tag: {s.id_tag}</div>
+                  </div>
+                  <div style={{ background:s.status==="Active"?"rgba(56,189,248,0.12)":s.status==="Completed"?"rgba(74,222,128,0.12)":"rgba(248,113,113,0.12)",borderRadius:8,padding:"3px 10px" }}>
+                    <span style={{ fontSize:11,fontWeight:700,color:s.status==="Active"?T.blue:s.status==="Completed"?T.green:T.red }}>{s.status}</span>
+                  </div>
+                </div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
+                  {[
+                    { label:"Energy",   value:s.energy_kwh!=null?`${s.energy_kwh} kWh`:"Active" },
+                    { label:"Duration", value:s.duration_min!=null?`${s.duration_min} min`:"--" },
+                    { label:"Start",    value:s.start_time?new Date(s.start_time).toLocaleTimeString("en-GH",{ hour:"2-digit",minute:"2-digit" }):"--" },
+                  ].map(r=>(
+                    <div key={r.label} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"8px" }}>
+                      <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.5 }}>{r.label}</div>
+                      <div style={{ fontWeight:700,fontSize:13,color:T.text,marginTop:3 }}>{r.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+      <Nav active="More" go={go}/>
+    </div>
+  );
+}
 export default function App() {
   const [screen,setScreen]   = useState(()=>{ try { return localStorage.getItem("eco_user")?"home":"splash"; } catch(e){ return "splash"; } });
   const [authMode,setAuthMode]= useState("login");
@@ -1338,7 +1593,7 @@ export default function App() {
   if (screen==="splash") return <><style>{CSS}</style><Splash onLogin={()=>{ setAuthMode("login");go("auth"); }} onRegister={()=>{ setAuthMode("register");go("auth"); }} onGuest={()=>go("home")}/></>;
   if (screen==="auth") return <><style>{CSS}</style><Auth mode={authMode} onBack={(mode)=>{ if(mode){ setAuthMode(mode); } else { go("splash"); } }} onSuccess={(u)=>{ setUser(u);go("home"); }}/></>;
 
-  const views={ home:<Home {...props}/>,map:<MapScreen {...props}/>,detail:<Detail {...props}/>,vehicles:<Vehicles {...props}/>,booking:<Booking {...props}/>,bookings:<Bookings {...props}/>,qr:<QRScreen {...props}/>,verify:<Verify {...props}/>,profile:<Profile {...props}/>,about:<About {...props}/> };
+  const views={chargers:<ChargerAdmin go={goSecure}/>, home:<Home {...props}/>,map:<MapScreen {...props}/>,detail:<Detail {...props}/>,vehicles:<Vehicles {...props}/>,booking:<Booking {...props}/>,bookings:<Bookings {...props}/>,qr:<QRScreen {...props}/>,verify:<Verify {...props}/>,profile:<Profile {...props}/>,about:<About {...props}/> };
 
   return (
     <><style>{CSS}</style>
