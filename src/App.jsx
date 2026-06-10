@@ -208,7 +208,8 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => (
           { icon:"fa-user",         label:"My Profile",      screen:"profile" },
           { icon:"fa-info-circle",  label:"About EcoCharge", screen:"about"   },
           { icon:"fa-bolt",         label:"Verify Booking",  screen:"verify", color:T.yellow },
-          { icon:"fa-charging-station", label:"Charger Admin", screen:"chargers", color:T.blue },
+          { icon:"fa-charging-station", label:"Charger Admin",   screen:"chargers", color:T.blue   },
+          { icon:"fa-list-alt",        label:"Session Manager", screen:"sessions", color:T.green  },
         ].map(item=>(
           <div key={item.label} className="tap row" onClick={()=>{ go(item.screen);onClose(); }}
             style={{ display:"flex",alignItems:"center",gap:14,padding:"16px 20px",borderBottom:`1px solid ${T.border}20` }}>
@@ -1550,6 +1551,445 @@ function ChargerAdmin({ go }) {
     </div>
   );
 }
+
+// ── SESSION STATUS CONFIG ─────────────────────────────────────
+const SESSION_STATUSES = {
+  Ready:      { color:"#9ca3af", icon:"fa-clock",               bg:"rgba(156,163,175,0.12)" },
+  Authorized: { color:"#38bdf8", icon:"fa-shield-alt",          bg:"rgba(56,189,248,0.12)"  },
+  Charging:   { color:"#4ade80", icon:"fa-bolt",                bg:"rgba(74,222,128,0.12)"  },
+  Paused:     { color:"#fbbf24", icon:"fa-pause-circle",        bg:"rgba(251,191,36,0.12)"  },
+  Completed:  { color:"#4ade80", icon:"fa-check-circle",        bg:"rgba(74,222,128,0.12)"  },
+  Cancelled:  { color:"#f87171", icon:"fa-times-circle",        bg:"rgba(248,113,113,0.12)" },
+  Expired:    { color:"#f97316", icon:"fa-hourglass-end",       bg:"rgba(249,115,22,0.12)"  },
+  Faulted:    { color:"#f87171", icon:"fa-exclamation-triangle",bg:"rgba(248,113,113,0.12)" },
+};
+
+const fmtDuration = (sec) => {
+  if (!sec) return "--";
+  const h = Math.floor(sec/3600);
+  const m = Math.floor((sec%3600)/60);
+  const s = sec%60;
+  if (h>0) return `${h}h ${m}m`;
+  if (m>0) return `${m}m ${s}s`;
+  return `${s}s`;
+};
+
+const fmtCost = (c) => c!=null ? `GH₵${Number(c).toFixed(2)}` : "--";
+const fmtKwh  = (k) => k!=null ? `${Number(k).toFixed(3)} kWh` : "--";
+const fmtDate = (d) => d ? new Date(d).toLocaleString("en-GH",{ day:"numeric",month:"short",hour:"2-digit",minute:"2-digit" }) : "--";
+
+// ── SESSION MANAGEMENT SCREEN ─────────────────────────────────
+function SessionManager({ go, user }) {
+  const [sessions,  setSessions]  = useState([]);
+  const [selected,  setSelected]  = useState(null);
+  const [events,    setEvents]    = useState([]);
+  const [loading,   setLoading]   = useState(false);
+  const [filter,    setFilter]    = useState("All");
+  const [tab,       setTab]       = useState("list"); // list | detail | analytics
+  const [analytics, setAnalytics] = useState(null);
+  const [liveTimer, setLiveTimer] = useState(0);
+
+  // Live timer for active sessions
+  useEffect(()=>{
+    const t = setInterval(()=>setLiveTimer(n=>n+1), 1000);
+    return ()=>clearInterval(t);
+  },[]);
+
+  const loadSessions = async () => {
+    setLoading(true);
+    if (!SUPABASE_URL) { setLoading(false); return; }
+    try {
+      let url = `${SUPABASE_URL}/rest/v1/charging_sessions?select=*&order=created_at.desc&limit=50`;
+      if (filter !== "All") url += `&status=eq.${filter}`;
+      const res = await fetch(url, {
+        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }
+      });
+      const data = await res.json();
+      if (Array.isArray(data)) setSessions(data);
+    } catch(e) {}
+    setLoading(false);
+  };
+
+  const loadEvents = async (sessionId) => {
+    if (!SUPABASE_URL) return;
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/session_events?session_id=eq.${sessionId}&order=created_at.desc`,
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+      );
+      const data = await res.json();
+      if (Array.isArray(data)) setEvents(data);
+    } catch(e) {}
+  };
+
+  const loadAnalytics = async () => {
+    if (!SUPABASE_URL) return;
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/session_analytics?limit=30`,
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+      );
+      const data = await res.json();
+      if (Array.isArray(data)) setAnalytics(data);
+    } catch(e) {}
+  };
+
+  const updateStatus = async (sessionId, newStatus, reason="") => {
+    if (!SUPABASE_URL) return;
+    const now = new Date().toISOString();
+    const updates = { status: newStatus, status_reason: reason, updated_at: now };
+    if (newStatus === "Charging")   updates.started_at    = now;
+    if (newStatus === "Paused")     updates.paused_at     = now;
+    if (newStatus === "Completed")  updates.completed_at  = now;
+    if (newStatus === "Cancelled")  updates.cancelled_at  = now;
+    if (newStatus === "Authorized") updates.authorized_at = now;
+    if (newStatus === "Completed" || newStatus === "Cancelled") {
+      updates.meter_stop = selected?.meter_current || selected?.meter_start || 0;
+    }
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/charging_sessions?id=eq.${sessionId}`, {
+        method: "PATCH",
+        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify(updates)
+      });
+      await loadSessions();
+      if (selected?.id === sessionId) {
+        setSelected(prev => prev ? { ...prev, ...updates } : prev);
+        await loadEvents(sessionId);
+      }
+    } catch(e) {}
+  };
+
+  useEffect(()=>{ loadSessions(); },[filter]);
+  useEffect(()=>{ if (tab==="analytics") loadAnalytics(); },[tab]);
+
+  // Auto-refresh active sessions every 10s
+  useEffect(()=>{
+    const t = setInterval(()=>{ if (sessions.some(s=>s.status==="Charging")) loadSessions(); }, 10000);
+    return ()=>clearInterval(t);
+  },[sessions]);
+
+  const openDetail = async (s) => {
+    setSelected(s);
+    setTab("detail");
+    await loadEvents(s.id);
+  };
+
+  const activeCount    = sessions.filter(s=>s.status==="Charging").length;
+  const completedCount = sessions.filter(s=>s.status==="Completed").length;
+  const totalKwh       = sessions.filter(s=>s.energy_kwh).reduce((a,s)=>a+(s.energy_kwh||0),0);
+  const totalRevenue   = sessions.filter(s=>s.cost_total).reduce((a,s)=>a+(s.cost_total||0),0);
+
+  const FILTERS = ["All","Ready","Authorized","Charging","Paused","Completed","Cancelled","Faulted"];
+
+  // ── DETAIL VIEW ───────────────────────────────────────────
+  if (tab==="detail" && selected) {
+    const st = SESSION_STATUSES[selected.status] || SESSION_STATUSES.Ready;
+    const liveElapsed = selected.started_at && selected.status==="Charging"
+      ? Math.floor((Date.now()-new Date(selected.started_at).getTime())/1000) : null;
+    const nextActions = {
+      Ready:      ["Authorized","Cancelled","Expired"],
+      Authorized: ["Charging","Cancelled"],
+      Charging:   ["Paused","Completed","Faulted"],
+      Paused:     ["Charging","Completed","Cancelled"],
+      Completed:  [],
+      Cancelled:  [],
+      Expired:    [],
+      Faulted:    ["Ready"],
+    };
+    return (
+      <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+        <Header title="Session Detail" sub={selected.session_ref||selected.id} onBack={()=>{ setTab("list");setSelected(null); }}/>
+        <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 100px" }}>
+
+          {/* Status Badge */}
+          <div className="fade" style={{ background:st.bg,border:`1px solid ${st.color}33`,borderRadius:18,padding:"18px",marginBottom:14,textAlign:"center" }}>
+            <div style={{ width:56,height:56,borderRadius:"50%",background:`${st.color}22`,border:`2px solid ${st.color}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px" }}>
+              <i className={`fas ${st.icon}`} style={{ fontSize:22,color:st.color }}/>
+            </div>
+            <div style={{ fontWeight:900,fontSize:22,color:st.color,letterSpacing:1 }}>{selected.status}</div>
+            {selected.status_reason&&<div style={{ fontSize:12,color:T.muted,marginTop:4 }}>{selected.status_reason}</div>}
+
+            {/* Live timer for charging sessions */}
+            {liveElapsed!=null&&(
+              <div style={{ marginTop:12 }}>
+                <div style={{ fontWeight:900,fontSize:36,color:T.green,fontFamily:"monospace" }}>{fmtDuration(liveElapsed)}</div>
+                <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>elapsed</div>
+              </div>
+            )}
+          </div>
+
+          {/* Key metrics */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
+            {[
+              { label:"Energy",       value:fmtKwh(selected.energy_kwh),    icon:"fa-bolt",        color:T.green  },
+              { label:"Cost",         value:fmtCost(selected.cost_total),   icon:"fa-money-bill-alt",color:T.yellow },
+              { label:"Duration",     value:fmtDuration(selected.duration_sec), icon:"fa-clock",   color:T.blue   },
+              { label:"Payment",      value:selected.payment_status||"Unpaid",icon:"fa-credit-card",color:selected.payment_status==="Paid"?T.green:T.red },
+            ].map(m=>(
+              <div key={m.label} style={{ background:T.card,borderRadius:14,padding:"14px",border:`1px solid ${T.border}`,textAlign:"center" }}>
+                <i className={`fas ${m.icon}`} style={{ fontSize:16,color:m.color,marginBottom:6,display:"block" }}/>
+                <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4 }}>{m.label}</div>
+                <div style={{ fontWeight:800,fontSize:16,color:m.color }}>{m.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Full details */}
+          <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
+            <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}><i className="fas fa-info-circle" style={{ marginRight:8,color:T.green }}/>Session Info</div>
+            {[
+              { label:"Session ID",    value:selected.id },
+              { label:"Reference",     value:selected.session_ref||"--" },
+              { label:"Charger",       value:selected.charger_id||"--" },
+              { label:"Connector",     value:`#${selected.connector_id||1}` },
+              { label:"Vehicle",       value:selected.vehicle_type||"--" },
+              { label:"ID Tag",        value:selected.id_tag||"--" },
+              { label:"Booking Ref",   value:selected.booking_ref||"--" },
+              { label:"Started",       value:fmtDate(selected.started_at) },
+              { label:"Completed",     value:fmtDate(selected.completed_at) },
+              { label:"Stop Reason",   value:selected.stop_reason||"--" },
+              { label:"Meter Start",   value:selected.meter_start!=null?`${selected.meter_start} Wh`:"--" },
+              { label:"Meter Stop",    value:selected.meter_stop!=null?`${selected.meter_stop} Wh`:"--" },
+              { label:"Rate",          value:`GH₵${selected.rate_per_kwh||0.85}/kWh` },
+              { label:"Base Fee",      value:`GH₵${selected.base_fee||5.00}` },
+              { label:"Water",         value:`${selected.water_litres||20}L ${selected.water_collected?"✅":"pending"}` },
+              { label:"Payment Ref",   value:selected.payment_ref||"--" },
+            ].map(r=>(
+              <div key={r.label} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:8,marginBottom:8,borderBottom:`1px solid rgba(255,255,255,0.05)` }}>
+                <span style={{ color:T.muted,fontSize:12 }}>{r.label}</span>
+                <span style={{ color:T.text,fontWeight:600,fontSize:12,fontFamily:r.label.includes("ID")||r.label.includes("Ref")?"monospace":"inherit",maxWidth:"55%",textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{r.value}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Status Actions */}
+          {nextActions[selected.status]?.length > 0 && (
+            <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
+              <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}><i className="fas fa-play-circle" style={{ marginRight:8,color:T.green }}/>Change Status</div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+                {nextActions[selected.status].map(s=>{
+                  const cfg = SESSION_STATUSES[s];
+                  return (
+                    <button key={s} onClick={()=>updateStatus(selected.id,s)} className="tap"
+                      style={{ background:cfg.bg,border:`1px solid ${cfg.color}33`,borderRadius:12,padding:"12px 8px",fontSize:12,fontWeight:700,color:cfg.color,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+                      <i className={`fas ${cfg.icon}`}/> {s}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Fault info */}
+          {selected.status==="Faulted"&&selected.fault_code&&(
+            <div style={{ background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.2)",borderRadius:14,padding:"14px",marginBottom:14 }}>
+              <div style={{ fontWeight:700,fontSize:13,color:T.red,marginBottom:8 }}><i className="fas fa-exclamation-triangle" style={{ marginRight:8 }}/>Fault Details</div>
+              <div style={{ fontSize:12,color:T.mutedLight }}><strong>Code:</strong> {selected.fault_code}</div>
+              {selected.fault_message&&<div style={{ fontSize:12,color:T.mutedLight,marginTop:4 }}><strong>Message:</strong> {selected.fault_message}</div>}
+            </div>
+          )}
+
+          {/* Event Timeline */}
+          {events.length > 0 && (
+            <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
+              <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}><i className="fas fa-history" style={{ marginRight:8,color:T.blue }}/>Event Timeline</div>
+              {events.map((ev,i)=>(
+                <div key={ev.id} style={{ display:"flex",gap:10,marginBottom:12 }}>
+                  <div style={{ display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0 }}>
+                    <div style={{ width:10,height:10,borderRadius:"50%",background:T.green,marginTop:3 }}/>
+                    {i<events.length-1&&<div style={{ width:1,flex:1,background:T.border,marginTop:3 }}/>}
+                  </div>
+                  <div style={{ flex:1,paddingBottom:8 }}>
+                    <div style={{ fontWeight:600,fontSize:12,color:T.text }}>{ev.message||ev.event_type}</div>
+                    <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{fmtDate(ev.created_at)} · {ev.triggered_by||"system"}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── ANALYTICS VIEW ────────────────────────────────────────
+  if (tab==="analytics") {
+    const totalSessions  = sessions.length;
+    const completedPct   = totalSessions ? Math.round((completedCount/totalSessions)*100) : 0;
+    return (
+      <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+        <Header title="Session Analytics" sub="Performance overview" onBack={()=>setTab("list")}/>
+        <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 100px" }}>
+
+          {/* Summary cards */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16 }}>
+            {[
+              { label:"Active Now",   value:activeCount,                        color:T.green,  icon:"fa-bolt" },
+              { label:"Completed",    value:completedCount,                     color:T.blue,   icon:"fa-check-circle" },
+              { label:"Total Energy", value:`${totalKwh.toFixed(1)} kWh`,       color:T.yellow, icon:"fa-sun" },
+              { label:"Revenue",      value:`GH₵${totalRevenue.toFixed(0)}`,    color:T.green,  icon:"fa-money-bill-alt" },
+            ].map(s=>(
+              <div key={s.label} style={{ background:T.card,borderRadius:14,padding:"16px",border:`1px solid ${T.border}`,textAlign:"center" }}>
+                <i className={`fas ${s.icon}`} style={{ fontSize:20,color:s.color,marginBottom:8,display:"block" }}/>
+                <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4 }}>{s.label}</div>
+                <div style={{ fontWeight:800,fontSize:22,color:s.color }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Status breakdown */}
+          <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${T.border}` }}>
+            <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:14 }}><i className="fas fa-chart-pie" style={{ marginRight:8,color:T.green }}/>Status Breakdown</div>
+            {Object.entries(SESSION_STATUSES).map(([status,cfg])=>{
+              const count = sessions.filter(s=>s.status===status).length;
+              const pct   = totalSessions ? Math.round((count/totalSessions)*100) : 0;
+              return (
+                <div key={status} style={{ marginBottom:10 }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
+                    <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                      <i className={`fas ${cfg.icon}`} style={{ fontSize:12,color:cfg.color,width:16 }}/>
+                      <span style={{ fontSize:12,color:T.text,fontWeight:600 }}>{status}</span>
+                    </div>
+                    <span style={{ fontSize:12,color:T.muted }}>{count} ({pct}%)</span>
+                  </div>
+                  <div style={{ height:5,borderRadius:3,background:"rgba(255,255,255,0.06)",overflow:"hidden" }}>
+                    <div style={{ height:"100%",width:`${pct}%`,background:cfg.color,borderRadius:3,transition:"width .5s ease" }}/>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Completion rate */}
+          <div style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:16,padding:"18px",marginBottom:16,border:`1px solid rgba(74,222,128,0.2)`,textAlign:"center" }}>
+            <div style={{ fontSize:12,color:T.muted,marginBottom:6 }}>Session Completion Rate</div>
+            <div style={{ fontWeight:900,fontSize:48,color:T.green }}>{completedPct}%</div>
+            <div style={{ height:8,borderRadius:4,background:"rgba(255,255,255,0.08)",overflow:"hidden",margin:"12px 0 8px" }}>
+              <div style={{ height:"100%",width:`${completedPct}%`,background:`linear-gradient(90deg,${T.green},${T.blue})`,borderRadius:4 }}/>
+            </div>
+            <div style={{ fontSize:11,color:T.muted }}>{completedCount} of {totalSessions} sessions completed</div>
+          </div>
+        </div>
+        <Nav active="More" go={go}/>
+      </div>
+    );
+  }
+
+  // ── LIST VIEW ─────────────────────────────────────────────
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Sessions" sub="Charging session management" onBack={()=>go("home")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"12px 14px 100px" }}>
+
+        {/* Top stats bar */}
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14 }}>
+          {[
+            { label:"Active",   value:activeCount,                  color:T.green  },
+            { label:"kWh Today",value:totalKwh.toFixed(1),          color:T.yellow },
+            { label:"Revenue",  value:`GH₵${totalRevenue.toFixed(0)}`,color:T.blue },
+          ].map(s=>(
+            <div key={s.label} style={{ background:T.card,borderRadius:12,padding:"12px 8px",border:`1px solid ${T.border}`,textAlign:"center" }}>
+              <div style={{ fontWeight:800,fontSize:18,color:s.color }}>{s.value}</div>
+              <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginTop:3 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ display:"flex",gap:8,marginBottom:14 }}>
+          <button onClick={loadSessions} className="tap"
+            style={{ flex:1,background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px",fontSize:12,color:T.green,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+            <i className={`fas fa-sync${loading?" fa-spin":""}`}/> Refresh
+          </button>
+          <button onClick={()=>setTab("analytics")} className="tap"
+            style={{ flex:1,background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px",fontSize:12,color:T.blue,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+            <i className="fas fa-chart-bar"/> Analytics
+          </button>
+        </div>
+
+        {/* Filter chips */}
+        <div style={{ display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginBottom:14 }}>
+          {FILTERS.map(f=>{
+            const cfg = SESSION_STATUSES[f];
+            const active = filter===f;
+            return (
+              <button key={f} onClick={()=>setFilter(f)} className="tap"
+                style={{ flexShrink:0,background:active?(cfg?cfg.bg:"rgba(74,222,128,0.12)"):T.card,border:`1px solid ${active?(cfg?cfg.color:T.green):T.border}`,borderRadius:20,padding:"6px 14px",fontSize:11,fontWeight:700,color:active?(cfg?cfg.color:T.green):T.muted,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+                {cfg&&<i className={`fas ${cfg.icon}`}/>} {f}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Session list */}
+        {loading&&sessions.length===0&&(
+          <div style={{ textAlign:"center",padding:"30px 0",color:T.muted,fontSize:13 }}><Spinner/> <span style={{ marginLeft:8 }}>Loading sessions...</span></div>
+        )}
+
+        {!loading&&sessions.length===0&&(
+          <div style={{ textAlign:"center",padding:"40px 0",color:T.muted,fontSize:13 }}>
+            <i className="fas fa-bolt" style={{ fontSize:48,marginBottom:16,display:"block",opacity:0.3 }}/>
+            <div style={{ fontWeight:700,fontSize:15,color:T.text,marginBottom:6 }}>No Sessions Found</div>
+            <div style={{ fontSize:12 }}>Sessions appear here when charging starts</div>
+          </div>
+        )}
+
+        {sessions.map(s=>{
+          const cfg = SESSION_STATUSES[s.status] || SESSION_STATUSES.Ready;
+          const isActive = s.status==="Charging";
+          const elapsed = isActive && s.started_at
+            ? Math.floor((Date.now()-new Date(s.started_at).getTime())/1000) : null;
+          return (
+            <div key={s.id} className="tap row" onClick={()=>openDetail(s)}
+              style={{ background:T.card,borderRadius:16,border:`1px solid ${isActive?T.green:T.border}`,marginBottom:10,overflow:"hidden",boxShadow:isActive?`0 0 12px rgba(74,222,128,0.1)`:"none" }}>
+
+              {/* Active indicator bar */}
+              {isActive&&<div style={{ height:3,background:`linear-gradient(90deg,${T.green},${T.blue})` }}/>}
+
+              <div style={{ padding:"14px 14px" }}>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ fontWeight:700,fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+                      {s.session_ref||s.id.substring(0,16)}
+                    </div>
+                    <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>
+                      <i className="fas fa-charging-station" style={{ marginRight:4 }}/>{s.charger_id||"--"} · {s.vehicle_type||"Unknown"}
+                    </div>
+                  </div>
+                  <div style={{ display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0,marginLeft:8 }}>
+                    <div style={{ background:cfg.bg,borderRadius:8,padding:"3px 10px",display:"flex",alignItems:"center",gap:5 }}>
+                      <i className={`fas ${cfg.icon}`} style={{ fontSize:10,color:cfg.color }}/>
+                      <span style={{ fontSize:11,fontWeight:700,color:cfg.color }}>{s.status}</span>
+                    </div>
+                    {elapsed!=null&&(
+                      <div style={{ fontSize:11,fontWeight:700,color:T.green,fontFamily:"monospace" }}>{fmtDuration(elapsed)}</div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6 }}>
+                  {[
+                    { label:"Energy",  value:fmtKwh(s.energy_kwh),          color:T.green  },
+                    { label:"Cost",    value:fmtCost(s.cost_total),          color:T.yellow },
+                    { label:"Time",    value:fmtDuration(s.duration_sec),    color:T.blue   },
+                    { label:"Payment", value:s.payment_status||"Unpaid",     color:s.payment_status==="Paid"?T.green:T.muted },
+                  ].map(m=>(
+                    <div key={m.label} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"6px 4px",textAlign:"center" }}>
+                      <div style={{ fontWeight:700,fontSize:11,color:m.color }}>{m.value}</div>
+                      <div style={{ fontSize:9,color:T.muted,marginTop:2 }}>{m.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <Nav active="More" go={go}/>
+    </div>
+  );
+}
 export default function App() {
   const [screen,setScreen]   = useState(()=>{ try { return localStorage.getItem("eco_user")?"home":"splash"; } catch(e){ return "splash"; } });
   const [authMode,setAuthMode]= useState("login");
@@ -1593,7 +2033,7 @@ export default function App() {
   if (screen==="splash") return <><style>{CSS}</style><Splash onLogin={()=>{ setAuthMode("login");go("auth"); }} onRegister={()=>{ setAuthMode("register");go("auth"); }} onGuest={()=>go("home")}/></>;
   if (screen==="auth") return <><style>{CSS}</style><Auth mode={authMode} onBack={(mode)=>{ if(mode){ setAuthMode(mode); } else { go("splash"); } }} onSuccess={(u)=>{ setUser(u);go("home"); }}/></>;
 
-  const views={chargers:<ChargerAdmin go={goSecure}/>, home:<Home {...props}/>,map:<MapScreen {...props}/>,detail:<Detail {...props}/>,vehicles:<Vehicles {...props}/>,booking:<Booking {...props}/>,bookings:<Bookings {...props}/>,qr:<QRScreen {...props}/>,verify:<Verify {...props}/>,profile:<Profile {...props}/>,about:<About {...props}/> };
+  const views={chargers:<ChargerAdmin go={goSecure}/>,sessions:<SessionManager go={goSecure} user={user}/>, home:<Home {...props}/>,map:<MapScreen {...props}/>,detail:<Detail {...props}/>,vehicles:<Vehicles {...props}/>,booking:<Booking {...props}/>,bookings:<Bookings {...props}/>,qr:<QRScreen {...props}/>,verify:<Verify {...props}/>,profile:<Profile {...props}/>,about:<About {...props}/> };
 
   return (
     <><style>{CSS}</style>
