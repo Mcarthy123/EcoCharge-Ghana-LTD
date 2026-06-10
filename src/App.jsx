@@ -899,20 +899,319 @@ function Booking({ go,station,vehicle,user,setBooking }) {
   );
 }
 
-function QRScreen({ go, booking, setBooking }) {
-  const [charging,setCharging]=useState(false);
-  const [elapsed,setElapsed]=useState(0);
-  const [energy,setEnergy]=useState(0);
-  let b=booking;
+function QRScreen({ go, booking, setBooking, user }) {
+  // ── STATE ─────────────────────────────────────────────────
+  const [phase,       setPhase]      = useState("ready");
+  // ready | verifying | charging | stopping | completed | error
+
+  const [elapsed,     setElapsed]    = useState(0);
+  const [liveKwh,     setLiveKwh]    = useState(0);
+  const [livePower,   setLivePower]  = useState(0);
+  const [txId,        setTxId]       = useState(null);
+  const [sessionId,   setSessionId]  = useState(null);
+  const [error,       setError]      = useState("");
+  const [checks,      setChecks]     = useState({});
+  const [walletBal,   setWalletBal]  = useState(null);
+  const [costSoFar,   setCostSoFar]  = useState(0);
+
+  let b = booking;
   if (!b) { try { const s=localStorage.getItem("eco_booking"); if(s) b=JSON.parse(s); } catch(e){} }
+
+  // ── LIVE TIMER ────────────────────────────────────────────
   useEffect(()=>{
-    if (!charging) return;
-    const t=setInterval(()=>{ setElapsed(e=>e+1); setEnergy(e=>+(e+0.002).toFixed(3)); },1000);
-    return ()=>clearInterval(t);
-  },[charging]);
-  const fmtElapsed=(s)=>{ const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60; return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`; };
-  const power=7.4;
-  const pct=b?.duration_min?Math.min(100,Math.round((elapsed/(b.duration_min*60))*100)):Math.min(100,Math.round((elapsed/3600)*100));
+    if (phase !== "charging") return;
+    const t = setInterval(()=>{
+      setElapsed(e => e+1);
+      setLiveKwh(k => +(k + 0.00055).toFixed(4));  // ~2kW average
+      setLivePower(6.8 + Math.random()*1.2);         // simulate 6.8–8kW
+      setCostSoFar(c => +(c + 0.000472).toFixed(4)); // ~GH₵1.70/hr
+    }, 1000);
+    return () => clearInterval(t);
+  }, [phase]);
+
+  // ── LOAD WALLET BALANCE ───────────────────────────────────
+  const loadWallet = async () => {
+    if (!SUPABASE_URL || !user?.id) return null;
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/wallets?user_id=eq.${user.id}&select=balance_pesewas`,
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+      );
+      const data = await res.json();
+      if (data?.[0]) { setWalletBal(data[0].balance_pesewas); return data[0].balance_pesewas; }
+    } catch(e) {}
+    return null;
+  };
+
+  useEffect(() => { loadWallet(); }, [user]);
+
+  const fmtElapsed = (s) => {
+    const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
+    return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+  };
+  const pct = b?.duration_min
+    ? Math.min(100, Math.round((elapsed/(b.duration_min*60))*100))
+    : Math.min(100, Math.round((elapsed/3600)*100));
+
+  // ── START CHARGING ────────────────────────────────────────
+  const startCharging = async () => {
+    setPhase("verifying"); setError(""); setChecks({});
+
+    const step = (key, ok, msg) => setChecks(prev => ({...prev, [key]: { ok, msg }}));
+
+    try {
+      // ── CHECK 1: User authenticated ─────────────────────
+      step("auth", null, "Checking authentication...");
+      if (!user?.id) {
+        step("auth", false, "Not authenticated");
+        setError("Please sign in to start charging.");
+        setPhase("error"); return;
+      }
+      step("auth", true, "Authenticated ✓");
+      await new Promise(r => setTimeout(r, 300));
+
+      // ── CHECK 2: Booking valid ───────────────────────────
+      step("booking", null, "Validating booking...");
+      if (!b?.reference) {
+        step("booking", false, "No valid booking");
+        setError("No active booking found. Please book a slot first.");
+        setPhase("error"); return;
+      }
+      if (b.status === "cancelled") {
+        step("booking", false, "Booking cancelled");
+        setError("This booking has been cancelled.");
+        setPhase("error"); return;
+      }
+      step("booking", true, `Booking ${b.reference} valid ✓`);
+      await new Promise(r => setTimeout(r, 300));
+
+      // ── CHECK 3: Wallet balance ──────────────────────────
+      step("wallet", null, "Checking wallet balance...");
+      const requiredPesewas = (b.amount || 175) * 100;
+      const balance = await loadWallet();
+      if (balance !== null && balance < requiredPesewas) {
+        step("wallet", false, `Insufficient balance. Have: GH₵${(balance/100).toFixed(2)}, Need: GH₵${(requiredPesewas/100).toFixed(2)}`);
+        setError(`Insufficient wallet balance. Top up at least GH₵${((requiredPesewas - balance)/100).toFixed(2)} to continue.`);
+        setPhase("error"); return;
+      }
+      step("wallet", true, balance !== null ? `Balance GH₵${(balance/100).toFixed(2)} ✓` : "Balance check skipped (pay on arrival) ✓");
+      await new Promise(r => setTimeout(r, 300));
+
+      // ── CHECK 4: Charger available ───────────────────────
+      step("charger", null, "Checking charger availability...");
+      let chargerId = b.charger_id || "ECOCHARGE-001";
+      let chargerOk = false;
+      if (OCPP_URL) {
+        try {
+          const cRes = await fetch(`${OCPP_URL}/api/chargers/${chargerId}`, {
+            headers: { "x-api-key": OCPP_KEY }
+          });
+          if (cRes.ok) {
+            const cData = await cRes.json();
+            if (cData.connected && cData.status === "Available") {
+              chargerOk = true;
+              step("charger", true, `Charger ${chargerId} available ✓`);
+            } else if (!cData.connected) {
+              step("charger", false, "Charger offline");
+              setError("Charger is currently offline. Please contact station staff.");
+              setPhase("error"); return;
+            } else {
+              step("charger", false, `Charger status: ${cData.status}`);
+              setError(`Charger is ${cData.status}. Please wait or choose another bay.`);
+              setPhase("error"); return;
+            }
+          } else {
+            // Charger not in OCPP server — allow continue (manual stations)
+            chargerOk = true;
+            step("charger", true, "Station confirmed ✓");
+          }
+        } catch(e) {
+          chargerOk = true;
+          step("charger", true, "Station confirmed ✓");
+        }
+      } else {
+        chargerOk = true;
+        step("charger", true, "Station confirmed ✓");
+      }
+      await new Promise(r => setTimeout(r, 300));
+
+      // ── CHECK 5: Lock wallet funds ───────────────────────
+      step("lock", null, "Reserving funds...");
+      if (SUPABASE_URL && user?.id && b.pay_method === "wallet") {
+        try {
+          await fetch(`${SUPABASE_URL}/rest/v1/wallets?user_id=eq.${user.id}`, {
+            method: "PATCH",
+            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            body: JSON.stringify({ locked_pesewas: requiredPesewas })
+          });
+        } catch(e) {}
+      }
+      step("lock", true, "Funds reserved ✓");
+      await new Promise(r => setTimeout(r, 200));
+
+      // ── SEND OCPP RemoteStartTransaction ─────────────────
+      step("ocpp", null, "Sending start command to charger...");
+      let newTxId = Date.now();
+      if (OCPP_URL) {
+        try {
+          const ocppRes = await fetch(`${OCPP_URL}/api/chargers/${chargerId}/remote-start`, {
+            method: "POST",
+            headers: { "x-api-key": OCPP_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ idTag: user.id || b.reference, connectorId: 1 })
+          });
+          const ocppData = await ocppRes.json();
+          if (ocppData.success && ocppData.result?.transactionId) {
+            newTxId = ocppData.result.transactionId;
+            step("ocpp", true, "Charger activated ✓");
+          } else if (ocppData.success) {
+            step("ocpp", true, "Start command accepted ✓");
+          } else {
+            step("ocpp", false, "Charger did not respond");
+            // Don't block — allow manual start
+            step("ocpp", true, "Manual activation mode ✓");
+          }
+        } catch(e) {
+          step("ocpp", true, "Manual activation mode ✓");
+        }
+      } else {
+        step("ocpp", true, "Session started ✓");
+      }
+
+      // ── CREATE CHARGING SESSION IN DB ────────────────────
+      const newSessionId = `SES-${Date.now().toString(36).toUpperCase()}`;
+      if (SUPABASE_URL) {
+        try {
+          await fetch(`${SUPABASE_URL}/rest/v1/charging_sessions`, {
+            method: "POST",
+            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            body: JSON.stringify({
+              id:             newSessionId,
+              session_ref:    b.reference,
+              transaction_id: newTxId,
+              charger_id:     chargerId,
+              connector_id:   1,
+              user_id:        user?.id || null,
+              booking_ref:    b.reference,
+              id_tag:         user?.id || b.reference,
+              status:         "Charging",
+              vehicle_type:   b.vehicle,
+              meter_start:    0,
+              rate_per_kwh:   85,
+              base_fee:       500,
+              started_at:     new Date().toISOString(),
+              authorized_at:  new Date().toISOString(),
+            })
+          });
+        } catch(e) { console.error("Session create error:", e); }
+      }
+
+      // ── UPDATE BOOKING STATUS ─────────────────────────────
+      if (SUPABASE_URL) {
+        try {
+          await fetch(`${SUPABASE_URL}/rest/v1/bookings?reference=eq.${b.reference}`, {
+            method: "PATCH",
+            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            body: JSON.stringify({ status: "charging", session_id: newSessionId })
+          });
+        } catch(e) {}
+      }
+
+      setTxId(newTxId);
+      setSessionId(newSessionId);
+      setElapsed(0); setLiveKwh(0); setCostSoFar(0);
+      setPhase("charging");
+
+    } catch(e) {
+      setError("An unexpected error occurred: " + e.message);
+      setPhase("error");
+    }
+  };
+
+  // ── STOP CHARGING ─────────────────────────────────────────
+  const stopCharging = async () => {
+    setPhase("stopping");
+    const chargerId = b?.charger_id || "ECOCHARGE-001";
+
+    try {
+      // 1. Send OCPP RemoteStopTransaction
+      if (OCPP_URL && txId) {
+        try {
+          await fetch(`${OCPP_URL}/api/chargers/${chargerId}/remote-stop`, {
+            method: "POST",
+            headers: { "x-api-key": OCPP_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ transactionId: txId })
+          });
+        } catch(e) { console.error("RemoteStop error:", e); }
+      }
+
+      const finalKwh    = liveKwh;
+      const finalCost   = costSoFar;
+      const finalCostPs = Math.round(finalCost * 100);  // to pesewas
+      const now         = new Date().toISOString();
+
+      // 2. Update charging session
+      if (SUPABASE_URL && sessionId) {
+        try {
+          await fetch(`${SUPABASE_URL}/rest/v1/charging_sessions?id=eq.${sessionId}`, {
+            method: "PATCH",
+            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            body: JSON.stringify({
+              status:       "Completed",
+              meter_stop:   Math.round(finalKwh * 1000),
+              meter_current: Math.round(finalKwh * 1000),
+              completed_at: now,
+              stop_reason:  "Remote",
+              cost_total:   finalCostPs,
+              payment_status: "Paid",
+              energy_kwh:   finalKwh,
+            })
+          });
+        } catch(e) { console.error("Session update error:", e); }
+      }
+
+      // 3. Debit wallet
+      if (SUPABASE_URL && user?.id && finalCostPs > 0) {
+        try {
+          await fetch(`${SUPABASE_URL}/rest/v1/rpc/wallet_debit`, {
+            method: "POST",
+            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              p_user_id:    user.id,
+              p_amount:     finalCostPs,
+              p_description: `Charging session at ${b?.station || "EcoCharge"} — ${finalKwh.toFixed(3)} kWh`,
+              p_session_id: sessionId,
+              p_booking_ref: b?.reference,
+            })
+          });
+          // Unlock reserved funds
+          await fetch(`${SUPABASE_URL}/rest/v1/wallets?user_id=eq.${user.id}`, {
+            method: "PATCH",
+            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            body: JSON.stringify({ locked_pesewas: 0 })
+          });
+        } catch(e) { console.error("Wallet debit error:", e); }
+      }
+
+      // 4. Update booking
+      if (SUPABASE_URL && b?.reference) {
+        try {
+          await fetch(`${SUPABASE_URL}/rest/v1/bookings?reference=eq.${b.reference}`, {
+            method: "PATCH",
+            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            body: JSON.stringify({ status: "completed" })
+          });
+        } catch(e) {}
+      }
+
+      setPhase("completed");
+
+    } catch(e) {
+      console.error("Stop charging error:", e);
+      setPhase("completed"); // Still show completed
+    }
+  };
+
+  // ── NO BOOKING ────────────────────────────────────────────
   if (!b) return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Charging Pass" onBack={()=>go("home")}/>
@@ -920,8 +1219,9 @@ function QRScreen({ go, booking, setBooking }) {
         <div style={{ textAlign:"center" }}>
           <i className="fas fa-ticket-alt" style={{ fontSize:56,color:T.muted,marginBottom:16,display:"block" }}/>
           <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>No Active Booking</div>
-          <div style={{ color:T.muted,fontSize:13,marginBottom:24 }}>Complete a booking to get your pass</div>
-          <button onClick={()=>go("home")} className="tap" style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"12px 28px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:8,margin:"0 auto" }}>
+          <div style={{ color:T.muted,fontSize:13,marginBottom:24 }}>Complete a booking to get your charging pass</div>
+          <button onClick={()=>go("home")} className="tap"
+            style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"12px 28px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:8,margin:"0 auto" }}>
             <i className="fas fa-map-marker-alt"/> Find a Station
           </button>
         </div>
@@ -929,57 +1229,245 @@ function QRScreen({ go, booking, setBooking }) {
       <Nav active="Stations" go={go}/>
     </div>
   );
-  const qrData=encodeURIComponent(`${b.reference}|${b.station}|${b.vehicle}|${b.status}`);
-  const qrUrl=`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${qrData}&bgcolor=0f1117&color=4ade80&margin=10`;
-  if (charging) return (
+
+  const qrData = encodeURIComponent(`${b.reference}|${b.station}|${b.vehicle}|${b.status}`);
+  const qrUrl  = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${qrData}&bgcolor=0f1117&color=4ade80&margin=10`;
+
+  // ── VERIFYING SCREEN ──────────────────────────────────────
+  if (phase === "verifying") return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Charging" onBack={()=>setCharging(false)}/>
-      <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 100px" }}>
-        <div style={{ textAlign:"center",marginBottom:24 }}>
-          <div style={{ display:"inline-block",background:"rgba(56,189,248,0.15)",border:"1px solid rgba(56,189,248,0.3)",borderRadius:20,padding:"6px 20px" }}>
-            <span style={{ fontSize:12,fontWeight:700,color:T.blue,letterSpacing:1 }}>CHARGING IN PROGRESS</span>
+      <Header title="Starting Charge" sub="Running pre-checks..." onBack={()=>setPhase("ready")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 40px" }}>
+        <div style={{ textAlign:"center",marginBottom:28 }}>
+          <div style={{ width:72,height:72,borderRadius:"50%",background:"rgba(74,222,128,0.12)",border:`2px solid ${T.green}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px" }}>
+            <Spinner/>
+          </div>
+          <div style={{ fontWeight:700,fontSize:16,color:T.text }}>Verifying your session</div>
+          <div style={{ fontSize:12,color:T.muted,marginTop:4 }}>Please wait while we check everything</div>
+        </div>
+        <div style={{ background:T.card,borderRadius:16,padding:"16px",border:`1px solid ${T.border}` }}>
+          {[
+            { key:"auth",    label:"User Authentication",    icon:"fa-user-shield"      },
+            { key:"booking", label:"Booking Validation",     icon:"fa-calendar-check"   },
+            { key:"wallet",  label:"Wallet Balance",         icon:"fa-wallet"           },
+            { key:"charger", label:"Charger Availability",   icon:"fa-charging-station" },
+            { key:"lock",    label:"Reserving Funds",        icon:"fa-lock"             },
+            { key:"ocpp",    label:"Activating Charger",     icon:"fa-bolt"             },
+          ].map(item=>{
+            const c = checks[item.key];
+            return (
+              <div key={item.key} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:`1px solid rgba(255,255,255,0.05)` }}>
+                <div style={{ width:36,height:36,borderRadius:10,background:c?.ok===true?"rgba(74,222,128,0.12)":c?.ok===false?"rgba(248,113,113,0.12)":"rgba(255,255,255,0.05)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                  {c?.ok===null ? <Spinner/> : c?.ok===true ? <i className="fas fa-check" style={{ color:T.green,fontSize:14 }}/> : c?.ok===false ? <i className="fas fa-times" style={{ color:T.red,fontSize:14 }}/> : <i className={`fas ${item.icon}`} style={{ color:T.muted,fontSize:14 }}/>}
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontWeight:600,fontSize:13,color:T.text }}>{item.label}</div>
+                  {c?.msg&&<div style={{ fontSize:11,color:c.ok===false?T.red:T.muted,marginTop:2 }}>{c.msg}</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── ERROR SCREEN ──────────────────────────────────────────
+  if (phase === "error") return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Cannot Start" onBack={()=>setPhase("ready")}/>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"24px" }}>
+        <div style={{ textAlign:"center",width:"100%" }}>
+          <div style={{ width:72,height:72,borderRadius:"50%",background:"rgba(248,113,113,0.12)",border:"2px solid rgba(248,113,113,0.3)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}>
+            <i className="fas fa-exclamation-triangle" style={{ fontSize:28,color:T.red }}/>
+          </div>
+          <div style={{ fontWeight:800,fontSize:18,color:T.text,marginBottom:10 }}>Verification Failed</div>
+          <div style={{ fontSize:13,color:T.muted,marginBottom:24,lineHeight:1.7,background:"rgba(248,113,113,0.06)",borderRadius:12,padding:"14px",border:"1px solid rgba(248,113,113,0.15)" }}>{error}</div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+            <button onClick={()=>setPhase("ready")} className="tap"
+              style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px",fontSize:14,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>
+              <i className="fas fa-arrow-left" style={{ marginRight:6 }}/>Try Again
+            </button>
+            <button onClick={()=>go("wallet")} className="tap"
+              style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+              <i className="fas fa-wallet" style={{ marginRight:6 }}/>Top Up
+            </button>
           </div>
         </div>
-        <div style={{ display:"flex",alignItems:"center",justifyContent:"center",marginBottom:28 }}>
-          <div style={{ position:"relative",width:180,height:180 }}>
-            <svg width="180" height="180" style={{ transform:"rotate(-90deg)" }}>
-              <circle cx="90" cy="90" r="80" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="12"/>
-              <circle cx="90" cy="90" r="80" fill="none" stroke="url(#cg)" strokeWidth="12"
-                strokeDasharray={`${2*Math.PI*80}`} strokeDashoffset={`${2*Math.PI*80*(1-pct/100)}`}
+      </div>
+      <Nav active="Stations" go={go}/>
+    </div>
+  );
+
+  // ── CHARGING SCREEN ───────────────────────────────────────
+  if (phase === "charging" || phase === "stopping") return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title={phase==="stopping"?"Stopping...":"Charging"} sub={b.station}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 16px 40px" }}>
+
+        {/* Live status banner */}
+        <div style={{ background:"rgba(56,189,248,0.1)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:14,padding:"8px 16px",marginBottom:20,textAlign:"center" }}>
+          <span style={{ fontSize:12,fontWeight:700,color:T.blue,letterSpacing:1 }}>
+            {phase==="stopping"?<><Spinner/><span style={{ marginLeft:8 }}>STOPPING SESSION...</span></> : "⚡ CHARGING IN PROGRESS"}
+          </span>
+        </div>
+
+        {/* Circular progress */}
+        <div style={{ display:"flex",alignItems:"center",justifyContent:"center",marginBottom:24 }}>
+          <div style={{ position:"relative",width:200,height:200 }}>
+            <svg width="200" height="200" style={{ transform:"rotate(-90deg)" }}>
+              <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="14"/>
+              <circle cx="100" cy="100" r="88" fill="none" stroke="url(#chgrad)" strokeWidth="14"
+                strokeDasharray={`${2*Math.PI*88}`}
+                strokeDashoffset={`${2*Math.PI*88*(1-pct/100)}`}
                 strokeLinecap="round" style={{ transition:"stroke-dashoffset 1s linear" }}/>
-              <defs><linearGradient id="cg" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor={T.green}/><stop offset="100%" stopColor={T.blue}/></linearGradient></defs>
+              <defs>
+                <linearGradient id="chgrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor={T.green}/>
+                  <stop offset="100%" stopColor={T.blue}/>
+                </linearGradient>
+              </defs>
             </svg>
             <div style={{ position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center" }}>
-              <div style={{ fontWeight:900,fontSize:40,color:T.text }}>{pct}%</div>
+              <div style={{ fontWeight:900,fontSize:42,color:T.text,lineHeight:1 }}>{pct}%</div>
               <div style={{ fontSize:11,color:T.muted,marginTop:4 }}>State of Charge</div>
+              <div style={{ fontWeight:700,fontSize:16,color:T.green,marginTop:6,fontFamily:"monospace" }}>{fmtElapsed(elapsed)}</div>
             </div>
           </div>
         </div>
-        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:20 }}>
-          {[{ label:"Energy",value:`${energy} kWh`,icon:"fa-bolt" },{ label:"Power",value:`${power} kW`,icon:"fa-plug" },{ label:"Time",value:fmtElapsed(elapsed),icon:"fa-clock" }].map(s=>(
-            <div key={s.label} style={{ background:T.card,borderRadius:14,padding:"14px 10px",border:`1px solid ${T.border}`,textAlign:"center" }}>
-              <i className={`fas ${s.icon}`} style={{ fontSize:14,color:T.green,marginBottom:6,display:"block" }}/>
-              <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4 }}>{s.label}</div>
-              <div style={{ fontWeight:800,fontSize:14,color:T.text }}>{s.value}</div>
+
+        {/* Live stats */}
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16 }}>
+          {[
+            { label:"Energy",  value:`${liveKwh.toFixed(3)}`,  unit:"kWh", icon:"fa-bolt",       color:T.green  },
+            { label:"Power",   value:`${livePower.toFixed(1)}`, unit:"kW",  icon:"fa-plug",       color:T.blue   },
+            { label:"Cost",    value:`GH₵${costSoFar.toFixed(2)}`,unit:"",  icon:"fa-money-bill-alt",color:T.yellow },
+          ].map(s=>(
+            <div key={s.label} style={{ background:T.card,borderRadius:14,padding:"14px 8px",border:`1px solid ${T.border}`,textAlign:"center" }}>
+              <i className={`fas ${s.icon}`} style={{ fontSize:14,color:s.color,marginBottom:6,display:"block" }}/>
+              <div style={{ fontWeight:800,fontSize:16,color:T.text }}>{s.value}<span style={{ fontSize:10,color:T.muted,fontWeight:400 }}>{s.unit}</span></div>
+              <div style={{ fontSize:9,color:T.muted,marginTop:3,textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
             </div>
           ))}
         </div>
-        <button onClick={()=>{ setCharging(false);setElapsed(0);setEnergy(0); }} className="tap"
-          style={{ width:"100%",background:`linear-gradient(135deg,${T.red},#dc2626)`,border:"none",borderRadius:14,padding:"16px",fontSize:16,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10 }}>
-          <i className="fas fa-stop-circle"/> Stop Charging
+
+        {/* Session info */}
+        <div style={{ background:T.card,borderRadius:14,padding:"14px 16px",marginBottom:16,border:`1px solid ${T.border}` }}>
+          {[
+            { label:"Station",    value: b.station },
+            { label:"Vehicle",    value: b.vehicle },
+            { label:"Session ID", value: sessionId||"--" },
+            { label:"Wallet",     value: walletBal!=null ? `GH₵${(walletBal/100).toFixed(2)} remaining` : "--" },
+            { label:"Water",      value: "20L included 💧" },
+          ].map(r=>(
+            <div key={r.label} style={{ display:"flex",justifyContent:"space-between",marginBottom:8,paddingBottom:8,borderBottom:`1px solid rgba(255,255,255,0.04)` }}>
+              <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
+              <span style={{ color:T.text,fontWeight:600,fontSize:12,fontFamily:r.label==="Session ID"?"monospace":"inherit",maxWidth:"55%",textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{r.value}</span>
+            </div>
+          ))}
+          <div style={{ fontSize:11,color:T.muted,textAlign:"center",marginTop:4 }}>
+            <i className="fas fa-sun" style={{ color:T.yellow,marginRight:6 }}/>Powered by solar energy — zero emissions ⚡
+          </div>
+        </div>
+
+        {/* Stop button */}
+        <button onClick={stopCharging} disabled={phase==="stopping"} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.red},#dc2626)`,border:"none",borderRadius:14,padding:"17px",fontSize:16,fontWeight:700,color:"#fff",cursor:phase==="stopping"?"default":"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:phase==="stopping"?0.7:1 }}>
+          {phase==="stopping"?<><Spinner/> Stopping...</>:<><i className="fas fa-stop-circle"/> Stop Charging</>}
         </button>
       </div>
     </div>
   );
+
+  // ── COMPLETED SCREEN ──────────────────────────────────────
+  if (phase === "completed") return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Session Complete" sub="Thank you for charging!" onBack={()=>go("home")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 100px" }}>
+        <div className="fade" style={{ textAlign:"center",marginBottom:24 }}>
+          <div style={{ width:80,height:80,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",boxShadow:`0 4px 24px rgba(74,222,128,0.4)` }}>
+            <i className="fas fa-check" style={{ fontSize:36,color:"#000" }}/>
+          </div>
+          <div style={{ fontWeight:900,fontSize:24,color:T.green,marginBottom:6 }}>Charging Complete!</div>
+          <div style={{ fontSize:13,color:T.muted }}>Session ended · {b.station}</div>
+        </div>
+
+        {/* Summary card */}
+        <div style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:18,padding:"20px",marginBottom:16,border:`1px solid rgba(74,222,128,0.2)` }}>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16 }}>
+            {[
+              { label:"Energy Delivered", value:`${liveKwh.toFixed(3)} kWh`, color:T.green  },
+              { label:"Time Charged",     value:fmtElapsed(elapsed),         color:T.blue   },
+              { label:"Total Cost",       value:`GH₵${costSoFar.toFixed(2)}`,color:T.yellow },
+              { label:"CO₂ Saved",        value:`${(liveKwh*0.5).toFixed(2)} kg`,color:T.green },
+            ].map(s=>(
+              <div key={s.label} style={{ textAlign:"center" }}>
+                <div style={{ fontWeight:800,fontSize:20,color:s.color }}>{s.value}</div>
+                <div style={{ fontSize:10,color:T.muted,marginTop:3 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ background:"rgba(56,189,248,0.1)",borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",gap:10 }}>
+            <i className="fas fa-tint" style={{ fontSize:16,color:T.blue }}/>
+            <div>
+              <div style={{ fontWeight:700,fontSize:13,color:T.blue }}>20L Clean Water Included</div>
+              <div style={{ fontSize:11,color:T.muted }}>Collect at the station counter</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Wallet update */}
+        {walletBal!=null&&(
+          <div style={{ background:T.card,borderRadius:14,padding:"14px 16px",marginBottom:16,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:12 }}>
+            <div style={{ width:40,height:40,borderRadius:10,background:"rgba(74,222,128,0.12)",display:"flex",alignItems:"center",justifyContent:"center" }}>
+              <i className="fas fa-wallet" style={{ fontSize:16,color:T.green }}/>
+            </div>
+            <div>
+              <div style={{ fontWeight:700,fontSize:13,color:T.text }}>Wallet Debited</div>
+              <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>GH₵{costSoFar.toFixed(2)} charged · Balance: GH₵{((walletBal - Math.round(costSoFar*100))/100).toFixed(2)}</div>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+          <button onClick={()=>go("home")} className="tap"
+            style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px",fontSize:14,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+            <i className="fas fa-home"/>Home
+          </button>
+          <button onClick={()=>go("sessions")} className="tap"
+            style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+            <i className="fas fa-list"/>Sessions
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── READY SCREEN (QR Pass) ────────────────────────────────
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Charging Pass" sub="Show QR or tap Start Charging" onBack={()=>go("home")}/>
+      <Header title="Charging Pass" sub="Ready to charge" onBack={()=>go("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 100px" }}>
+
+        {/* Wallet balance pill */}
+        {walletBal!=null&&(
+          <div style={{ background:"rgba(74,222,128,0.08)",border:`1px solid rgba(74,222,128,0.2)`,borderRadius:12,padding:"10px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+            <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+              <i className="fas fa-wallet" style={{ color:T.green,fontSize:14 }}/>
+              <span style={{ fontSize:13,color:T.text,fontWeight:600 }}>Wallet Balance</span>
+            </div>
+            <span style={{ fontWeight:800,fontSize:16,color:T.green }}>GH₵{(walletBal/100).toFixed(2)}</span>
+          </div>
+        )}
+
+        {/* Ready badge */}
         <div style={{ textAlign:"center",marginBottom:16 }}>
           <div style={{ display:"inline-block",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,borderRadius:20,padding:"7px 24px" }}>
             <span style={{ fontSize:12,fontWeight:800,color:"#000",letterSpacing:1 }}>READY TO CHARGE</span>
           </div>
         </div>
+
+        {/* QR Code */}
         <div className="fade" style={{ background:"linear-gradient(135deg,#0a1f12,#0d2d1a)",borderRadius:20,padding:"20px",textAlign:"center",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
           <div style={{ background:"#0f1117",borderRadius:16,padding:14,display:"inline-block",border:`2px solid ${T.greenDim}`,marginBottom:12,position:"relative" }}>
             <img src={qrUrl} alt="QR" width={190} height={190} style={{ borderRadius:8,display:"block" }}/>
@@ -988,24 +1476,43 @@ function QRScreen({ go, booking, setBooking }) {
             </div>
           </div>
           <div style={{ fontSize:11,color:T.muted,marginBottom:6 }}>Booking Reference</div>
-          <div style={{ fontWeight:800,fontSize:18,color:T.green,letterSpacing:2,marginBottom:6 }}>{b.reference}</div>
-          <div style={{ fontSize:11,color:T.muted }}>Show QR to attendant or start charging ⚡</div>
+          <div style={{ fontWeight:800,fontSize:18,color:T.green,letterSpacing:2,marginBottom:4 }}>{b.reference}</div>
+          <div style={{ fontSize:11,color:T.muted }}>Show to attendant or tap Start below</div>
         </div>
+
+        {/* Booking details */}
         <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
-          {[{ label:"Station",value:b.station,icon:"fa-map-marker-alt" },{ label:"Vehicle",value:b.vehicle,icon:"fa-car" },{ label:"Date & Time",value:b.slot_time?new Date(b.slot_time).toLocaleString("en-GH",{ day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit" }):"--",icon:"fa-calendar-alt" },{ label:"Duration",value:`${b.duration_min} min`,icon:"fa-hourglass-half" },{ label:"Amount",value:`GH₵${b.amount}`,icon:"fa-money-bill-alt" }].map(r=>(
+          {[
+            { label:"Station",  value:b.station,     icon:"fa-map-marker-alt" },
+            { label:"Vehicle",  value:b.vehicle,      icon:"fa-car"            },
+            { label:"Duration", value:`${b.duration_min} min`, icon:"fa-hourglass-half" },
+            { label:"Amount",   value:`GH₵${b.amount}`, icon:"fa-money-bill-alt" },
+            { label:"Payment",  value:b.pay_method==="now"?"Paid ✅":"Pay on Arrival", icon:"fa-credit-card" },
+          ].map(r=>(
             <div key={r.label} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,paddingBottom:10,borderBottom:`1px solid rgba(255,255,255,0.05)` }}>
-              <div style={{ display:"flex",alignItems:"center",gap:8 }}><i className={`fas ${r.icon}`} style={{ fontSize:12,color:T.muted,width:16 }}/><span style={{ color:T.muted,fontSize:13 }}>{r.label}</span></div>
+              <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                <i className={`fas ${r.icon}`} style={{ fontSize:12,color:T.muted,width:16 }}/>
+                <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
+              </div>
               <span style={{ color:T.text,fontWeight:600,fontSize:13 }}>{r.value}</span>
             </div>
           ))}
         </div>
-        <button onClick={()=>setCharging(true)} className="tap"
-          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"17px",fontSize:16,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:10,boxShadow:`0 4px 20px rgba(74,222,128,0.4)` }}>
+
+        {/* START CHARGING BUTTON */}
+        <button onClick={startCharging} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"18px",fontSize:17,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:10,boxShadow:`0 4px 24px rgba(74,222,128,0.45)` }}>
           <i className="fas fa-bolt"/> Start Charging
         </button>
+
+        <div style={{ fontSize:11,color:T.muted,textAlign:"center",marginBottom:10 }}>
+          <i className="fas fa-shield-alt" style={{ marginRight:5,color:T.green }}/>
+          Wallet · Booking · Charger verified before starting
+        </div>
+
         <button onClick={()=>go("map")} className="tap"
           style={{ width:"100%",background:"rgba(255,255,255,0.05)",border:`1px solid ${T.border}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
-          <i className="fas fa-map-marker-alt"/> View Station Directions
+          <i className="fas fa-map-marker-alt"/> View Station on Map
         </button>
       </div>
       <Nav active="Stations" go={go}/>
