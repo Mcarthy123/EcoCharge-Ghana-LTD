@@ -210,6 +210,7 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => (
           { icon:"fa-bolt",         label:"Verify Booking",  screen:"verify", color:T.yellow },
           { icon:"fa-charging-station", label:"Charger Admin",   screen:"chargers", color:T.blue   },
           { icon:"fa-list-alt",        label:"Session Manager", screen:"sessions", color:T.green  },
+          { icon:"fa-wallet",          label:"My Wallet",       screen:"wallet",   color:T.yellow },
         ].map(item=>(
           <div key={item.label} className="tap row" onClick={()=>{ go(item.screen);onClose(); }}
             style={{ display:"flex",alignItems:"center",gap:14,padding:"16px 20px",borderBottom:`1px solid ${T.border}20` }}>
@@ -1990,6 +1991,390 @@ function SessionManager({ go, user }) {
     </div>
   );
 }
+
+// ── WALLET HELPERS ────────────────────────────────────────────
+const toGHS    = (p) => p != null ? (p / 100).toFixed(2) : "0.00";
+const toPesewas = (g) => Math.round(parseFloat(g) * 100);
+const fmtGHS   = (p) => `GH₵${toGHS(p)}`;
+
+const TOP_UP_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000]; // pesewas
+// = GH₵10, 20, 50, 100, 200, 500
+
+const TX_ICONS = {
+  TopUp:       { icon:"fa-arrow-down",   color:"#4ade80" },
+  Debit:       { icon:"fa-bolt",         color:"#f87171" },
+  Refund:      { icon:"fa-undo",         color:"#38bdf8" },
+  Bonus:       { icon:"fa-gift",         color:"#fbbf24" },
+  Lock:        { icon:"fa-lock",         color:"#9ca3af" },
+  Unlock:      { icon:"fa-unlock",       color:"#9ca3af" },
+  Adjustment:  { icon:"fa-sliders-h",    color:"#a78bfa" },
+};
+
+// ── WALLET SCREEN ─────────────────────────────────────────────
+function WalletScreen({ go, user }) {
+  const [wallet,    setWallet]    = useState(null);
+  const [txns,      setTxns]      = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [tab,       setTab]       = useState("home"); // home | topup | history
+  const [topupAmt,  setTopupAmt]  = useState(5000);   // pesewas
+  const [customAmt, setCustomAmt] = useState("");
+  const [paying,    setPaying]    = useState(false);
+  const [txFilter,  setTxFilter]  = useState("All");
+
+  const loadWallet = async () => {
+    if (!SUPABASE_URL || !user?.id) { setLoading(false); return; }
+    try {
+      // Load wallet
+      const wRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/wallets?user_id=eq.${user.id}&select=*`,
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+      );
+      const wData = await wRes.json();
+      if (wData?.length) {
+        setWallet(wData[0]);
+      } else {
+        // Auto-create wallet
+        const cRes = await fetch(`${SUPABASE_URL}/rest/v1/wallets`, {
+          method: "POST",
+          headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=representation" },
+          body: JSON.stringify({ user_id: user.id, email: user.email, display_name: user.name, balance_pesewas: 0 })
+        });
+        const cData = await cRes.json();
+        if (cData?.[0]) setWallet(cData[0]);
+      }
+
+      // Load transactions
+      const tRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/wallet_transactions?user_id=eq.${user.id}&order=created_at.desc&limit=50`,
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+      );
+      const tData = await tRes.json();
+      if (Array.isArray(tData)) setTxns(tData);
+    } catch(e) {}
+    setLoading(false);
+  };
+
+  useEffect(()=>{ loadWallet(); },[user]);
+
+  const initiateTopUp = async () => {
+    const amount = customAmt ? toPesewas(customAmt) : topupAmt;
+    if (amount < 500) { alert("Minimum top-up is GH₵5"); return; }
+    if (!user?.email) { alert("Email required for payment"); return; }
+    setPaying(true);
+    try {
+      const ref = `WALLET-${Date.now()}-${Math.random().toString(36).slice(2,7).toUpperCase()}`;
+      // Save topup request
+      if (SUPABASE_URL) {
+        await fetch(`${SUPABASE_URL}/rest/v1/topup_requests`, {
+          method: "POST",
+          headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet_id: wallet?.id, user_id: user.id, email: user.email, amount_pesewas: amount, payment_ref: ref, status: "Pending" })
+        });
+      }
+      // Store pending topup info
+      try { localStorage.setItem("eco_topup", JSON.stringify({ ref, amount, userId: user.id })); } catch(e) {}
+      // Redirect to Paystack
+      window.location.href = `https://paystack.shop/pay/bldaqwywt5?email=${encodeURIComponent(user.email)}&amount=${amount}&reference=${ref}&metadata=${encodeURIComponent(JSON.stringify({ type:"wallet_topup", user_id: user.id }))}`;
+    } catch(e) {
+      alert("Payment initiation failed. Try again.");
+    }
+    setPaying(false);
+  };
+
+  const filteredTxns = txFilter === "All" ? txns : txns.filter(t => t.type === txFilter);
+
+  const totalIn  = txns.filter(t=>["TopUp","Refund","Bonus"].includes(t.type)).reduce((a,t)=>a+t.amount_pesewas,0);
+  const totalOut = txns.filter(t=>t.type==="Debit").reduce((a,t)=>a+t.amount_pesewas,0);
+
+  if (!user) return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="My Wallet" onBack={()=>go("home")}/>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:24,textAlign:"center" }}>
+        <div>
+          <i className="fas fa-wallet" style={{ fontSize:56,color:T.muted,marginBottom:16,display:"block" }}/>
+          <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>Sign in to access your wallet</div>
+          <button onClick={()=>go("auth")} className="tap"
+            style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"12px 28px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",marginTop:8 }}>
+            Sign In
+          </button>
+        </div>
+      </div>
+      <Nav active="Profile" go={go}/>
+    </div>
+  );
+
+  // ── TOP UP TAB ─────────────────────────────────────────────
+  if (tab === "topup") return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Top Up Wallet" sub="Add funds to charge" onBack={()=>setTab("home")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 16px 100px" }}>
+
+        {/* Current balance */}
+        <div style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:18,padding:"18px",marginBottom:20,border:`1px solid rgba(74,222,128,0.2)`,textAlign:"center" }}>
+          <div style={{ fontSize:12,color:T.muted,marginBottom:4 }}>Current Balance</div>
+          <div style={{ fontWeight:900,fontSize:36,color:T.green }}>{fmtGHS(wallet?.balance_pesewas||0)}</div>
+        </div>
+
+        {/* Quick amounts */}
+        <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}>Select Amount</div>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16 }}>
+          {TOP_UP_AMOUNTS.map(amt=>(
+            <button key={amt} onClick={()=>{ setTopupAmt(amt);setCustomAmt(""); }} className="tap"
+              style={{ background:topupAmt===amt&&!customAmt?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.card,border:`1px solid ${topupAmt===amt&&!customAmt?T.green:T.border}`,borderRadius:14,padding:"16px 8px",cursor:"pointer",fontFamily:"inherit",textAlign:"center" }}>
+              <div style={{ fontWeight:800,fontSize:18,color:topupAmt===amt&&!customAmt?"#000":T.text }}>{fmtGHS(amt)}</div>
+            </button>
+          ))}
+        </div>
+
+        {/* Custom amount */}
+        <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}>Or enter custom amount</div>
+        <div style={{ position:"relative",marginBottom:20 }}>
+          <span style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:15,fontWeight:700 }}>GH₵</span>
+          <input type="number" placeholder="0.00" value={customAmt}
+            onChange={e=>{ setCustomAmt(e.target.value);setTopupAmt(0); }}
+            style={{ width:"100%",background:T.card,border:`1px solid ${customAmt?T.green:T.border}`,borderRadius:14,padding:"16px 16px 16px 52px",color:T.text,fontSize:20,fontWeight:700,fontFamily:"inherit" }}/>
+        </div>
+
+        {/* Summary */}
+        <div style={{ background:T.card,borderRadius:14,padding:"14px 16px",marginBottom:20,border:`1px solid ${T.border}` }}>
+          {[
+            { label:"Top-up amount",  value: fmtGHS(customAmt ? toPesewas(customAmt) : topupAmt) },
+            { label:"Processing fee", value: "Free" },
+            { label:"You'll receive", value: fmtGHS(customAmt ? toPesewas(customAmt) : topupAmt), bold:true },
+          ].map(r=>(
+            <div key={r.label} style={{ display:"flex",justifyContent:"space-between",marginBottom:8 }}>
+              <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
+              <span style={{ color:r.bold?T.green:T.text,fontWeight:r.bold?800:600,fontSize:r.bold?16:13 }}>{r.value}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Payment methods */}
+        <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}>Pay with</div>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20 }}>
+          {[
+            { label:"Card / Mobile Money", icon:"fa-credit-card", color:T.green, active:true },
+            { label:"MTN MoMo",           icon:"fa-mobile-alt",  color:T.yellow, active:false },
+          ].map(m=>(
+            <div key={m.label} style={{ background:m.active?`${T.green}12`:T.card,border:`1px solid ${m.active?T.green:T.border}`,borderRadius:12,padding:"14px",textAlign:"center",opacity:m.active?1:0.5 }}>
+              <i className={`fas ${m.icon}`} style={{ fontSize:20,color:m.color,marginBottom:6,display:"block" }}/>
+              <div style={{ fontSize:11,fontWeight:600,color:m.active?T.text:T.muted }}>{m.label}</div>
+              {!m.active&&<div style={{ fontSize:9,color:T.muted,marginTop:2 }}>Coming soon</div>}
+            </div>
+          ))}
+        </div>
+
+        <button onClick={initiateTopUp} disabled={paying||(!topupAmt&&!customAmt)} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"17px",fontSize:16,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:`0 4px 20px rgba(74,222,128,0.4)`,opacity:paying?0.7:1 }}>
+          {paying?<><Spinner/> Processing…</>:<><i className="fas fa-lock"/> Pay {fmtGHS(customAmt?toPesewas(customAmt):topupAmt)} Securely</>}
+        </button>
+        <div style={{ textAlign:"center",marginTop:12,fontSize:11,color:T.muted }}>
+          <i className="fas fa-shield-alt" style={{ marginRight:5 }}/>Secured by Paystack · SSL Encrypted
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── HISTORY TAB ───────────────────────────────────────────
+  if (tab === "history") return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Transaction History" sub={`${txns.length} transactions`} onBack={()=>setTab("home")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"12px 14px 100px" }}>
+
+        {/* Summary */}
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
+          <div style={{ background:"rgba(74,222,128,0.08)",border:`1px solid rgba(74,222,128,0.2)`,borderRadius:14,padding:"14px",textAlign:"center" }}>
+            <i className="fas fa-arrow-down" style={{ fontSize:16,color:T.green,marginBottom:6,display:"block" }}/>
+            <div style={{ fontSize:10,color:T.muted,marginBottom:3 }}>TOTAL IN</div>
+            <div style={{ fontWeight:800,fontSize:18,color:T.green }}>{fmtGHS(totalIn)}</div>
+          </div>
+          <div style={{ background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.2)",borderRadius:14,padding:"14px",textAlign:"center" }}>
+            <i className="fas fa-arrow-up" style={{ fontSize:16,color:T.red,marginBottom:6,display:"block" }}/>
+            <div style={{ fontSize:10,color:T.muted,marginBottom:3 }}>TOTAL OUT</div>
+            <div style={{ fontWeight:800,fontSize:18,color:T.red }}>{fmtGHS(totalOut)}</div>
+          </div>
+        </div>
+
+        {/* Filter chips */}
+        <div style={{ display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginBottom:14 }}>
+          {["All","TopUp","Debit","Refund","Bonus"].map(f=>(
+            <button key={f} onClick={()=>setTxFilter(f)} className="tap"
+              style={{ flexShrink:0,background:txFilter===f?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.card,border:`1px solid ${txFilter===f?T.green:T.border}`,borderRadius:20,padding:"6px 16px",fontSize:11,fontWeight:700,color:txFilter===f?"#000":T.muted,cursor:"pointer",fontFamily:"inherit" }}>
+              {f}
+            </button>
+          ))}
+        </div>
+
+        {filteredTxns.length===0&&(
+          <div style={{ textAlign:"center",padding:"40px 0",color:T.muted,fontSize:13 }}>
+            <i className="fas fa-receipt" style={{ fontSize:40,marginBottom:12,display:"block",opacity:0.3 }}/>
+            No transactions yet
+          </div>
+        )}
+
+        {filteredTxns.map(tx=>{
+          const cfg = TX_ICONS[tx.type] || TX_ICONS.Adjustment;
+          const isCredit = ["TopUp","Refund","Bonus"].includes(tx.type);
+          return (
+            <div key={tx.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px 16px",marginBottom:10,display:"flex",alignItems:"center",gap:14 }}>
+              <div style={{ width:42,height:42,borderRadius:12,background:`${cfg.color}18`,border:`1px solid ${cfg.color}33`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                <i className={`fas ${cfg.icon}`} style={{ fontSize:16,color:cfg.color }}/>
+              </div>
+              <div style={{ flex:1,minWidth:0 }}>
+                <div style={{ fontWeight:600,fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{tx.description||tx.type}</div>
+                <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>
+                  {new Date(tx.created_at).toLocaleString("en-GH",{ day:"numeric",month:"short",hour:"2-digit",minute:"2-digit" })}
+                  {tx.payment_ref&&<span style={{ marginLeft:6,fontFamily:"monospace",fontSize:10 }}>· {tx.payment_ref.slice(-8)}</span>}
+                </div>
+                <div style={{ fontSize:10,color:tx.status==="Completed"?T.green:tx.status==="Failed"?T.red:T.yellow,marginTop:2,fontWeight:600 }}>
+                  {tx.status}
+                </div>
+              </div>
+              <div style={{ textAlign:"right",flexShrink:0 }}>
+                <div style={{ fontWeight:800,fontSize:16,color:isCredit?T.green:T.red }}>
+                  {isCredit?"+":"-"}{fmtGHS(tx.amount_pesewas)}
+                </div>
+                <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>Bal: {fmtGHS(tx.balance_after)}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <Nav active="Profile" go={go}/>
+    </div>
+  );
+
+  // ── WALLET HOME ───────────────────────────────────────────
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="My Wallet" sub="EcoCharge Ghana" onBack={()=>go("home")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 100px" }}>
+
+        {loading&&(
+          <div style={{ textAlign:"center",padding:"40px 0" }}><Spinner/></div>
+        )}
+
+        {!loading&&(
+          <>
+            {/* Balance Card */}
+            <div className="fade" style={{ background:"linear-gradient(135deg,#071a09,#0d2d1a,#071a09)",borderRadius:22,padding:"28px 24px",marginBottom:16,border:`1px solid rgba(74,222,128,0.25)`,position:"relative",overflow:"hidden" }}>
+              {/* Background glow */}
+              <div style={{ position:"absolute",top:-40,right:-40,width:160,height:160,borderRadius:"50%",background:"rgba(74,222,128,0.06)" }}/>
+              <div style={{ position:"relative",zIndex:1 }}>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20 }}>
+                  <div>
+                    <div style={{ fontSize:12,color:"rgba(255,255,255,0.5)",marginBottom:4 }}>Available Balance</div>
+                    <div style={{ fontWeight:900,fontSize:42,color:T.green,lineHeight:1,letterSpacing:-1 }}>
+                      {fmtGHS(wallet?.balance_pesewas||0)}
+                    </div>
+                  </div>
+                  <div style={{ width:48,height:48,borderRadius:14,background:"rgba(74,222,128,0.15)",border:`1px solid rgba(74,222,128,0.3)`,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                    <i className="fas fa-wallet" style={{ fontSize:20,color:T.green }}/>
+                  </div>
+                </div>
+
+                {wallet?.locked_pesewas>0&&(
+                  <div style={{ background:"rgba(251,191,36,0.1)",borderRadius:10,padding:"8px 12px",marginBottom:16,display:"flex",alignItems:"center",gap:8 }}>
+                    <i className="fas fa-lock" style={{ fontSize:12,color:T.yellow }}/>
+                    <span style={{ fontSize:12,color:T.yellow }}>{fmtGHS(wallet.locked_pesewas)} reserved for active session</span>
+                  </div>
+                )}
+
+                <div style={{ display:"flex",gap:10 }}>
+                  <button onClick={()=>setTab("topup")} className="tap"
+                    style={{ flex:1,background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+                    <i className="fas fa-plus"/> Top Up
+                  </button>
+                  <button onClick={()=>setTab("history")} className="tap"
+                    style={{ flex:1,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:12,padding:"13px",fontSize:14,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+                    <i className="fas fa-history"/> History
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16 }}>
+              {[
+                { label:"Total In",     value:fmtGHS(wallet?.total_topped_up||0),  icon:"fa-arrow-down",  color:T.green  },
+                { label:"Total Spent",  value:fmtGHS(wallet?.total_spent||0),      icon:"fa-bolt",        color:T.red    },
+                { label:"Sessions",     value:wallet?.session_count||0,            icon:"fa-charging-station",color:T.blue },
+              ].map(s=>(
+                <div key={s.label} style={{ background:T.card,borderRadius:14,padding:"14px 10px",border:`1px solid ${T.border}`,textAlign:"center" }}>
+                  <i className={`fas ${s.icon}`} style={{ fontSize:16,color:s.color,marginBottom:6,display:"block" }}/>
+                  <div style={{ fontWeight:800,fontSize:15,color:s.color }}>{s.value}</div>
+                  <div style={{ fontSize:9,color:T.muted,marginTop:3,textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Recent transactions */}
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
+              <div style={{ fontWeight:700,fontSize:15,color:T.text }}>Recent Transactions</div>
+              {txns.length>3&&(
+                <button onClick={()=>setTab("history")} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit" }}>
+                  View all <i className="fas fa-arrow-right" style={{ fontSize:11 }}/>
+                </button>
+              )}
+            </div>
+
+            {txns.length===0&&(
+              <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"28px",textAlign:"center" }}>
+                <i className="fas fa-receipt" style={{ fontSize:36,color:T.muted,marginBottom:10,display:"block",opacity:0.4 }}/>
+                <div style={{ fontWeight:600,fontSize:14,color:T.text,marginBottom:6 }}>No transactions yet</div>
+                <div style={{ fontSize:12,color:T.muted,marginBottom:16 }}>Top up your wallet to start charging</div>
+                <button onClick={()=>setTab("topup")} className="tap"
+                  style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"11px 24px",fontSize:13,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+                  Top Up Now
+                </button>
+              </div>
+            )}
+
+            {txns.slice(0,5).map(tx=>{
+              const cfg = TX_ICONS[tx.type] || TX_ICONS.Adjustment;
+              const isCredit = ["TopUp","Refund","Bonus"].includes(tx.type);
+              return (
+                <div key={tx.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"13px 16px",marginBottom:8,display:"flex",alignItems:"center",gap:12 }}>
+                  <div style={{ width:38,height:38,borderRadius:10,background:`${cfg.color}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                    <i className={`fas ${cfg.icon}`} style={{ fontSize:14,color:cfg.color }}/>
+                  </div>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ fontWeight:600,fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{tx.description||tx.type}</div>
+                    <div style={{ fontSize:11,color:T.muted,marginTop:1 }}>
+                      {new Date(tx.created_at).toLocaleString("en-GH",{ day:"numeric",month:"short",hour:"2-digit",minute:"2-digit" })}
+                    </div>
+                  </div>
+                  <div style={{ fontWeight:800,fontSize:15,color:isCredit?T.green:T.red,flexShrink:0 }}>
+                    {isCredit?"+":"-"}{fmtGHS(tx.amount_pesewas)}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* How it works */}
+            <div style={{ background:T.card,borderRadius:16,padding:"16px",marginTop:8,border:`1px solid ${T.border}` }}>
+              <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}><i className="fas fa-info-circle" style={{ marginRight:8,color:T.blue }}/>How it works</div>
+              {[
+                { icon:"fa-plus-circle",   color:T.green,  text:"Top up with Mobile Money or card" },
+                { icon:"fa-bolt",          color:T.yellow, text:"Funds auto-deducted per kWh charged" },
+                { icon:"fa-tint",          color:T.blue,   text:"Every charge includes 20L clean water" },
+                { icon:"fa-undo",          color:T.blue,   text:"Unused balance refunded anytime" },
+              ].map((item,i)=>(
+                <div key={i} style={{ display:"flex",alignItems:"center",gap:12,marginBottom:i<3?10:0 }}>
+                  <div style={{ width:32,height:32,borderRadius:9,background:`${item.color}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                    <i className={`fas ${item.icon}`} style={{ fontSize:13,color:item.color }}/>
+                  </div>
+                  <span style={{ fontSize:12,color:T.mutedLight }}>{item.text}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+      <Nav active="Profile" go={go}/>
+    </div>
+  );
+}
 export default function App() {
   const [screen,setScreen]   = useState(()=>{ try { return localStorage.getItem("eco_user")?"home":"splash"; } catch(e){ return "splash"; } });
   const [authMode,setAuthMode]= useState("login");
@@ -2024,7 +2409,17 @@ export default function App() {
       if (SUPABASE_URL) {
         sb(`bookings?reference=eq.${ref}&select=*`).then(data=>{ if(data&&data.length>0){ const b=data[0]; sb(`bookings?id=eq.${b.id}`,{ method:"PATCH",headers:{ Prefer:"return=minimal" },body:JSON.stringify({ status:"confirmed",payment_confirmed:true }) }); const updated={ ...b,status:"confirmed",pay_method:"now" }; setBooking(updated); try { localStorage.setItem("eco_booking",JSON.stringify(updated)); } catch(e){} } });
       }
-      setTimeout(()=>setScreen("qr"),150);
+      const topupPending = (() => { try { return JSON.parse(localStorage.getItem("eco_topup")||"null"); } catch(e){ return null; } })();
+      if (topupPending && ref.startsWith("WALLET-")) {
+        if (SUPABASE_URL && topupPending.userId) {
+          fetch(`${SUPABASE_URL}/rest/v1/rpc/wallet_credit`,{ method:"POST",headers:{ apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`,"Content-Type":"application/json" },body:JSON.stringify({ p_user_id:topupPending.userId,p_amount:topupPending.amount,p_type:"TopUp",p_description:"Wallet top-up via Paystack",p_payment_ref:ref }) });
+          fetch(`${SUPABASE_URL}/rest/v1/topup_requests?payment_ref=eq.${ref}`,{ method:"PATCH",headers:{ apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`,"Content-Type":"application/json",Prefer:"return=minimal" },body:JSON.stringify({ status:"Completed",completed_at:new Date().toISOString() }) });
+        }
+        try { localStorage.removeItem("eco_topup"); } catch(e){}
+        setTimeout(()=>setScreen("wallet"),150);
+      } else {
+        setTimeout(()=>setScreen("qr"),150);
+      }
     }
   },[]);
 
@@ -2033,7 +2428,7 @@ export default function App() {
   if (screen==="splash") return <><style>{CSS}</style><Splash onLogin={()=>{ setAuthMode("login");go("auth"); }} onRegister={()=>{ setAuthMode("register");go("auth"); }} onGuest={()=>go("home")}/></>;
   if (screen==="auth") return <><style>{CSS}</style><Auth mode={authMode} onBack={(mode)=>{ if(mode){ setAuthMode(mode); } else { go("splash"); } }} onSuccess={(u)=>{ setUser(u);go("home"); }}/></>;
 
-  const views={chargers:<ChargerAdmin go={goSecure}/>,sessions:<SessionManager go={goSecure} user={user}/>, home:<Home {...props}/>,map:<MapScreen {...props}/>,detail:<Detail {...props}/>,vehicles:<Vehicles {...props}/>,booking:<Booking {...props}/>,bookings:<Bookings {...props}/>,qr:<QRScreen {...props}/>,verify:<Verify {...props}/>,profile:<Profile {...props}/>,about:<About {...props}/> };
+  const views={chargers:<ChargerAdmin go={goSecure}/>,sessions:<SessionManager go={goSecure} user={user}/>,wallet:<WalletScreen go={goSecure} user={user}/>, home:<Home {...props}/>,map:<MapScreen {...props}/>,detail:<Detail {...props}/>,vehicles:<Vehicles {...props}/>,booking:<Booking {...props}/>,bookings:<Bookings {...props}/>,qr:<QRScreen {...props}/>,verify:<Verify {...props}/>,profile:<Profile {...props}/>,about:<About {...props}/> };
 
   return (
     <><style>{CSS}</style>
