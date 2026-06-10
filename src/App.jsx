@@ -913,21 +913,98 @@ function QRScreen({ go, booking, setBooking, user }) {
   const [checks,      setChecks]     = useState({});
   const [walletBal,   setWalletBal]  = useState(null);
   const [costSoFar,   setCostSoFar]  = useState(0);
+  const [realtimeData, setRealtimeData] = useState(null);
+  const [estRemaining, setEstRemaining] = useState(null);
+  const [powerHistory, setPowerHistory] = useState([]);
+  const [realtimeSub,  setRealtimeSub]  = useState(null);
+  const [lastUpdated,  setLastUpdated]  = useState(null);
+  const [signalStr,    setSignalStr]    = useState(100);
 
   let b = booking;
   if (!b) { try { const s=localStorage.getItem("eco_booking"); if(s) b=JSON.parse(s); } catch(e){} }
 
-  // ── LIVE TIMER ────────────────────────────────────────────
+  // ── SUPABASE REALTIME + LIVE TIMER ────────────────────
   useEffect(()=>{
-    if (phase !== "charging") return;
-    const t = setInterval(()=>{
-      setElapsed(e => e+1);
-      setLiveKwh(k => +(k + 0.00055).toFixed(4));  // ~2kW average
-      setLivePower(6.8 + Math.random()*1.2);         // simulate 6.8–8kW
-      setCostSoFar(c => +(c + 0.000472).toFixed(4)); // ~GH₵1.70/hr
+    if (phase !== 'charging') return;
+
+    // 1. Local tick every second (always works)
+    const tick = setInterval(()=>{
+      setElapsed(e => e + 1);
+      // Only use local simulation if no realtime data
+      setRealtimeData(prev => {
+        if (prev) return prev; // realtime is live — don't simulate
+        const newKwh  = +(liveKwh + 0.00055).toFixed(4);
+        const newPow  = +(6.8 + Math.random()*1.4).toFixed(2);
+        const newCost = +(costSoFar + 0.000472).toFixed(4);
+        setLiveKwh(newKwh);
+        setLivePower(newPow);
+        setCostSoFar(newCost);
+        setPowerHistory(h => [...h.slice(-19), { t: Date.now(), v: newPow }]);
+        return null;
+      });
+      setLastUpdated(new Date());
+      setSignalStr(s => Math.max(20, s + (Math.random()-0.5)*10));
     }, 1000);
-    return () => clearInterval(t);
-  }, [phase]);
+
+    // 2. Supabase Realtime subscription for live meter values
+    let sub = null;
+    if (SUPABASE_URL && sessionId) {
+      try {
+        // Poll meter_values every 5s (Realtime via polling)
+        const pollMeter = async () => {
+          try {
+            const res = await fetch(
+              `${SUPABASE_URL}/rest/v1/meter_values?session_id=eq.${sessionId}&order=created_at.desc&limit=1`,
+              { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+            );
+            const data = await res.json();
+            if (data?.[0]) {
+              const mv = data[0];
+              if (mv.measurand === 'Energy.Active.Import.Register') {
+                const kwh = mv.value / 1000;
+                setLiveKwh(kwh);
+                setCostSoFar(+(kwh * 0.85 + 5).toFixed(2));
+                setRealtimeData(mv);
+                setLastUpdated(new Date());
+              }
+              if (mv.measurand === 'Power.Active.Import') {
+                setLivePower(mv.value / 1000);
+                setPowerHistory(h => [...h.slice(-19), { t: Date.now(), v: mv.value/1000 }]);
+              }
+            }
+            // Also refresh wallet
+            if (user?.id) {
+              const wRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/wallets?user_id=eq.${user.id}&select=balance_pesewas`,
+                { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+              );
+              const wData = await wRes.json();
+              if (wData?.[0]) setWalletBal(wData[0].balance_pesewas);
+            }
+          } catch(e) {}
+        };
+        const pollInterval = setInterval(pollMeter, 5000);
+        pollMeter(); // immediate first fetch
+        sub = pollInterval;
+        setRealtimeSub(pollInterval);
+      } catch(e) { console.error('Realtime setup error:', e); }
+    }
+
+    return () => {
+      clearInterval(tick);
+      if (sub) clearInterval(sub);
+    };
+  }, [phase, sessionId]);
+
+  // ── ESTIMATED REMAINING TIME ──────────────────────────────
+  useEffect(()=>{
+    if (!b?.duration_min || phase !== 'charging') return;
+    const totalSec = b.duration_min * 60;
+    const remSec   = Math.max(0, totalSec - elapsed);
+    const rm = Math.floor(remSec/60);
+    const rs = remSec % 60;
+    setEstRemaining(`${rm}m ${rs}s`);
+  }, [elapsed, phase]);
 
   // ── LOAD WALLET BALANCE ───────────────────────────────────
   const loadWallet = async () => {
@@ -1299,82 +1376,170 @@ function QRScreen({ go, booking, setBooking, user }) {
     </div>
   );
 
-  // ── CHARGING SCREEN ───────────────────────────────────────
-  if (phase === "charging" || phase === "stopping") return (
-    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title={phase==="stopping"?"Stopping...":"Charging"} sub={b.station}/>
-      <div style={{ flex:1,overflowY:"auto",padding:"16px 16px 40px" }}>
+  // ── LIVE CHARGING DASHBOARD ─────────────────────────────
+  if (phase === 'charging' || phase === 'stopping') return (
+    <div style={{ display:'flex',flexDirection:'column',height:'100%',background:'#060d08' }}>
 
-        {/* Live status banner */}
-        <div style={{ background:"rgba(56,189,248,0.1)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:14,padding:"8px 16px",marginBottom:20,textAlign:"center" }}>
-          <span style={{ fontSize:12,fontWeight:700,color:T.blue,letterSpacing:1 }}>
-            {phase==="stopping"?<><Spinner/><span style={{ marginLeft:8 }}>STOPPING SESSION...</span></> : "⚡ CHARGING IN PROGRESS"}
-          </span>
+      {/* TOP BAR */}
+      <div style={{ padding:'14px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid rgba(74,222,128,0.15)`,background:'rgba(0,0,0,0.3)',flexShrink:0 }}>
+        <div style={{ display:'flex',alignItems:'center',gap:10 }}>
+          <div style={{ width:10,height:10,borderRadius:'50%',background:T.green,boxShadow:'0 0 8px #4ade80',animation:'spin 2s linear infinite' }}/>
+          <div>
+            <div style={{ fontWeight:800,fontSize:14,color:T.text }}>{phase==='stopping'?'Stopping Session...':'Live Charging Dashboard'}</div>
+            <div style={{ fontSize:10,color:T.muted,marginTop:1 }}>{b.station} · {b.vehicle}</div>
+          </div>
         </div>
+        <div style={{ display:'flex',alignItems:'center',gap:8 }}>
+          {realtimeData&&<div style={{ background:'rgba(74,222,128,0.1)',border:'1px solid rgba(74,222,128,0.2)',borderRadius:8,padding:'3px 8px',fontSize:10,color:T.green,fontWeight:700 }}>LIVE</div>}
+          {lastUpdated&&<div style={{ fontSize:9,color:T.muted }}>{lastUpdated.toLocaleTimeString('en-GH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</div>}
+        </div>
+      </div>
 
-        {/* Circular progress */}
-        <div style={{ display:"flex",alignItems:"center",justifyContent:"center",marginBottom:24 }}>
-          <div style={{ position:"relative",width:200,height:200 }}>
-            <svg width="200" height="200" style={{ transform:"rotate(-90deg)" }}>
-              <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="14"/>
-              <circle cx="100" cy="100" r="88" fill="none" stroke="url(#chgrad)" strokeWidth="14"
-                strokeDasharray={`${2*Math.PI*88}`}
-                strokeDashoffset={`${2*Math.PI*88*(1-pct/100)}`}
-                strokeLinecap="round" style={{ transition:"stroke-dashoffset 1s linear" }}/>
+      <div style={{ flex:1,overflowY:'auto',padding:'14px 14px 24px' }}>
+
+        {/* HERO: Circular progress + timer */}
+        <div style={{ display:'flex',alignItems:'center',justifyContent:'center',marginBottom:18,position:'relative' }}>
+          <div style={{ position:'relative',width:210,height:210 }}>
+            {/* Outer glow ring */}
+            <div style={{ position:'absolute',inset:-8,borderRadius:'50%',background:'radial-gradient(circle,rgba(74,222,128,0.08) 0%,transparent 70%)' }}/>
+            <svg width='210' height='210' style={{ transform:'rotate(-90deg)' }}>
+              <circle cx='105' cy='105' r='90' fill='none' stroke='rgba(255,255,255,0.05)' strokeWidth='16'/>
+              <circle cx='105' cy='105' r='90' fill='none' stroke='url(#dashGrad)' strokeWidth='16'
+                strokeDasharray={`${2*Math.PI*90}`}
+                strokeDashoffset={`${2*Math.PI*90*(1-pct/100)}`}
+                strokeLinecap='round' style={{ transition:'stroke-dashoffset 1s linear' }}/>
               <defs>
-                <linearGradient id="chgrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor={T.green}/>
-                  <stop offset="100%" stopColor={T.blue}/>
+                <linearGradient id='dashGrad' x1='0%' y1='0%' x2='100%' y2='0%'>
+                  <stop offset='0%' stopColor='#4ade80'/>
+                  <stop offset='50%' stopColor='#38bdf8'/>
+                  <stop offset='100%' stopColor='#4ade80'/>
                 </linearGradient>
               </defs>
             </svg>
-            <div style={{ position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center" }}>
-              <div style={{ fontWeight:900,fontSize:42,color:T.text,lineHeight:1 }}>{pct}%</div>
-              <div style={{ fontSize:11,color:T.muted,marginTop:4 }}>State of Charge</div>
-              <div style={{ fontWeight:700,fontSize:16,color:T.green,marginTop:6,fontFamily:"monospace" }}>{fmtElapsed(elapsed)}</div>
+            <div style={{ position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center' }}>
+              <div style={{ fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:1,marginBottom:2 }}>Duration</div>
+              <div style={{ fontWeight:900,fontSize:38,color:T.text,lineHeight:1,fontFamily:'monospace' }}>{fmtElapsed(elapsed)}</div>
+              <div style={{ fontSize:11,color:T.green,marginTop:6,fontWeight:700 }}>{pct}% complete</div>
+              {estRemaining&&<div style={{ fontSize:10,color:T.muted,marginTop:3 }}>~{estRemaining} left</div>}
             </div>
           </div>
         </div>
 
-        {/* Live stats */}
-        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16 }}>
-          {[
-            { label:"Energy",  value:`${liveKwh.toFixed(3)}`,  unit:"kWh", icon:"fa-bolt",       color:T.green  },
-            { label:"Power",   value:`${livePower.toFixed(1)}`, unit:"kW",  icon:"fa-plug",       color:T.blue   },
-            { label:"Cost",    value:`GH₵${costSoFar.toFixed(2)}`,unit:"",  icon:"fa-money-bill-alt",color:T.yellow },
-          ].map(s=>(
-            <div key={s.label} style={{ background:T.card,borderRadius:14,padding:"14px 8px",border:`1px solid ${T.border}`,textAlign:"center" }}>
-              <i className={`fas ${s.icon}`} style={{ fontSize:14,color:s.color,marginBottom:6,display:"block" }}/>
-              <div style={{ fontWeight:800,fontSize:16,color:T.text }}>{s.value}<span style={{ fontSize:10,color:T.muted,fontWeight:400 }}>{s.unit}</span></div>
-              <div style={{ fontSize:9,color:T.muted,marginTop:3,textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
+        {/* BIG STATS ROW */}
+        <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10 }}>
+
+          {/* Power kW */}
+          <div style={{ background:'linear-gradient(135deg,#061520,#0a2030)',borderRadius:16,padding:'16px',border:'1px solid rgba(56,189,248,0.2)' }}>
+            <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
+              <i className='fas fa-plug' style={{ fontSize:12,color:T.blue }}/>
+              <span style={{ fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:0.8,fontWeight:700 }}>Current Power</span>
             </div>
-          ))}
+            <div style={{ fontWeight:900,fontSize:32,color:T.blue,lineHeight:1 }}>{livePower.toFixed(1)}</div>
+            <div style={{ fontSize:12,color:T.muted,marginTop:3 }}>kW</div>
+            {/* Mini power bar */}
+            <div style={{ height:4,borderRadius:2,background:'rgba(255,255,255,0.06)',overflow:'hidden',marginTop:8 }}>
+              <div style={{ height:'100%',width:`${Math.min(100,(livePower/22)*100)}%`,background:`linear-gradient(90deg,${T.blue},#818cf8)`,borderRadius:2,transition:'width .5s ease' }}/>
+            </div>
+            <div style={{ fontSize:9,color:T.muted,marginTop:3 }}>Max: 22 kW</div>
+          </div>
+
+          {/* Energy kWh */}
+          <div style={{ background:'linear-gradient(135deg,#071a09,#0a2510)',borderRadius:16,padding:'16px',border:'1px solid rgba(74,222,128,0.2)' }}>
+            <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
+              <i className='fas fa-bolt' style={{ fontSize:12,color:T.green }}/>
+              <span style={{ fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:0.8,fontWeight:700 }}>Energy</span>
+            </div>
+            <div style={{ fontWeight:900,fontSize:32,color:T.green,lineHeight:1 }}>{liveKwh.toFixed(3)}</div>
+            <div style={{ fontSize:12,color:T.muted,marginTop:3 }}>kWh consumed</div>
+            <div style={{ height:4,borderRadius:2,background:'rgba(255,255,255,0.06)',overflow:'hidden',marginTop:8 }}>
+              <div style={{ height:'100%',width:`${Math.min(100,(liveKwh/50)*100)}%`,background:`linear-gradient(90deg,${T.green},#86efac)`,borderRadius:2,transition:'width .5s ease' }}/>
+            </div>
+            <div style={{ fontSize:9,color:T.muted,marginTop:3 }}>CO₂ saved: {(liveKwh*0.5).toFixed(2)} kg</div>
+          </div>
         </div>
 
-        {/* Session info */}
-        <div style={{ background:T.card,borderRadius:14,padding:"14px 16px",marginBottom:16,border:`1px solid ${T.border}` }}>
+        {/* COST + WALLET ROW */}
+        <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10 }}>
+
+          {/* Cost so far */}
+          <div style={{ background:'linear-gradient(135deg,#1a1000,#2a1800)',borderRadius:16,padding:'16px',border:'1px solid rgba(251,191,36,0.2)' }}>
+            <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
+              <i className='fas fa-money-bill-alt' style={{ fontSize:12,color:T.yellow }}/>
+              <span style={{ fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:0.8,fontWeight:700 }}>Cost So Far</span>
+            </div>
+            <div style={{ fontWeight:900,fontSize:28,color:T.yellow,lineHeight:1 }}>GH₵{costSoFar.toFixed(2)}</div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:4 }}>GH₵0.85/kWh + GH₵5 base</div>
+          </div>
+
+          {/* Wallet balance */}
+          <div style={{ background:'linear-gradient(135deg,#071a09,#0a2510)',borderRadius:16,padding:'16px',border:`1px solid ${walletBal!=null&&walletBal<(costSoFar*100+500)?'rgba(248,113,113,0.3)':'rgba(74,222,128,0.2)'}` }}>
+            <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
+              <i className='fas fa-wallet' style={{ fontSize:12,color:walletBal!=null&&walletBal<(costSoFar*100+500)?T.red:T.green }}/>
+              <span style={{ fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:0.8,fontWeight:700 }}>Wallet</span>
+            </div>
+            <div style={{ fontWeight:900,fontSize:28,color:walletBal!=null&&walletBal<(costSoFar*100+500)?T.red:T.green,lineHeight:1 }}>
+              {walletBal!=null?`GH₵${(walletBal/100).toFixed(2)}`:'--'}
+            </div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:4 }}>
+              {walletBal!=null&&walletBal<(costSoFar*100+500)?'⚠️ Low balance':'Available balance'}
+            </div>
+          </div>
+        </div>
+
+        {/* POWER CHART (mini sparkline) */}
+        {powerHistory.length > 2 && (
+          <div style={{ background:T.card,borderRadius:16,padding:'14px 16px',marginBottom:10,border:`1px solid ${T.border}` }}>
+            <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10 }}>
+              <div style={{ fontWeight:700,fontSize:12,color:T.text }}><i className='fas fa-chart-line' style={{ marginRight:6,color:T.blue }}/>Power History</div>
+              <div style={{ fontSize:10,color:T.muted }}>Last {powerHistory.length} readings</div>
+            </div>
+            <div style={{ height:48,display:'flex',alignItems:'flex-end',gap:2 }}>
+              {powerHistory.map((p,i)=>{
+                const maxP = Math.max(...powerHistory.map(x=>x.v), 0.1);
+                const h = Math.max(4, Math.round((p.v/maxP)*44));
+                return (
+                  <div key={i} style={{ flex:1,height:`${h}px`,background:i===powerHistory.length-1?T.blue:'rgba(56,189,248,0.3)',borderRadius:'2px 2px 0 0',transition:'height .3s ease' }}/>
+                );
+              })}
+            </div>
+            <div style={{ display:'flex',justifyContent:'space-between',marginTop:4 }}>
+              <span style={{ fontSize:9,color:T.muted }}>Earlier</span>
+              <span style={{ fontSize:10,color:T.blue,fontWeight:700 }}>Now: {livePower.toFixed(1)} kW</span>
+            </div>
+          </div>
+        )}
+
+        {/* SESSION DETAILS */}
+        <div style={{ background:T.card,borderRadius:16,padding:'14px 16px',marginBottom:14,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:12,color:T.text,marginBottom:10 }}><i className='fas fa-info-circle' style={{ marginRight:6,color:T.green }}/>Session Details</div>
           {[
-            { label:"Station",    value: b.station },
-            { label:"Vehicle",    value: b.vehicle },
-            { label:"Session ID", value: sessionId||"--" },
-            { label:"Wallet",     value: walletBal!=null ? `GH₵${(walletBal/100).toFixed(2)} remaining` : "--" },
-            { label:"Water",      value: "20L included 💧" },
+            { label:'Session ID',  value:sessionId||'--',          mono:true  },
+            { label:'Charger',     value:b.charger_id||'ECOCHARGE-001', mono:false },
+            { label:'Est. Finish', value:estRemaining?`~${estRemaining} remaining`:'--', mono:false },
+            { label:'Rate',        value:'GH₵0.85/kWh + GH₵5 base', mono:false },
+            { label:'Solar',       value:'85% Solar Powered ☀️',   mono:false },
+            { label:'Water',       value:'20L Clean Water 💧',      mono:false },
           ].map(r=>(
-            <div key={r.label} style={{ display:"flex",justifyContent:"space-between",marginBottom:8,paddingBottom:8,borderBottom:`1px solid rgba(255,255,255,0.04)` }}>
-              <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
-              <span style={{ color:T.text,fontWeight:600,fontSize:12,fontFamily:r.label==="Session ID"?"monospace":"inherit",maxWidth:"55%",textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{r.value}</span>
+            <div key={r.label} style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,paddingBottom:8,borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+              <span style={{ color:T.muted,fontSize:12 }}>{r.label}</span>
+              <span style={{ color:T.text,fontWeight:600,fontSize:11,fontFamily:r.mono?'monospace':'inherit',maxWidth:'55%',textAlign:'right',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{r.value}</span>
             </div>
           ))}
-          <div style={{ fontSize:11,color:T.muted,textAlign:"center",marginTop:4 }}>
-            <i className="fas fa-sun" style={{ color:T.yellow,marginRight:6 }}/>Powered by solar energy — zero emissions ⚡
+          <div style={{ fontSize:10,color:T.muted,textAlign:'center',marginTop:4 }}>
+            {realtimeData?<><i className='fas fa-satellite-dish' style={{ color:T.green,marginRight:4 }}/>Live data from charger</>:<><i className='fas fa-clock' style={{ color:T.muted,marginRight:4 }}/>Simulated data — connect OCPP charger for live readings</>}
           </div>
         </div>
 
-        {/* Stop button */}
-        <button onClick={stopCharging} disabled={phase==="stopping"} className="tap"
-          style={{ width:"100%",background:`linear-gradient(135deg,${T.red},#dc2626)`,border:"none",borderRadius:14,padding:"17px",fontSize:16,fontWeight:700,color:"#fff",cursor:phase==="stopping"?"default":"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:phase==="stopping"?0.7:1 }}>
-          {phase==="stopping"?<><Spinner/> Stopping...</>:<><i className="fas fa-stop-circle"/> Stop Charging</>}
+        {/* STOP BUTTON */}
+        <button onClick={stopCharging} disabled={phase==='stopping'} className='tap'
+          style={{ width:'100%',background:`linear-gradient(135deg,${T.red},#dc2626)`,border:'none',borderRadius:14,padding:'17px',fontSize:16,fontWeight:700,color:'#fff',cursor:phase==='stopping'?'default':'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',gap:10,opacity:phase==='stopping'?0.7:1,boxShadow:'0 4px 16px rgba(248,113,113,0.3)' }}>
+          {phase==='stopping'?<><Spinner/> Stopping...</>:<><i className='fas fa-stop-circle'/> Stop Charging</>}
         </button>
+
+        <div style={{ fontSize:10,color:T.muted,textAlign:'center',marginTop:10,lineHeight:1.7 }}>
+          Wallet will be debited GH₵{costSoFar.toFixed(2)} when you stop.<br/>
+          <i className='fas fa-sun' style={{ color:T.yellow,marginRight:4 }}/>Powered by 85% solar energy
+        </div>
       </div>
     </div>
   );
