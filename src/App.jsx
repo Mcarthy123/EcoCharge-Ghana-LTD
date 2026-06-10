@@ -2021,6 +2021,7 @@ function WalletScreen({ go, user }) {
   const [customAmt, setCustomAmt] = useState("");
   const [paying,    setPaying]    = useState(false);
   const [txFilter,  setTxFilter]  = useState("All");
+  const [payError,  setPayError]  = useState("");
 
   const loadWallet = async () => {
     if (!SUPABASE_URL || !user?.id) { setLoading(false); return; }
@@ -2056,8 +2057,6 @@ function WalletScreen({ go, user }) {
   };
 
   useEffect(()=>{ loadWallet(); },[user]);
-
-  const [payError, setPayError] = useState("");
 
   const initiateTopUp = async () => {
     const amount = customAmt ? toPesewas(customAmt) : topupAmt;
