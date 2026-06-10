@@ -211,6 +211,7 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => (
           { icon:"fa-charging-station", label:"Charger Admin",   screen:"chargers", color:T.blue   },
           { icon:"fa-list-alt",        label:"Session Manager", screen:"sessions", color:T.green  },
           { icon:"fa-wallet",          label:"My Wallet",       screen:"wallet",   color:T.yellow },
+          { icon:"fa-tags",            label:"Pricing Engine",  screen:"pricing",  color:"#a78bfa" },
         ].map(item=>(
           <div key={item.label} className="tap row" onClick={()=>{ go(item.screen);onClose(); }}
             style={{ display:"flex",alignItems:"center",gap:14,padding:"16px 20px",borderBottom:`1px solid ${T.border}20` }}>
@@ -2375,6 +2376,439 @@ function WalletScreen({ go, user }) {
     </div>
   );
 }
+
+// ── PRICING ENGINE HELPERS ────────────────────────────────────
+const PESEWAS = (p) => p != null ? (p/100).toFixed(2) : "0.00";
+const GHS     = (p) => `GH₵${PESEWAS(p)}`;
+
+const PROMO_COLORS = {
+  Percentage:    { color:"#fbbf24", label:"% Off"     },
+  FixedDiscount: { color:"#38bdf8", label:"Flat Off"  },
+  FlatRate:      { color:"#4ade80", label:"Flat Rate" },
+  FreeKwh:       { color:"#a78bfa", label:"Free kWh"  },
+};
+
+const SCHEDULE_LABELS = {
+  Always:    "Always active",
+  TimeOfDay: "Time of day",
+  DayOfWeek: "Specific days",
+  DateRange: "Date range",
+  Combined:  "Time + Days",
+};
+
+// ── PRICING ADMIN SCREEN ──────────────────────────────────────
+function PricingAdmin({ go, user }) {
+  const [tariffs,   setTariffs]   = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [selected,  setSelected]  = useState(null);
+  const [editing,   setEditing]   = useState(null);  // tariff being edited
+  const [saving,    setSaving]    = useState(false);
+  const [tab,       setTab]       = useState("list"); // list | edit | simulate
+  const [simResult, setSimResult] = useState(null);
+
+  // Simulator state
+  const [simKwh,    setSimKwh]    = useState("10");
+  const [simMins,   setSimMins]   = useState("60");
+  const [simIdle,   setSimIdle]   = useState("0");
+  const [simTariff, setSimTariff] = useState(null);
+
+  const loadTariffs = async () => {
+    setLoading(true);
+    if (!SUPABASE_URL) { setLoading(false); return; }
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/tariffs?order=priority.asc,name.asc&select=*`,
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+      );
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setTariffs(data);
+        if (!simTariff && data.length) setSimTariff(data[0]);
+      }
+    } catch(e) {}
+    setLoading(false);
+  };
+
+  const saveTariff = async () => {
+    if (!editing) return;
+    setSaving(true);
+    try {
+      const isNew = !editing.id;
+      const url   = isNew
+        ? `${SUPABASE_URL}/rest/v1/tariffs`
+        : `${SUPABASE_URL}/rest/v1/tariffs?id=eq.${editing.id}`;
+      await fetch(url, {
+        method: isNew ? "POST" : "PATCH",
+        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify(editing),
+      });
+      await loadTariffs();
+      setTab("list");
+      setEditing(null);
+    } catch(e) {}
+    setSaving(false);
+  };
+
+  const toggleActive = async (tariff) => {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/tariffs?id=eq.${tariff.id}`, {
+        method: "PATCH",
+        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify({ is_active: !tariff.is_active }),
+      });
+      setTariffs(prev => prev.map(t => t.id===tariff.id ? {...t, is_active: !t.is_active} : t));
+    } catch(e) {}
+  };
+
+  const simulate = () => {
+    if (!simTariff) return;
+    const kwh  = parseFloat(simKwh)  || 0;
+    const mins = parseFloat(simMins) || 0;
+    const idle = parseFloat(simIdle) || 0;
+    const energyCost = Math.round(kwh  * simTariff.price_per_kwh);
+    const timeCost   = Math.round(mins * simTariff.price_per_min);
+    const billableIdle = Math.max(0, idle - simTariff.idle_grace_min);
+    const idleCost   = Math.round(billableIdle * simTariff.idle_fee_per_min);
+    const baseFee    = simTariff.session_base_fee || 0;
+    let subtotal     = energyCost + timeCost + idleCost + baseFee;
+    subtotal         = Math.max(subtotal, simTariff.min_charge_fee || 0);
+    let discount     = 0;
+    if (simTariff.is_promo && simTariff.promo_type === "Percentage") {
+      discount = Math.round(subtotal * simTariff.promo_value / 100);
+    } else if (simTariff.is_promo && simTariff.promo_type === "FixedDiscount") {
+      discount = Math.min(simTariff.promo_value, subtotal);
+    }
+    const total = Math.max(0, subtotal - discount);
+    setSimResult({ energyCost, timeCost, idleCost, baseFee, subtotal, discount, total });
+  };
+
+  useEffect(()=>{ loadTariffs(); },[]);
+
+  const newTariff = () => {
+    setEditing({
+      name:"", code:"", description:"",
+      price_per_kwh:85, price_per_min:0,
+      idle_fee_per_min:0, idle_grace_min:10,
+      session_base_fee:500, min_charge_fee:0,
+      is_promo:false, promo_type:null, promo_value:0, promo_code:"",
+      schedule_type:"Always", is_active:true, priority:0,
+      is_default:false,
+    });
+    setTab("edit");
+  };
+
+  const inp = (label, key, type="number", placeholder="") => (
+    <div style={{ marginBottom:12 }}>
+      <div style={{ fontSize:11,color:T.muted,marginBottom:5,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5 }}>{label}</div>
+      <input type={type} placeholder={placeholder} value={editing?.[key]||""}
+        onChange={e=>setEditing(prev=>({...prev,[key]:type==="number"?parseFloat(e.target.value)||0:e.target.value}))}
+        style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+    </div>
+  );
+
+  // ── EDIT TAB ──────────────────────────────────────────────
+  if (tab==="edit") return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title={editing?.id?"Edit Tariff":"New Tariff"} sub="Configure pricing" onBack={()=>{ setTab("list");setEditing(null); }}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"14px 16px 100px" }}>
+
+        <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:14 }}><i className="fas fa-tag" style={{ marginRight:8,color:T.green }}/>Basic Info</div>
+          {inp("Tariff Name", "name", "text", "e.g. Standard Rate")}
+          {inp("Code (unique)", "code", "text", "e.g. STANDARD")}
+          {inp("Description", "description", "text", "Short description")}
+          <div style={{ marginBottom:12 }}>
+            <div style={{ fontSize:11,color:T.muted,marginBottom:5,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5 }}>Priority (higher = used first)</div>
+            <input type="number" value={editing?.priority||0} onChange={e=>setEditing(p=>({...p,priority:parseInt(e.target.value)||0}))}
+              style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+          </div>
+        </div>
+
+        <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:14 }}><i className="fas fa-bolt" style={{ marginRight:8,color:T.yellow }}/>Pricing (in Pesewas)</div>
+          <div style={{ background:"rgba(56,189,248,0.08)",borderRadius:10,padding:"10px 12px",marginBottom:14,fontSize:11,color:T.blue }}>
+            <i className="fas fa-info-circle" style={{ marginRight:6 }}/>100 pesewas = GH₵1.00 · e.g. 85 = GH₵0.85/kWh
+          </div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+            {[
+              { label:"Price per kWh",    key:"price_per_kwh" },
+              { label:"Price per Minute", key:"price_per_min" },
+              { label:"Idle Fee/Min",     key:"idle_fee_per_min" },
+              { label:"Idle Grace (min)", key:"idle_grace_min" },
+              { label:"Base/Session Fee", key:"session_base_fee" },
+              { label:"Min Session Fee",  key:"min_charge_fee" },
+            ].map(f=>(
+              <div key={f.key}>
+                <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600 }}>{f.label}</div>
+                <input type="number" value={editing?.[f.key]||0} onChange={e=>setEditing(p=>({...p,[f.key]:parseInt(e.target.value)||0}))}
+                  style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+            <div style={{ fontWeight:700,fontSize:13,color:T.text }}><i className="fas fa-tag" style={{ marginRight:8,color:T.yellow }}/>Promotional</div>
+            <button onClick={()=>setEditing(p=>({...p,is_promo:!p.is_promo}))} className="tap"
+              style={{ background:editing?.is_promo?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.border,border:"none",borderRadius:20,padding:"5px 16px",fontSize:12,fontWeight:700,color:editing?.is_promo?"#000":T.muted,cursor:"pointer",fontFamily:"inherit" }}>
+              {editing?.is_promo?"ON":"OFF"}
+            </button>
+          </div>
+          {editing?.is_promo&&(
+            <>
+              <div style={{ marginBottom:12 }}>
+                <div style={{ fontSize:11,color:T.muted,marginBottom:5,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5 }}>Promo Type</div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+                  {["Percentage","FixedDiscount","FlatRate","FreeKwh"].map(pt=>(
+                    <button key={pt} onClick={()=>setEditing(p=>({...p,promo_type:pt}))} className="tap"
+                      style={{ background:editing?.promo_type===pt?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.bg,border:`1px solid ${editing?.promo_type===pt?T.green:T.border}`,borderRadius:8,padding:"9px",fontSize:11,fontWeight:700,color:editing?.promo_type===pt?"#000":T.muted,cursor:"pointer",fontFamily:"inherit" }}>
+                      {pt==="Percentage"?"% Off":pt==="FixedDiscount"?"Fixed Off":pt==="FlatRate"?"Flat Rate":"Free kWh"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {inp("Promo Value (% or pesewas)", "promo_value")}
+              {inp("Promo Code (optional)", "promo_code", "text", "e.g. SAVE20")}
+              {inp("Max Uses (0 = unlimited)", "promo_max_uses")}
+            </>
+          )}
+        </div>
+
+        <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:14 }}><i className="fas fa-clock" style={{ marginRight:8,color:T.blue }}/>Schedule</div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12 }}>
+            {["Always","TimeOfDay","DayOfWeek","DateRange"].map(st=>(
+              <button key={st} onClick={()=>setEditing(p=>({...p,schedule_type:st}))} className="tap"
+                style={{ background:editing?.schedule_type===st?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.bg,border:`1px solid ${editing?.schedule_type===st?T.green:T.border}`,borderRadius:8,padding:"9px",fontSize:11,fontWeight:700,color:editing?.schedule_type===st?"#000":T.muted,cursor:"pointer",fontFamily:"inherit" }}>
+                {st==="Always"?"Always":st==="TimeOfDay"?"By Time":st==="DayOfWeek"?"By Day":"Date Range"}
+              </button>
+            ))}
+          </div>
+          {(editing?.schedule_type==="TimeOfDay"||editing?.schedule_type==="Combined")&&(
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
+              <div>
+                <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600 }}>FROM TIME</div>
+                <input type="time" value={editing?.active_from_time||""} onChange={e=>setEditing(p=>({...p,active_from_time:e.target.value}))}
+                  style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+              </div>
+              <div>
+                <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600 }}>TO TIME</div>
+                <input type="time" value={editing?.active_to_time||""} onChange={e=>setEditing(p=>({...p,active_to_time:e.target.value}))}
+                  style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+              </div>
+            </div>
+          )}
+          {(editing?.schedule_type==="DateRange")&&(
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+              <div>
+                <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600 }}>FROM DATE</div>
+                <input type="date" value={editing?.active_from_date||""} onChange={e=>setEditing(p=>({...p,active_from_date:e.target.value}))}
+                  style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+              </div>
+              <div>
+                <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600 }}>TO DATE</div>
+                <input type="date" value={editing?.active_to_date||""} onChange={e=>setEditing(p=>({...p,active_to_date:e.target.value}))}
+                  style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <button onClick={saveTariff} disabled={saving||!editing?.name||!editing?.code} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:16,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:saving?0.7:1 }}>
+          {saving?<><Spinner/> Saving…</>:<><i className="fas fa-save"/> Save Tariff</>}
+        </button>
+      </div>
+    </div>
+  );
+
+  // ── SIMULATE TAB ─────────────────────────────────────────
+  if (tab==="simulate") return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Price Simulator" sub="Test tariff costs" onBack={()=>setTab("list")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"14px 16px 100px" }}>
+
+        {/* Tariff selector */}
+        <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}>Select Tariff</div>
+        <div style={{ display:"flex",gap:8,overflowX:"auto",paddingBottom:4,marginBottom:16 }}>
+          {tariffs.filter(t=>t.is_active).map(t=>(
+            <button key={t.id} onClick={()=>setSimTariff(t)} className="tap"
+              style={{ flexShrink:0,background:simTariff?.id===t.id?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.card,border:`1px solid ${simTariff?.id===t.id?T.green:T.border}`,borderRadius:10,padding:"8px 16px",fontSize:12,fontWeight:700,color:simTariff?.id===t.id?"#000":T.muted,cursor:"pointer",fontFamily:"inherit" }}>
+              {t.name}
+            </button>
+          ))}
+        </div>
+
+        {/* Inputs */}
+        <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:14 }}><i className="fas fa-sliders-h" style={{ marginRight:8,color:T.green }}/>Session Parameters</div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10 }}>
+            {[
+              { label:"Energy (kWh)", val:simKwh, set:setSimKwh },
+              { label:"Duration (min)", val:simMins, set:setSimMins },
+              { label:"Idle (min)", val:simIdle, set:setSimIdle },
+            ].map(f=>(
+              <div key={f.label}>
+                <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600 }}>{f.label}</div>
+                <input type="number" value={f.val} onChange={e=>f.set(e.target.value)}
+                  style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:15,fontWeight:700,fontFamily:"inherit",textAlign:"center" }}/>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button onClick={simulate} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"14px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:16 }}>
+          <i className="fas fa-calculator"/> Calculate Cost
+        </button>
+
+        {simResult&&(
+          <div className="fade" style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:18,padding:"18px",border:`1px solid rgba(74,222,128,0.25)` }}>
+            <div style={{ textAlign:"center",marginBottom:16 }}>
+              <div style={{ fontSize:12,color:T.muted,marginBottom:4 }}>Estimated Cost — {simTariff?.name}</div>
+              <div style={{ fontWeight:900,fontSize:44,color:T.green }}>{GHS(simResult.total)}</div>
+              {simResult.discount>0&&<div style={{ fontSize:13,color:T.yellow,marginTop:4 }}>You save {GHS(simResult.discount)} 🎉</div>}
+            </div>
+            <Divider/>
+            {[
+              { label:`Energy (${simKwh} kWh)`,     value:GHS(simResult.energyCost), show:simResult.energyCost>0 },
+              { label:`Time (${simMins} min)`,       value:GHS(simResult.timeCost),   show:simResult.timeCost>0   },
+              { label:`Idle fee (${simIdle} min)`,   value:GHS(simResult.idleCost),   show:simResult.idleCost>0   },
+              { label:"Base/connection fee",         value:GHS(simResult.baseFee),    show:simResult.baseFee>0    },
+              { label:"Subtotal",                    value:GHS(simResult.subtotal),   show:true                   },
+              { label:"Promo discount",              value:`-${GHS(simResult.discount)}`,show:simResult.discount>0 },
+            ].filter(r=>r.show).map(r=>(
+              <div key={r.label} style={{ display:"flex",justifyContent:"space-between",marginBottom:8 }}>
+                <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
+                <span style={{ color:r.label.includes("discount")?T.yellow:T.text,fontWeight:600,fontSize:13 }}>{r.value}</span>
+              </div>
+            ))}
+            <Divider/>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+              <span style={{ fontWeight:700,color:T.text,fontSize:14 }}>Total</span>
+              <span style={{ fontWeight:900,fontSize:24,color:T.green }}>{GHS(simResult.total)}</span>
+            </div>
+          </div>
+        )}
+      </div>
+      <Nav active="More" go={go}/>
+    </div>
+  );
+
+  // ── TARIFF LIST ───────────────────────────────────────────
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Pricing Engine" sub="Manage tariffs" onBack={()=>go("home")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"12px 14px 100px" }}>
+
+        {/* Action bar */}
+        <div style={{ display:"flex",gap:8,marginBottom:14 }}>
+          <button onClick={newTariff} className="tap"
+            style={{ flex:1,background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+            <i className="fas fa-plus"/> New Tariff
+          </button>
+          <button onClick={()=>setTab("simulate")} className="tap"
+            style={{ flex:1,background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,color:T.blue,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+            <i className="fas fa-calculator"/> Simulate
+          </button>
+          <button onClick={loadTariffs} className="tap"
+            style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px",fontSize:13,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center" }}>
+            <i className={`fas fa-sync${loading?" fa-spin":""}`}/>
+          </button>
+        </div>
+
+        {/* Summary */}
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14 }}>
+          {[
+            { label:"Total",    value:tariffs.length,                          color:T.text   },
+            { label:"Active",   value:tariffs.filter(t=>t.is_active).length,   color:T.green  },
+            { label:"Promos",   value:tariffs.filter(t=>t.is_promo).length,    color:T.yellow },
+          ].map(s=>(
+            <div key={s.label} style={{ background:T.card,borderRadius:12,padding:"12px",border:`1px solid ${T.border}`,textAlign:"center" }}>
+              <div style={{ fontWeight:800,fontSize:22,color:s.color }}>{s.value}</div>
+              <div style={{ fontSize:10,color:T.muted,marginTop:3,textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {loading&&<div style={{ textAlign:"center",padding:"30px 0" }}><Spinner/></div>}
+
+        {tariffs.map(t=>(
+          <div key={t.id} style={{ background:T.card,borderRadius:16,border:`1px solid ${t.is_active?T.border:"rgba(255,255,255,0.05)"}`,marginBottom:10,overflow:"hidden",opacity:t.is_active?1:0.6 }}>
+            {/* Header */}
+            <div style={{ padding:"14px 16px" }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:3 }}>
+                    <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{t.name}</div>
+                    {t.is_default&&<Badge label="Default" color={T.blue}/>}
+                    {t.is_promo&&<Badge label="PROMO" color={T.yellow}/>}
+                  </div>
+                  <div style={{ fontSize:11,color:T.muted }}>{t.description||"No description"}</div>
+                </div>
+                {/* Active toggle */}
+                <button onClick={()=>toggleActive(t)} className="tap"
+                  style={{ background:t.is_active?`linear-gradient(135deg,${T.green},${T.greenDark})`:"rgba(255,255,255,0.08)",border:"none",borderRadius:20,padding:"5px 14px",fontSize:11,fontWeight:700,color:t.is_active?"#000":T.muted,cursor:"pointer",fontFamily:"inherit",flexShrink:0,marginLeft:8 }}>
+                  {t.is_active?"ON":"OFF"}
+                </button>
+              </div>
+
+              {/* Pricing chips */}
+              <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:10 }}>
+                {t.price_per_kwh>0&&(
+                  <div style={{ background:"rgba(74,222,128,0.1)",border:"1px solid rgba(74,222,128,0.2)",borderRadius:8,padding:"4px 10px",display:"flex",alignItems:"center",gap:4 }}>
+                    <i className="fas fa-bolt" style={{ fontSize:9,color:T.green }}/>
+                    <span style={{ fontSize:11,fontWeight:700,color:T.green }}>{GHS(t.price_per_kwh)}/kWh</span>
+                  </div>
+                )}
+                {t.price_per_min>0&&(
+                  <div style={{ background:"rgba(56,189,248,0.1)",border:"1px solid rgba(56,189,248,0.2)",borderRadius:8,padding:"4px 10px",display:"flex",alignItems:"center",gap:4 }}>
+                    <i className="fas fa-clock" style={{ fontSize:9,color:T.blue }}/>
+                    <span style={{ fontSize:11,fontWeight:700,color:T.blue }}>{GHS(t.price_per_min)}/min</span>
+                  </div>
+                )}
+                {t.idle_fee_per_min>0&&(
+                  <div style={{ background:"rgba(251,191,36,0.1)",border:"1px solid rgba(251,191,36,0.2)",borderRadius:8,padding:"4px 10px",display:"flex",alignItems:"center",gap:4 }}>
+                    <i className="fas fa-parking" style={{ fontSize:9,color:T.yellow }}/>
+                    <span style={{ fontSize:11,fontWeight:700,color:T.yellow }}>Idle: {GHS(t.idle_fee_per_min)}/min</span>
+                  </div>
+                )}
+                {t.session_base_fee>0&&(
+                  <div style={{ background:"rgba(167,139,250,0.1)",border:"1px solid rgba(167,139,250,0.2)",borderRadius:8,padding:"4px 10px" }}>
+                    <span style={{ fontSize:11,fontWeight:700,color:"#a78bfa" }}>Base: {GHS(t.session_base_fee)}</span>
+                  </div>
+                )}
+                {t.is_promo&&t.promo_type&&(
+                  <div style={{ background:"rgba(251,191,36,0.15)",border:"1px solid rgba(251,191,36,0.3)",borderRadius:8,padding:"4px 10px" }}>
+                    <span style={{ fontSize:11,fontWeight:700,color:T.yellow }}>
+                      {t.promo_type==="Percentage"?`${t.promo_value}% OFF`:t.promo_type==="FixedDiscount"?`${GHS(t.promo_value)} OFF`:`Flat ${GHS(t.promo_value)}`}
+                      {t.promo_code&&` · Code: ${t.promo_code}`}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Schedule + edit */}
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                <div style={{ fontSize:11,color:T.muted }}>
+                  <i className="fas fa-clock" style={{ marginRight:4 }}/>{SCHEDULE_LABELS[t.schedule_type]||t.schedule_type}
+                  {t.active_from_time&&` · ${t.active_from_time}–${t.active_to_time}`}
+                  <span style={{ marginLeft:8 }}>Priority: {t.priority}</span>
+                </div>
+                <button onClick={()=>{ setEditing({...t});setTab("edit"); }} className="tap"
+                  style={{ background:"rgba(255,255,255,0.06)",border:`1px solid ${T.border}`,borderRadius:8,padding:"5px 12px",fontSize:11,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+                  <i className="fas fa-pencil-alt"/> Edit
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <Nav active="More" go={go}/>
+    </div>
+  );
+}
 export default function App() {
   const [screen,setScreen]   = useState(()=>{ try { return localStorage.getItem("eco_user")?"home":"splash"; } catch(e){ return "splash"; } });
   const [authMode,setAuthMode]= useState("login");
@@ -2428,7 +2862,7 @@ export default function App() {
   if (screen==="splash") return <><style>{CSS}</style><Splash onLogin={()=>{ setAuthMode("login");go("auth"); }} onRegister={()=>{ setAuthMode("register");go("auth"); }} onGuest={()=>go("home")}/></>;
   if (screen==="auth") return <><style>{CSS}</style><Auth mode={authMode} onBack={(mode)=>{ if(mode){ setAuthMode(mode); } else { go("splash"); } }} onSuccess={(u)=>{ setUser(u);go("home"); }}/></>;
 
-  const views={chargers:<ChargerAdmin go={goSecure}/>,sessions:<SessionManager go={goSecure} user={user}/>,wallet:<WalletScreen go={goSecure} user={user}/>, home:<Home {...props}/>,map:<MapScreen {...props}/>,detail:<Detail {...props}/>,vehicles:<Vehicles {...props}/>,booking:<Booking {...props}/>,bookings:<Bookings {...props}/>,qr:<QRScreen {...props}/>,verify:<Verify {...props}/>,profile:<Profile {...props}/>,about:<About {...props}/> };
+  const views={chargers:<ChargerAdmin go={goSecure}/>,sessions:<SessionManager go={goSecure} user={user}/>,wallet:<WalletScreen go={goSecure} user={user}/>,pricing:<PricingAdmin go={goSecure} user={user}/>, home:<Home {...props}/>,map:<MapScreen {...props}/>,detail:<Detail {...props}/>,vehicles:<Vehicles {...props}/>,booking:<Booking {...props}/>,bookings:<Bookings {...props}/>,qr:<QRScreen {...props}/>,verify:<Verify {...props}/>,profile:<Profile {...props}/>,about:<About {...props}/> };
 
   return (
     <><style>{CSS}</style>
