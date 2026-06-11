@@ -212,6 +212,7 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => (
           { icon:"fa-list-alt",        label:"Session Manager", screen:"sessions", color:T.green  },
           { icon:"fa-wallet",          label:"My Wallet",       screen:"wallet",   color:T.yellow },
           { icon:"fa-tags",            label:"Pricing Engine",  screen:"pricing",  color:"#a78bfa" },
+          { icon:"fa-shield-alt",      label:"Admin Dashboard", screen:"admin",    color:"#f87171" },
         ].map(item=>(
           <div key={item.label} className="tap row" onClick={()=>{ go(item.screen);onClose(); }}
             style={{ display:"flex",alignItems:"center",gap:14,padding:"16px 20px",borderBottom:`1px solid ${T.border}20` }}>
@@ -3495,6 +3496,665 @@ function PricingAdmin({ go, user }) {
     </div>
   );
 }
+
+// ── ADMIN DASHBOARD ───────────────────────────────────────────
+const ADMIN_TABS = [
+  { id:"overview",  label:"Overview",  icon:"fa-tachometer-alt" },
+  { id:"chargers",  label:"Chargers",  icon:"fa-charging-station" },
+  { id:"stations",  label:"Stations",  icon:"fa-map-marker-alt" },
+  { id:"sessions",  label:"Sessions",  icon:"fa-bolt" },
+  { id:"wallets",   label:"Wallets",   icon:"fa-wallet" },
+  { id:"revenue",   label:"Revenue",   icon:"fa-chart-line" },
+  { id:"pricing",   label:"Pricing",   icon:"fa-tags" },
+  { id:"faults",    label:"Faults",    icon:"fa-exclamation-triangle" },
+];
+
+function AdminDashboard({ go, user }) {
+  const [tab,         setTab]       = useState("overview");
+  const [loading,     setLoading]   = useState(false);
+
+  // Data states
+  const [overview,    setOverview]  = useState(null);
+  const [chargers,    setChargers]  = useState([]);
+  const [stations,    setStations]  = useState([]);
+  const [sessions,    setSessions]  = useState([]);
+  const [wallets,     setWallets]   = useState([]);
+  const [faults,      setFaults]    = useState([]);
+  const [revenue,     setRevenue]   = useState([]);
+  const [tariffs,     setTariffs]   = useState([]);
+
+  // Edit states
+  const [editStation, setEditStation] = useState(null);
+  const [editTariff,  setEditTariff]  = useState(null);
+  const [saving,      setSaving]      = useState(false);
+  const [msg,         setMsg]         = useState("");
+
+  // ── DATA LOADERS ────────────────────────────────────────────
+  const load = async (table, setter, query="") => {
+    if (!SUPABASE_URL) return;
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/${table}${query}`,
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+      );
+      const data = await res.json();
+      if (Array.isArray(data)) setter(data);
+    } catch(e) {}
+  };
+
+  const loadOverview = async () => {
+    if (!SUPABASE_URL) return;
+    setLoading(true);
+    try {
+      const [sesRes, walRes, charRes, faultRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/charging_sessions?select=status,cost_total,energy_kwh,created_at&order=created_at.desc&limit=100`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${SUPABASE_ANON}` }}),
+        fetch(`${SUPABASE_URL}/rest/v1/wallets?select=balance_pesewas,total_spent,total_topped_up`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${SUPABASE_ANON}` }}),
+        fetch(`${SUPABASE_URL}/rest/v1/chargers?select=id,status,online,has_fault`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${SUPABASE_ANON}` }}),
+        fetch(`${SUPABASE_URL}/rest/v1/chargers?select=id,status,error_code&has_fault=eq.true`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${SUPABASE_ANON}` }}),
+      ]);
+      const [ses, wal, chr, flt] = await Promise.all([sesRes.json(), walRes.json(), charRes.json(), faultRes.json()]);
+
+      const totalRevenue   = Array.isArray(ses) ? ses.reduce((a,s)=>a+(s.cost_total||0),0) : 0;
+      const totalEnergy    = Array.isArray(ses) ? ses.reduce((a,s)=>a+(s.energy_kwh||0),0) : 0;
+      const totalWallets   = Array.isArray(wal) ? wal.length : 0;
+      const totalBalance   = Array.isArray(wal) ? wal.reduce((a,w)=>a+(w.balance_pesewas||0),0) : 0;
+      const activeChargers = Array.isArray(chr) ? chr.filter(c=>c.online).length : 0;
+      const faultCount     = Array.isArray(flt) ? flt.length : 0;
+      const activeSessions = Array.isArray(ses) ? ses.filter(s=>s.status==="Charging").length : 0;
+      const todaySes       = Array.isArray(ses) ? ses.filter(s=>new Date(s.created_at)>new Date(Date.now()-86400000)).length : 0;
+
+      setOverview({ totalRevenue, totalEnergy, totalWallets, totalBalance, activeChargers, faultCount, activeSessions, todaySes, totalSessions: Array.isArray(ses)?ses.length:0 });
+    } catch(e) {}
+    setLoading(false);
+  };
+
+  const loadOcppChargers = async () => {
+    setLoading(true);
+    if (OCPP_URL) {
+      try {
+        const res = await fetch(`${OCPP_URL}/api/chargers`, { headers:{ "x-api-key": OCPP_KEY }});
+        const data = await res.json();
+        if (data?.chargers) setChargers(data.chargers);
+      } catch(e) {}
+    }
+    await load("chargers", ch => setChargers(prev => {
+      const ocppMap = {};
+      prev.forEach(c => ocppMap[c.id] = c);
+      return Array.isArray(ch) ? ch.map(c => ({ ...c, ...ocppMap[c.id] })) : prev;
+    }), "?select=*&order=id");
+    setLoading(false);
+  };
+
+  useEffect(()=>{ loadOverview(); },[]);
+  useEffect(()=>{
+    if (tab==="chargers")  loadOcppChargers();
+    if (tab==="stations")  load("stations","order=id", setStations, "?select=*&order=id");
+    if (tab==="sessions")  load("charging_sessions", setSessions, "?select=*&order=created_at.desc&limit=100");
+    if (tab==="wallets")   load("wallets", setWallets, "?select=*&order=updated_at.desc&limit=100");
+    if (tab==="faults")    load("chargers", setFaults, "?select=*&has_fault=eq.true&order=updated_at.desc");
+    if (tab==="revenue")   load("charging_sessions", setRevenue, "?select=created_at,cost_total,energy_kwh,status&order=created_at.desc&limit=200");
+    if (tab==="pricing")   load("tariffs", setTariffs, "?select=*&order=priority.asc");
+  },[tab]);
+
+  const sbPatch = async (table, id, data) => {
+    if (!SUPABASE_URL) return false;
+    setSaving(true);
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
+        method:"PATCH",
+        headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${SUPABASE_ANON}`, "Content-Type":"application/json", Prefer:"return=minimal" },
+        body: JSON.stringify(data)
+      });
+      setMsg("Saved ✅"); setTimeout(()=>setMsg(""),2000);
+      setSaving(false); return true;
+    } catch(e) { setSaving(false); return false; }
+  };
+
+  const sendOcpp = async (chargerId, action, body={}) => {
+    if (!OCPP_URL) return null;
+    try {
+      const res = await fetch(`${OCPP_URL}/api/chargers/${chargerId}/${action}`, {
+        method:"POST", headers:{ "x-api-key": OCPP_KEY, "Content-Type":"application/json" },
+        body: JSON.stringify(body)
+      });
+      return res.json();
+    } catch(e) { return null; }
+  };
+
+  const statusColor = (s) => {
+    if (s==="Available"||s==="active"||s==="confirmed") return T.green;
+    if (s==="Charging") return T.blue;
+    if (s==="Faulted"||s==="failed") return T.red;
+    if (s==="Unavailable") return T.muted;
+    return T.yellow;
+  };
+
+  // ── STAT CARD ─────────────────────────────────────────────
+  const StatCard = ({ label, value, icon, color, sub }) => (
+    <div style={{ background:T.card,borderRadius:14,padding:"14px 12px",border:`1px solid ${T.border}`,textAlign:"center" }}>
+      <i className={`fas ${icon}`} style={{ fontSize:18,color,marginBottom:8,display:"block" }}/>
+      <div style={{ fontWeight:900,fontSize:20,color }}>{value}</div>
+      <div style={{ fontSize:9,color:T.muted,marginTop:3,textTransform:"uppercase",letterSpacing:0.5 }}>{label}</div>
+      {sub&&<div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{sub}</div>}
+    </div>
+  );
+
+  // ── OVERVIEW TAB ─────────────────────────────────────────
+  const OverviewTab = () => (
+    <div>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+        <div style={{ fontWeight:700,fontSize:15,color:T.text }}>Platform Overview</div>
+        <button onClick={loadOverview} className="tap" style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+          <i className={`fas fa-sync${loading?" fa-spin":""}`}/> Refresh
+        </button>
+      </div>
+
+      {!overview&&loading&&<div style={{ textAlign:"center",padding:"30px 0" }}><Spinner/></div>}
+
+      {overview&&(
+        <>
+          {/* Top KPIs */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
+            <div style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:16,padding:"18px",border:"1px solid rgba(74,222,128,0.25)",gridColumn:"1/-1" }}>
+              <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Total Revenue</div>
+              <div style={{ fontWeight:900,fontSize:36,color:T.green }}>GH₵{(overview.totalRevenue/100).toFixed(2)}</div>
+              <div style={{ fontSize:11,color:T.muted,marginTop:4 }}>{overview.totalSessions} sessions · {overview.totalEnergy.toFixed(1)} kWh delivered</div>
+            </div>
+          </div>
+
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10 }}>
+            <StatCard label="Active Now"    value={overview.activeSessions} icon="fa-bolt"             color={T.green}  />
+            <StatCard label="Online Chargers" value={overview.activeChargers} icon="fa-charging-station" color={T.blue}   />
+            <StatCard label="Faults"        value={overview.faultCount}    icon="fa-exclamation-triangle" color={overview.faultCount>0?T.red:T.green} />
+          </div>
+
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10 }}>
+            <StatCard label="Today Sessions" value={overview.todaySes}   icon="fa-calendar-day" color={T.yellow} />
+            <StatCard label="Total Wallets"  value={overview.totalWallets} icon="fa-wallet"      color={T.blue}   />
+          </div>
+
+          <div style={{ background:T.card,borderRadius:14,padding:"14px 16px",border:`1px solid ${T.border}`,marginBottom:10 }}>
+            <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Total Wallet Balances (Platform)</div>
+            <div style={{ fontWeight:800,fontSize:22,color:T.yellow }}>GH₵{(overview.totalBalance/100).toFixed(2)}</div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Across {overview.totalWallets} user wallets</div>
+          </div>
+
+          {/* Quick actions */}
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}>Quick Actions</div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+            {[
+              { label:"View Chargers",  tab:"chargers", icon:"fa-charging-station", color:T.green  },
+              { label:"View Faults",    tab:"faults",   icon:"fa-exclamation-triangle",color:T.red },
+              { label:"Revenue Report", tab:"revenue",  icon:"fa-chart-line",       color:T.yellow },
+              { label:"Manage Pricing", tab:"pricing",  icon:"fa-tags",             color:"#a78bfa" },
+            ].map(a=>(
+              <button key={a.tab} onClick={()=>setTab(a.tab)} className="tap"
+                style={{ background:`${a.color}10`,border:`1px solid ${a.color}25`,borderRadius:12,padding:"13px",fontSize:12,fontWeight:700,color:a.color,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+                <i className={`fas ${a.icon}`}/> {a.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  // ── CHARGER MANAGEMENT TAB ────────────────────────────────
+  const ChargersTab = () => (
+    <div>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+        <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{chargers.length} Chargers</div>
+        <button onClick={loadOcppChargers} className="tap" style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+          <i className={`fas fa-sync${loading?" fa-spin":""}`}/> Refresh
+        </button>
+      </div>
+      {chargers.length===0&&!loading&&(
+        <div style={{ textAlign:"center",padding:"30px 0",color:T.muted,fontSize:13 }}>
+          <i className="fas fa-charging-station" style={{ fontSize:40,display:"block",marginBottom:12,opacity:0.3 }}/>No chargers found
+        </div>
+      )}
+      {chargers.map(c=>(
+        <div key={c.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${c.has_fault?"rgba(248,113,113,0.3)":T.border}`,marginBottom:10,overflow:"hidden" }}>
+          <div style={{ padding:"13px 14px" }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
+              <div>
+                <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{c.id}</div>
+                <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{c.model||c.info?.chargePointModel||"Unknown"} · {c.vendor||c.info?.chargePointVendor||""}</div>
+              </div>
+              <div style={{ display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4 }}>
+                <div style={{ background:`${statusColor(c.status)}15`,borderRadius:8,padding:"3px 10px" }}>
+                  <span style={{ fontSize:10,fontWeight:700,color:statusColor(c.status) }}>{c.status||"Unknown"}</span>
+                </div>
+                <div style={{ fontSize:10,color:c.connected||c.online?T.green:T.muted,display:"flex",alignItems:"center",gap:4 }}>
+                  <div style={{ width:6,height:6,borderRadius:"50%",background:c.connected||c.online?T.green:T.muted }}/>
+                  {c.connected||c.online?"Online":"Offline"}
+                </div>
+              </div>
+            </div>
+            {c.error_code&&c.error_code!=="NoError"&&(
+              <div style={{ background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.2)",borderRadius:8,padding:"6px 10px",marginBottom:8,fontSize:11,color:T.red }}>
+                <i className="fas fa-exclamation-triangle" style={{ marginRight:6 }}/>{c.error_code}
+              </div>
+            )}
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:10 }}>
+              {[
+                { label:"Last Beat", value:c.last_heartbeat||c.lastHeartbeat?new Date(c.last_heartbeat||c.lastHeartbeat).toLocaleTimeString("en-GH",{hour:"2-digit",minute:"2-digit"}):"--" },
+                { label:"Firmware",  value:c.firmware||c.info?.firmwareVersion||"--" },
+                { label:"Active TX", value:c.active_transaction||c.activeTransactions||0 },
+              ].map(r=>(
+                <div key={r.label} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"7px" }}>
+                  <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase" }}>{r.label}</div>
+                  <div style={{ fontWeight:700,fontSize:11,color:T.text,marginTop:2 }}>{r.value}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6 }}>
+              {[
+                { label:"Reset",    action:"reset",              body:{type:"Soft"}, color:T.yellow },
+                { label:"Unlock",   action:"unlock",             body:{connectorId:1}, color:T.blue },
+                { label:"Disable",  action:"change-availability",body:{connectorId:0,type:"Inoperative"}, color:T.muted },
+              ].map(cmd=>(
+                <button key={cmd.action} onClick={async()=>{ const r=await sendOcpp(c.id,cmd.action,cmd.body); setMsg(r?.success?"Command sent ✅":"Command failed ❌"); setTimeout(()=>setMsg(""),2000); }} className="tap"
+                  style={{ background:`${cmd.color}10`,border:`1px solid ${cmd.color}25`,borderRadius:8,padding:"8px",fontSize:10,fontWeight:700,color:cmd.color,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:4 }}>
+                  {cmd.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  // ── STATION MANAGEMENT TAB ────────────────────────────────
+  const StationsTab = () => {
+    const [localStations, setLocalStations] = useState(stations);
+    useEffect(()=>setLocalStations(stations),[stations]);
+
+    const saveStation = async (s) => {
+      setSaving(true);
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/stations?id=eq.${s.id}`, {
+          method:"PATCH",
+          headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${SUPABASE_ANON}`, "Content-Type":"application/json", Prefer:"return=minimal" },
+          body: JSON.stringify({ name:s.name, city:s.city, bays:s.bays, open:s.open, solar:s.solar, hydrogen:s.hydrogen, time:s.time, lat:s.lat, lng:s.lng })
+        });
+        setMsg("Station saved ✅"); setTimeout(()=>setMsg(""),2000);
+        setEditStation(null);
+        load("stations", setStations, "?select=*&order=id");
+      } catch(e) {}
+      setSaving(false);
+    };
+
+    if (editStation) return (
+      <div>
+        <button onClick={()=>setEditStation(null)} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginBottom:14,display:"flex",alignItems:"center",gap:6 }}>
+          <i className="fas fa-arrow-left"/> Back to stations
+        </button>
+        <div style={{ background:T.card,borderRadius:16,padding:"16px",border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:14 }}>Edit: {editStation.name}</div>
+          {[
+            { label:"Station Name", key:"name",     type:"text"   },
+            { label:"City",         key:"city",     type:"text"   },
+            { label:"Total Bays",   key:"bays",     type:"number" },
+            { label:"Open Bays",    key:"open",     type:"number" },
+            { label:"Solar %",      key:"solar",    type:"number" },
+            { label:"Hydrogen %",   key:"hydrogen", type:"number" },
+            { label:"Wait Time",    key:"time",     type:"text"   },
+            { label:"Latitude",     key:"lat",      type:"number" },
+            { label:"Longitude",    key:"lng",      type:"number" },
+          ].map(f=>(
+            <div key={f.key} style={{ marginBottom:10 }}>
+              <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600,textTransform:"uppercase" }}>{f.label}</div>
+              <input type={f.type} value={editStation[f.key]||""} onChange={e=>setEditStation(p=>({...p,[f.key]:f.type==="number"?parseFloat(e.target.value)||0:e.target.value}))}
+                style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:10,padding:"11px 14px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+            </div>
+          ))}
+          <button onClick={()=>saveStation(editStation)} disabled={saving} className="tap"
+            style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:4 }}>
+            {saving?<><Spinner/> Saving…</>:<><i className="fas fa-save"/> Save Station</>}
+          </button>
+        </div>
+      </div>
+    );
+
+    return (
+      <div>
+        <div style={{ fontWeight:700,fontSize:15,color:T.text,marginBottom:14 }}>{localStations.length} Stations</div>
+        {localStations.map(s=>(
+          <div key={s.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"13px 14px",marginBottom:10 }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
+              <div>
+                <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{s.name}</div>
+                <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{s.city} · {s.bays} bays · {s.solar}% solar</div>
+              </div>
+              <button onClick={()=>setEditStation({...s})} className="tap"
+                style={{ background:`${T.green}10`,border:`1px solid ${T.green}25`,borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
+                Edit
+              </button>
+            </div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6 }}>
+              {[
+                { label:"Open", value:`${s.open}/${s.bays}`, color:T.green },
+                { label:"Solar",value:`${s.solar}%`,          color:T.yellow },
+                { label:"H₂",   value:`${s.hydrogen}%`,       color:T.blue },
+                { label:"Wait", value:s.time,                 color:T.muted },
+              ].map(r=>(
+                <div key={r.label} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"6px",textAlign:"center" }}>
+                  <div style={{ fontWeight:700,fontSize:11,color:r.color }}>{r.value}</div>
+                  <div style={{ fontSize:9,color:T.muted }}>{r.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // ── SESSION MONITORING TAB ────────────────────────────────
+  const SessionsTab = () => {
+    const active = sessions.filter(s=>s.status==="Charging");
+    return (
+      <div>
+        {active.length>0&&(
+          <div style={{ background:"rgba(74,222,128,0.08)",border:"1px solid rgba(74,222,128,0.2)",borderRadius:14,padding:"12px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:10 }}>
+            <div style={{ width:10,height:10,borderRadius:"50%",background:T.green,flexShrink:0 }}/>
+            <div style={{ fontWeight:700,fontSize:13,color:T.green }}>{active.length} session{active.length>1?"s":""} charging live right now</div>
+          </div>
+        )}
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+          <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{sessions.length} Sessions</div>
+          <button onClick={()=>load("charging_sessions",setSessions,"?select=*&order=created_at.desc&limit=100")} className="tap"
+            style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+            <i className="fas fa-sync"/> Refresh
+          </button>
+        </div>
+        {sessions.map(s=>{
+          const sc = s.status==="Charging"?T.blue:s.status==="Completed"?T.green:s.status==="Faulted"?T.red:T.muted;
+          return (
+            <div key={s.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${s.status==="Charging"?"rgba(56,189,248,0.25)":T.border}`,padding:"13px 14px",marginBottom:8 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
+                <div>
+                  <div style={{ fontWeight:700,fontSize:12,color:T.text,fontFamily:"monospace" }}>{s.session_ref||s.id?.slice(0,16)}</div>
+                  <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{s.charger_id||"--"} · {s.vehicle_type||"--"}</div>
+                </div>
+                <div style={{ background:`${sc}15`,borderRadius:8,padding:"3px 10px" }}>
+                  <span style={{ fontSize:10,fontWeight:700,color:sc }}>{s.status}</span>
+                </div>
+              </div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6 }}>
+                {[
+                  { label:"kWh",    value:s.energy_kwh!=null?s.energy_kwh.toFixed(3):"--" },
+                  { label:"Min",    value:s.duration_min!=null?s.duration_min.toFixed(0):"--" },
+                  { label:"Cost",   value:s.cost_total?`₵${(s.cost_total/100).toFixed(0)}`:"--" },
+                  { label:"Pay",    value:s.payment_status||"--" },
+                ].map(r=>(
+                  <div key={r.label} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"6px",textAlign:"center" }}>
+                    <div style={{ fontWeight:700,fontSize:11,color:T.text }}>{r.value}</div>
+                    <div style={{ fontSize:9,color:T.muted }}>{r.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // ── WALLET MONITORING TAB ─────────────────────────────────
+  const WalletsTab = () => {
+    const totalBal  = wallets.reduce((a,w)=>a+(w.balance_pesewas||0),0);
+    const totalIn   = wallets.reduce((a,w)=>a+(w.total_topped_up||0),0);
+    const totalSpent= wallets.reduce((a,w)=>a+(w.total_spent||0),0);
+    return (
+      <div>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
+          {[
+            { label:"Total Balances", value:`GH₵${(totalBal/100).toFixed(0)}`,  color:T.green  },
+            { label:"Total Top-ups",  value:`GH₵${(totalIn/100).toFixed(0)}`,   color:T.blue   },
+            { label:"Total Spent",    value:`GH₵${(totalSpent/100).toFixed(0)}`,color:T.yellow },
+            { label:"Total Wallets",  value:wallets.length,                     color:T.mutedLight },
+          ].map(s=>(
+            <div key={s.label} style={{ background:T.card,borderRadius:14,padding:"14px",border:`1px solid ${T.border}`,textAlign:"center" }}>
+              <div style={{ fontWeight:800,fontSize:20,color:s.color }}>{s.value}</div>
+              <div style={{ fontSize:10,color:T.muted,marginTop:3,textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+        {wallets.map(w=>(
+          <div key={w.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"13px 14px",marginBottom:8 }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
+              <div>
+                <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{w.display_name||w.email||"Anonymous"}</div>
+                <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{w.email||"No email"}</div>
+              </div>
+              <div style={{ fontWeight:800,fontSize:16,color:T.green }}>GH₵{((w.balance_pesewas||0)/100).toFixed(2)}</div>
+            </div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6 }}>
+              {[
+                { label:"Topped Up", value:`GH₵${((w.total_topped_up||0)/100).toFixed(0)}` },
+                { label:"Spent",     value:`GH₵${((w.total_spent||0)/100).toFixed(0)}` },
+                { label:"Sessions",  value:w.session_count||0 },
+              ].map(r=>(
+                <div key={r.label} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"6px",textAlign:"center" }}>
+                  <div style={{ fontWeight:700,fontSize:11,color:T.text }}>{r.value}</div>
+                  <div style={{ fontSize:9,color:T.muted }}>{r.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // ── REVENUE ANALYTICS TAB ─────────────────────────────────
+  const RevenueTab = () => {
+    const completed = revenue.filter(s=>s.status==="Completed"&&s.cost_total);
+    const totalRev  = completed.reduce((a,s)=>a+(s.cost_total||0),0);
+    const totalKwh  = completed.reduce((a,s)=>a+(s.energy_kwh||0),0);
+    const avgRev    = completed.length ? totalRev/completed.length : 0;
+
+    // Group by day
+    const byDay = {};
+    completed.forEach(s=>{
+      const day = s.created_at?.slice(0,10)||"Unknown";
+      if (!byDay[day]) byDay[day] = { rev:0, count:0, kwh:0 };
+      byDay[day].rev   += s.cost_total||0;
+      byDay[day].count += 1;
+      byDay[day].kwh   += s.energy_kwh||0;
+    });
+    const days = Object.entries(byDay).sort((a,b)=>a[0]>b[0]?-1:1).slice(0,10);
+    const maxRev = Math.max(...days.map(d=>d[1].rev), 1);
+
+    return (
+      <div>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
+          {[
+            { label:"Total Revenue",  value:`GH₵${(totalRev/100).toFixed(2)}`,    color:T.green  },
+            { label:"Total Energy",   value:`${totalKwh.toFixed(1)} kWh`,          color:T.yellow },
+            { label:"Avg per Session",value:`GH₵${(avgRev/100).toFixed(2)}`,       color:T.blue   },
+            { label:"Paid Sessions",  value:completed.length,                      color:T.green  },
+          ].map(s=>(
+            <div key={s.label} style={{ background:T.card,borderRadius:14,padding:"14px",border:`1px solid ${T.border}`,textAlign:"center" }}>
+              <div style={{ fontWeight:800,fontSize:18,color:s.color }}>{s.value}</div>
+              <div style={{ fontSize:10,color:T.muted,marginTop:3,textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Revenue by day bar chart */}
+        <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:14 }}>Revenue by Day</div>
+          {days.map(([day,d])=>(
+            <div key={day} style={{ marginBottom:10 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
+                <span style={{ fontSize:11,color:T.muted }}>{new Date(day).toLocaleDateString("en-GH",{day:"numeric",month:"short"})}</span>
+                <span style={{ fontSize:11,fontWeight:700,color:T.green }}>GH₵{(d.rev/100).toFixed(2)} · {d.count} sessions</span>
+              </div>
+              <div style={{ height:8,borderRadius:4,background:"rgba(255,255,255,0.06)",overflow:"hidden" }}>
+                <div style={{ height:"100%",width:`${(d.rev/maxRev)*100}%`,background:`linear-gradient(90deg,${T.green},${T.blue})`,borderRadius:4,transition:"width .5s ease" }}/>
+              </div>
+            </div>
+          ))}
+          {days.length===0&&<div style={{ textAlign:"center",color:T.muted,fontSize:13,padding:"20px 0" }}>No completed sessions yet</div>}
+        </div>
+
+        {/* CO2 impact */}
+        <div style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:14,padding:"16px",border:"1px solid rgba(74,222,128,0.2)" }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}><i className="fas fa-leaf" style={{ marginRight:8,color:T.green }}/>Environmental Impact</div>
+          {[
+            { label:"CO₂ Prevented", value:`${(totalKwh*0.5).toFixed(1)} kg`,    color:T.green  },
+            { label:"Solar Energy",  value:`${(totalKwh*0.85).toFixed(1)} kWh`,  color:T.yellow },
+            { label:"Clean Water",   value:`${completed.length*20} L delivered`,  color:T.blue   },
+          ].map(r=>(
+            <div key={r.label} style={{ display:"flex",justifyContent:"space-between",marginBottom:8 }}>
+              <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
+              <span style={{ color:r.color,fontWeight:700,fontSize:13 }}>{r.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ── PRICING TAB ───────────────────────────────────────────
+  const PricingTab = () => (
+    <div>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+        <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{tariffs.length} Tariffs</div>
+        <button onClick={()=>go("pricing")} className="tap"
+          style={{ background:`${T.green}10`,border:`1px solid ${T.green}25`,borderRadius:10,padding:"7px 14px",fontSize:11,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+          <i className="fas fa-external-link-alt"/> Full Editor
+        </button>
+      </div>
+      {tariffs.map(t=>(
+        <div key={t.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${t.is_active?T.border:"rgba(255,255,255,0.05)"}`,padding:"13px 14px",marginBottom:8,opacity:t.is_active?1:0.55 }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6 }}>
+            <div>
+              <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{t.name}</div>
+              <div style={{ fontSize:10,color:T.muted }}>{t.code}</div>
+            </div>
+            <div style={{ display:"flex",gap:6,alignItems:"center" }}>
+              {t.is_promo&&<Badge label="PROMO" color={T.yellow}/>}
+              <div style={{ background:t.is_active?`${T.green}15`:"rgba(255,255,255,0.05)",borderRadius:8,padding:"3px 10px" }}>
+                <span style={{ fontSize:10,fontWeight:700,color:t.is_active?T.green:T.muted }}>{t.is_active?"ON":"OFF"}</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+            {t.price_per_kwh>0&&<div style={{ background:"rgba(74,222,128,0.08)",borderRadius:6,padding:"3px 8px",fontSize:10,color:T.green,fontWeight:700 }}>GH₵{(t.price_per_kwh/100).toFixed(2)}/kWh</div>}
+            {t.price_per_min>0&&<div style={{ background:"rgba(56,189,248,0.08)",borderRadius:6,padding:"3px 8px",fontSize:10,color:T.blue,fontWeight:700 }}>GH₵{(t.price_per_min/100).toFixed(2)}/min</div>}
+            {t.idle_fee_per_min>0&&<div style={{ background:"rgba(251,191,36,0.08)",borderRadius:6,padding:"3px 8px",fontSize:10,color:T.yellow,fontWeight:700 }}>Idle: GH₵{(t.idle_fee_per_min/100).toFixed(2)}/min</div>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  // ── FAULT MONITORING TAB ──────────────────────────────────
+  const FaultsTab = () => (
+    <div>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+        <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{faults.length} Active Fault{faults.length!==1?"s":""}</div>
+        <button onClick={()=>load("chargers",setFaults,"?select=*&has_fault=eq.true&order=updated_at.desc")} className="tap"
+          style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+          <i className="fas fa-sync"/> Refresh
+        </button>
+      </div>
+      {faults.length===0&&(
+        <div style={{ textAlign:"center",padding:"40px 0" }}>
+          <div style={{ width:64,height:64,borderRadius:"50%",background:"rgba(74,222,128,0.1)",border:`2px solid ${T.green}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px" }}>
+            <i className="fas fa-check" style={{ fontSize:26,color:T.green }}/>
+          </div>
+          <div style={{ fontWeight:700,fontSize:15,color:T.text,marginBottom:6 }}>All Systems Normal</div>
+          <div style={{ fontSize:12,color:T.muted }}>No active faults detected</div>
+        </div>
+      )}
+      {faults.map(f=>(
+        <div key={f.id} style={{ background:"rgba(248,113,113,0.06)",borderRadius:14,border:"1px solid rgba(248,113,113,0.2)",padding:"14px",marginBottom:10 }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
+            <div>
+              <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{f.id}</div>
+              <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{f.location||f.city||"Unknown location"}</div>
+            </div>
+            <div style={{ background:"rgba(248,113,113,0.12)",borderRadius:8,padding:"3px 10px" }}>
+              <span style={{ fontSize:10,fontWeight:700,color:T.red }}>{f.status||"Faulted"}</span>
+            </div>
+          </div>
+          {f.error_code&&<div style={{ fontSize:12,color:T.red,marginBottom:8 }}><i className="fas fa-exclamation-circle" style={{ marginRight:6 }}/>Error: {f.error_code}</div>}
+          {f.status_info&&<div style={{ fontSize:11,color:T.mutedLight,marginBottom:10 }}>{f.status_info}</div>}
+          <div style={{ fontSize:10,color:T.muted,marginBottom:10 }}>Last update: {f.last_status_update?new Date(f.last_status_update).toLocaleString("en-GH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"--"}</div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+            <button onClick={async()=>{ const r=await sendOcpp(f.id,"reset",{type:"Hard"}); setMsg(r?.success?"Reset sent ✅":"Reset failed ❌"); setTimeout(()=>setMsg(""),2000); }} className="tap"
+              style={{ background:"rgba(251,191,36,0.1)",border:"1px solid rgba(251,191,36,0.2)",borderRadius:10,padding:"10px",fontSize:12,fontWeight:700,color:T.yellow,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+              <i className="fas fa-redo"/> Hard Reset
+            </button>
+            <button onClick={async()=>{ await sbPatch("chargers",f.id,{has_fault:false,status:"Available",error_code:null}); load("chargers",setFaults,"?select=*&has_fault=eq.true"); }} className="tap"
+              style={{ background:"rgba(74,222,128,0.1)",border:"1px solid rgba(74,222,128,0.2)",borderRadius:10,padding:"10px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+              <i className="fas fa-check"/> Clear Fault
+            </button>
+          </div>
+        </div>
+      ))}
+      {/* Fault log from charger_logs */}
+      <div style={{ background:T.card,borderRadius:14,padding:"14px",marginTop:10,border:`1px solid ${T.border}` }}>
+        <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}><i className="fas fa-history" style={{ marginRight:8,color:T.muted }}/>View Full Logs</div>
+        <button onClick={()=>go("chargers")} className="tap"
+          style={{ width:"100%",background:`${T.blue}10`,border:`1px solid ${T.blue}25`,borderRadius:10,padding:"11px",fontSize:12,fontWeight:700,color:T.blue,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+          <i className="fas fa-external-link-alt"/> Open Charger Admin for Full Logs
+        </button>
+      </div>
+    </div>
+  );
+
+  // ── RENDER ────────────────────────────────────────────────
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <div style={{ padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
+        <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+          <button onClick={()=>go("home")} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
+            <i className="fas fa-arrow-left" style={{ fontSize:18,color:T.text }}/>
+          </button>
+          <div>
+            <div style={{ fontWeight:800,fontSize:15,color:T.text }}>Admin Dashboard</div>
+            <div style={{ fontSize:10,color:T.muted,marginTop:1 }}>EcoCharge Ghana · Management</div>
+          </div>
+        </div>
+        <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+          {msg&&<div style={{ fontSize:11,color:T.green,fontWeight:700 }}>{msg}</div>}
+          <Logo size={30}/>
+        </div>
+      </div>
+
+      {/* Tab bar — scrollable */}
+      <div style={{ display:"flex",gap:6,overflowX:"auto",padding:"10px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0 }}>
+        {ADMIN_TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} className="tap"
+            style={{ flexShrink:0,background:tab===t.id?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.card,border:`1px solid ${tab===t.id?T.green:T.border}`,borderRadius:20,padding:"7px 14px",fontSize:11,fontWeight:700,color:tab===t.id?"#000":T.muted,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+            <i className={`fas ${t.icon}`}/> {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 100px" }}>
+        {tab==="overview" && <OverviewTab/>}
+        {tab==="chargers" && <ChargersTab/>}
+        {tab==="stations" && <StationsTab/>}
+        {tab==="sessions" && <SessionsTab/>}
+        {tab==="wallets"  && <WalletsTab/>}
+        {tab==="revenue"  && <RevenueTab/>}
+        {tab==="pricing"  && <PricingTab/>}
+        {tab==="faults"   && <FaultsTab/>}
+      </div>
+
+      <Nav active="More" go={go}/>
+    </div>
+  );
+}
 export default function App() {
   const [screen,setScreen]   = useState(()=>{ try { return localStorage.getItem("eco_user")?"home":"splash"; } catch(e){ return "splash"; } });
   const [authMode,setAuthMode]= useState("login");
@@ -3578,7 +4238,7 @@ export default function App() {
   if (screen==="splash") return <><style>{CSS}</style><Splash onLogin={()=>{ setAuthMode("login");go("auth"); }} onRegister={()=>{ setAuthMode("register");go("auth"); }} onGuest={()=>go("home")}/></>;
   if (screen==="auth") return <><style>{CSS}</style><Auth mode={authMode} onBack={(mode)=>{ if(mode){ setAuthMode(mode); } else { go("splash"); } }} onSuccess={(u)=>{ setUser(u);go("home"); }}/></>;
 
-  const views={chargers:<ChargerAdmin go={goSecure}/>,sessions:<SessionManager go={goSecure} user={user}/>,wallet:<WalletScreen go={goSecure} user={user}/>,pricing:<PricingAdmin go={goSecure} user={user}/>, home:<Home {...props}/>,map:<MapScreen {...props}/>,detail:<Detail {...props}/>,vehicles:<Vehicles {...props}/>,booking:<Booking {...props}/>,bookings:<Bookings {...props}/>,qr:<QRScreen {...props}/>,verify:<Verify {...props}/>,profile:<Profile {...props}/>,about:<About {...props}/> };
+  const views={chargers:<ChargerAdmin go={goSecure}/>,sessions:<SessionManager go={goSecure} user={user}/>,wallet:<WalletScreen go={goSecure} user={user}/>,pricing:<PricingAdmin go={goSecure} user={user}/>,admin:<AdminDashboard go={goSecure} user={user}/>, home:<Home {...props}/>,map:<MapScreen {...props}/>,detail:<Detail {...props}/>,vehicles:<Vehicles {...props}/>,booking:<Booking {...props}/>,bookings:<Bookings {...props}/>,qr:<QRScreen {...props}/>,verify:<Verify {...props}/>,profile:<Profile {...props}/>,about:<About {...props}/> };
 
   return (
     <><style>{CSS}</style>
