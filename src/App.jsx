@@ -4251,3 +4251,292 @@ export default function App() {
     </>
   );
 }
+// ── UNREAD BADGE COMPONENT ────────────────────────────────────
+// Paste this ABOVE the NotificationsScreen function (Block 1)
+// It shows a green dot with count on the bell icon
+
+function UnreadBadge({ userId }) {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (!SUPABASE_URL || !userId) return;
+    const load = async () => {
+      try {
+        const res = await fetch(
+          `${SUPABASE_URL}/rest/v1/notifications?user_id=eq.${userId}&is_read=eq.false&select=id`,
+          { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+        );
+        const data = await res.json();
+        if (Array.isArray(data)) setCount(data.length);
+      } catch(e) {}
+    };
+    load();
+    const t = setInterval(load, 30000); // refresh every 30s
+    return () => clearInterval(t);
+  }, [userId]);
+
+  if (!count) return null;
+  return (
+    <div style={{
+      position: "absolute",
+      top: -4, right: -4,
+      minWidth: 16, height: 16,
+      borderRadius: 8,
+      background: T.green,
+      border: `2px solid #080d10`,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 9,
+      fontWeight: 800,
+      color: "#000",
+      padding: "0 3px",
+    }}>
+      {count > 9 ? "9+" : count}
+    </div>
+  );
+}
+// ============================================================
+// BLOCK 1 — Paste this BEFORE "export default function App()"
+// ============================================================
+
+// ── NOTIFICATION HELPERS ─────────────────────────────────────
+const NOTIF_CONFIG = {
+  charging_started:   { icon:"fa-bolt",         color:"#38bdf8", label:"Charging Started"   },
+  charging_completed: { icon:"fa-check-circle",  color:"#4ade80", label:"Session Complete"   },
+  low_balance:        { icon:"fa-exclamation-triangle", color:"#f87171", label:"Low Balance" },
+  booking_confirmed:  { icon:"fa-calendar-check",color:"#4ade80", label:"Booking Confirmed"  },
+  topup_successful:   { icon:"fa-wallet",        color:"#4ade80", label:"Top-Up Successful"  },
+  system:             { icon:"fa-info-circle",   color:"#9ca3af", label:"System"             },
+};
+
+// Call this from anywhere to create a notification
+const createNotification = async (userId, type, title, body, metadata={}) => {
+  if (!SUPABASE_URL || !userId) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON,
+        Authorization: `Bearer ${SUPABASE_ANON}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        user_id:  userId,
+        type,
+        category: type,
+        title,
+        body,
+        metadata,
+        is_read:  false,
+        sent_at:  new Date().toISOString(),
+      }),
+    });
+  } catch(e) {}
+};
+
+// ── NOTIFICATIONS SCREEN ──────────────────────────────────────
+function NotificationsScreen({ go, user }) {
+  const [notifs,   setNotifs]   = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [unread,   setUnread]   = useState(0);
+
+  const loadNotifs = async () => {
+    if (!SUPABASE_URL || !user?.id) { setLoading(false); return; }
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/notifications?user_id=eq.${user.id}&order=created_at.desc&limit=50`,
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+      );
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setNotifs(data);
+        setUnread(data.filter(n => !n.is_read).length);
+      }
+    } catch(e) {}
+    setLoading(false);
+  };
+
+  const markRead = async (id) => {
+    setNotifs(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    setUnread(prev => Math.max(0, prev - 1));
+    if (!SUPABASE_URL) return;
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/notifications?id=eq.${id}`, {
+        method: "PATCH",
+        headers: {
+          apikey: SUPABASE_ANON,
+          Authorization: `Bearer ${SUPABASE_ANON}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify({ is_read: true, read_at: new Date().toISOString() }),
+      });
+    } catch(e) {}
+  };
+
+  const markAllRead = async () => {
+    setNotifs(prev => prev.map(n => ({ ...n, is_read: true })));
+    setUnread(0);
+    if (!SUPABASE_URL || !user?.id) return;
+    try {
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/notifications?user_id=eq.${user.id}&is_read=eq.false`,
+        {
+          method: "PATCH",
+          headers: {
+            apikey: SUPABASE_ANON,
+            Authorization: `Bearer ${SUPABASE_ANON}`,
+            "Content-Type": "application/json",
+            Prefer: "return=minimal",
+          },
+          body: JSON.stringify({ is_read: true, read_at: new Date().toISOString() }),
+        }
+      );
+    } catch(e) {}
+  };
+
+  const deleteNotif = async (id) => {
+    setNotifs(prev => prev.filter(n => n.id !== id));
+    if (!SUPABASE_URL) return;
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/notifications?id=eq.${id}`, {
+        method: "DELETE",
+        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` },
+      });
+    } catch(e) {}
+  };
+
+  useEffect(() => { loadNotifs(); }, [user]);
+
+  const fmtAgo = (iso) => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    const h = Math.floor(m / 60);
+    const d = Math.floor(h / 24);
+    if (d > 0)  return `${d}d ago`;
+    if (h > 0)  return `${h}h ago`;
+    if (m > 0)  return `${m}m ago`;
+    return "Just now";
+  };
+
+  if (!user) return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Notifications" onBack={()=>go("home")}/>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:24,textAlign:"center" }}>
+        <div>
+          <i className="fas fa-bell-slash" style={{ fontSize:56,color:T.muted,marginBottom:16,display:"block" }}/>
+          <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>Sign in to see notifications</div>
+          <button onClick={()=>go("auth")} className="tap"
+            style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"12px 28px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",marginTop:8 }}>
+            Sign In
+          </button>
+        </div>
+      </div>
+      <Nav active="Profile" go={go}/>
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <div style={{ padding:"14px 18px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
+        <button onClick={()=>go("home")} className="tap"
+          style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
+          <i className="fas fa-arrow-left" style={{ fontSize:20,color:T.text }}/>
+        </button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:800,fontSize:16,color:T.text }}>Notifications</div>
+          {unread > 0 && (
+            <div style={{ fontSize:11,color:T.green,marginTop:2 }}>{unread} unread</div>
+          )}
+        </div>
+        {unread > 0 && (
+          <button onClick={markAllRead} className="tap"
+            style={{ background:"none",border:"none",color:T.green,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit" }}>
+            Mark all read
+          </button>
+        )}
+        <Logo size={34}/>
+      </div>
+
+      <div style={{ flex:1,overflowY:"auto",padding:"12px 14px 100px" }}>
+
+        {loading && (
+          <div style={{ textAlign:"center",padding:"40px 0" }}><Spinner/></div>
+        )}
+
+        {!loading && notifs.length === 0 && (
+          <div style={{ textAlign:"center",padding:"60px 20px" }}>
+            <div style={{ width:80,height:80,borderRadius:"50%",background:"rgba(255,255,255,0.05)",border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}>
+              <i className="fas fa-bell" style={{ fontSize:32,color:T.muted }}/>
+            </div>
+            <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>No notifications yet</div>
+            <div style={{ fontSize:13,color:T.muted,lineHeight:1.7 }}>
+              You'll get notified when your<br/>session starts, ends, or wallet is low.
+            </div>
+          </div>
+        )}
+
+        {notifs.map(n => {
+          const cfg = NOTIF_CONFIG[n.type] || NOTIF_CONFIG.system;
+          return (
+            <div key={n.id} className="tap"
+              onClick={() => { if (!n.is_read) markRead(n.id); if (n.action_url) go(n.action_url); }}
+              style={{
+                background: n.is_read ? T.card : "rgba(74,222,128,0.06)",
+                borderRadius: 16,
+                border: `1px solid ${n.is_read ? T.border : "rgba(74,222,128,0.2)"}`,
+                padding: "14px 14px",
+                marginBottom: 10,
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 12,
+                position: "relative",
+              }}>
+
+              {/* Icon */}
+              <div style={{ width:42,height:42,borderRadius:12,background:`${cfg.color}18`,border:`1px solid ${cfg.color}33`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                <i className={`fas ${cfg.icon}`} style={{ fontSize:16,color:cfg.color }}/>
+              </div>
+
+              {/* Content */}
+              <div style={{ flex:1,minWidth:0 }}>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:3 }}>
+                  <div style={{ fontWeight:n.is_read?600:700,fontSize:13,color:T.text,flex:1,paddingRight:8 }}>
+                    {n.title}
+                  </div>
+                  <div style={{ fontSize:10,color:T.muted,flexShrink:0 }}>
+                    {fmtAgo(n.created_at)}
+                  </div>
+                </div>
+                <div style={{ fontSize:12,color:T.muted,lineHeight:1.6 }}>{n.body}</div>
+                {n.type && (
+                  <div style={{ marginTop:6 }}>
+                    <span style={{ fontSize:10,fontWeight:700,color:cfg.color,background:`${cfg.color}15`,borderRadius:6,padding:"2px 8px" }}>
+                      {cfg.label}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Unread dot */}
+              {!n.is_read && (
+                <div style={{ width:8,height:8,borderRadius:"50%",background:T.green,flexShrink:0,marginTop:4 }}/>
+              )}
+
+              {/* Delete button */}
+              <button
+                onClick={e => { e.stopPropagation(); deleteNotif(n.id); }}
+                className="tap"
+                style={{ position:"absolute",top:10,right:10,background:"none",border:"none",color:T.muted,cursor:"pointer",padding:"2px 6px",fontSize:11 }}>
+                <i className="fas fa-times"/>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <Nav active="Profile" go={go}/>
+    </div>
+  );
+}
