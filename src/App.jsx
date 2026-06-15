@@ -1764,7 +1764,7 @@ function Verify({ go }) {
 
 function Profile({ go,user,setUser,onMenu }) {
   const fileRef=useRef(null);
-  const [avatar,setAvatar]=useState(null);
+  const [avatar,setAvatar]=useState(null);useEffect(()=>{if(!SUPABASE_URL||!user?.id)return;fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}&select=avatar_url`,{headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`}}).then(r=>r.json()).then(d=>{if(d?.[0]?.avatar_url)setAvatar(d[0].avatar_url);}).catch(()=>{});},[user]);
   const handlePhoto=async(e)=>{ const file=e.target.files[0]; if(!file) return; const r=new FileReader(); r.onload=(ev)=>setAvatar(ev.target.result); r.readAsDataURL(file); if(!SUPABASE_URL||!user?.id) return; try{ const ext=file.name.split('.').pop(); const path=`${user.id}/avatar.${ext}`; const res=await fetch(`${SUPABASE_URL}/storage/v1/object/avatars/${path}`,{method:'POST',headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`,'Content-Type':file.type,'x-upsert':'true'},body:file}); if(res.ok){ const url=`${SUPABASE_URL}/storage/v1/object/public/avatars/${path}`; setAvatar(url); if(SUPABASE_URL) await fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}`,{method:'PATCH',headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({avatar_url:url})}); }}catch(e){} };
   const booking=(()=>{ try { const b=localStorage.getItem("eco_booking"); return b?JSON.parse(b):null; } catch(e){ return null; } })();
   const totalCharges=booking?1:0;
