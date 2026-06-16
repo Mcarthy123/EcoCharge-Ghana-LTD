@@ -1284,7 +1284,7 @@ function QRScreen({ go, booking, setBooking, user }) {
       setPhase("completed");
 
     } catch(e) {
-      console.error("Stop charging error:", e);
+      if(SUPABASE_URL&&user?.id){try{await fetch(`${SUPABASE_URL}/rest/v1/rpc/award_loyalty_points`,{method:"POST",headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`,"Content-Type":"application/json"},body:JSON.stringify({p_user_id:user.id,p_kwh:finalKwh})});}catch(e){}}setPhase("completed");     } catch(e) { setPhase("completed"); }
       setPhase("completed"); // Still show completed
     }
   };
