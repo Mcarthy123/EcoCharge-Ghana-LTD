@@ -1771,7 +1771,7 @@ function Profile({ go,user,setUser,onMenu }) {
   const totalSpent=booking?booking.amount:0;
   const co2Saved=totalCharges*4;
   const waterReceived=totalCharges*20;
-  const menuItems=[
+ const [loyaltyData,setLoyaltyData]=useState({points:0,tier:"Bronze",totalCharges:0,totalKwh:0});useEffect(()=>{if(!SUPABASE_URL||!user?.id)return;fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}&select=loyalty_points,loyalty_tier,total_charges,total_kwh`,{headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`}}).then(r=>r.json()).then(d=>{if(d?.[0])setLoyaltyData({points:d[0].loyalty_points||0,tier:d[0].loyalty_tier||"Bronze",totalCharges:d[0].total_charges||0,totalKwh:d[0].total_kwh||0});}).catch(()=>{});},[user]);const tierColor={"Bronze":"#cd7f32","Silver":"#9ca3af","Gold":"#fbbf24","Platinum":"#38bdf8"}[loyaltyData.tier]||"#cd7f32";const tierNext={"Bronze":500,"Silver":2000,"Gold":5000,"Platinum":5000}[loyaltyData.tier]||500;const tierPct=Math.min(100,Math.round((loyaltyData.points/tierNext)*100)); const menuItems=[
     { icon:"fa-car",label:"My Vehicles",screen:"detail" },
     { icon:"fa-credit-card",label:"Payment Methods",screen:"home" },
     { icon:"fa-cog",label:"Settings",screen:"about" },
