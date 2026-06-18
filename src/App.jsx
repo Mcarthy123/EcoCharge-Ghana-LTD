@@ -74,19 +74,19 @@ const useSolarData = (lat=7.9465, lng=-1.0232) => {
   },[]);
   return { solar, loading };
 };
-const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
-  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-  html,body,#root{height:100%;-webkit-text-size-adjust:100%}
-  body{font-family:'Inter',sans-serif;background:#0a0d10;color:#fff;-webkit-font-smoothing:antialiased;}
-  @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  .fade{animation:fadeUp .3s ease both}
-  .fade1{animation:fadeUp .3s .06s ease both}
-  .fade2{animation:fadeUp .3s .12s ease both}
-  .fade3{animation:fadeUp .3s .18s ease both}
-  .tap{transition:opacity .15s,transform .15s;cursor:pointer;-webkit-tap-highlight-color:transparent;}
-  .tap:active{opacity:.7;transform:scale(.97)}
-  .row{transition:background .15s;cursor:pointer}
-  .row:active{background:#1e2330}
-  input,button,textarea{font-family:'Inter',sans-serif;outline:none}
+const CSS = [
+  "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');",
+  "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}",
+  "html,body,#root{height:100%;-webkit-text-size-adjust:100%}",
+  "body{font-family:'Inter',sans-serif;background:#0a0d10;color:#fff;-webkit-font-smoothing:antialiased;}",
+  "@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}",
+  "@keyframes spin{to{transform:rotate(360deg)}}",
+  ".fade{animation:fadeUp .3s ease both}",
+  ".fade1{animation:fadeUp .3s .06s ease both}",
+  ".fade2{animation:fadeUp .3s .12s ease both}",
+  ".fade3{animation:fadeUp .3s .18s ease both}",
+  ".tap{transition:opacity .15s,transform .15s;cursor:pointer;-webkit-tap-highlight-color:transparent;}",
+  ".tap:active{opacity:.7;transform:scale(.97)}",
+  ".row{transition:background .15s;cursor:pointer}",
+  ".row:active{background:#1e2330}",
+  "input,button,textarea{font-family:'Inter',sans-serif;outline:none}",
