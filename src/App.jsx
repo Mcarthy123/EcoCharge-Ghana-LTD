@@ -4,9 +4,11 @@
 // Paystack, Supabase, QR, Booking, Verify, Map
 // ============================================================
 import { useState, useEffect, useRef } from "react";
+
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL        || "";
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY   || "";
 const PAYSTACK_KEY  = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "";
+
 const sb = async (path, opts = {}) => {
   if (!SUPABASE_URL) return null;
   try {
@@ -17,12 +19,14 @@ const sb = async (path, opts = {}) => {
     return res.ok ? res.json() : null;
   } catch(e) { return null; }
 };
+
 const T = {
   bg:"#0a0d10", card:"#13171f", card2:"#1a1f2a", border:"#222632",
   green:"#4ade80", greenDark:"#22c55e", greenDim:"#166534",
   text:"#ffffff", muted:"#6b7280", mutedLight:"#9ca3af",
   blue:"#38bdf8", yellow:"#fbbf24", red:"#f87171",
 };
+
 const STATIONS = [
   { id:1, name:"Accra Central",  city:"Accra",      bays:6, open:6, solar:85, hydrogen:15, time:"23 mins", lat:5.6037,  lng:-0.1870 },
   { id:2, name:"Kumasi Hub",     city:"Kumasi",     bays:4, open:3, solar:90, hydrogen:10, time:"12 mins", lat:6.6885,  lng:-1.6244 },
@@ -33,17 +37,20 @@ const STATIONS = [
   { id:7, name:"Cape Coast",     city:"Cape Coast", bays:6, open:6, solar:88, hydrogen:12, time:"35 mins", lat:5.1053,  lng:-1.2466 },
   { id:8, name:"Ho District",    city:"Ho",         bays:4, open:3, solar:82, hydrogen:18, time:"40 mins", lat:6.6011,  lng:0.4712  },
 ];
+
 const VEHICLES = [
   { type:"Car",      price:"GH₵140–210", amount:175, desc:"Full EV sedan — solar powered"  },
   { type:"Scooter",  price:"GH₵8–15",   amount:12,  desc:"Electric scooter fast charge"    },
   { type:"Tricycle", price:"GH₵18–28",  amount:23,  desc:"Cargo tricycle — station charge" },
 ];
+
 const DURATIONS = [
   { label:"30 min",  value:30,  extra:0  },
   { label:"1 hour",  value:60,  extra:5  },
   { label:"2 hours", value:120, extra:10 },
   { label:"3 hours", value:180, extra:15 },
 ];
+
 const useSolarData = (lat=7.9465, lng=-1.0232) => {
   const [solar, setSolar] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -74,6 +81,7 @@ const useSolarData = (lat=7.9465, lng=-1.0232) => {
   },[]);
   return { solar, loading };
 };
+
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
