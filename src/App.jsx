@@ -548,7 +548,7 @@ function Home({ go,stations,setStation,user,onMenu }) {
           </div>
         </div>
         <div style={{ position:"relative" }}>
-          <button className="tap" style={{ background:"rgba(255,255,255,.07)",border:`1px solid ${T.border}`,borderRadius:12,width:40,height:40,display:"flex",alignItems:"center",justifyContent:"center" }}>
+          <button   className="tap"   onClick={() => setView("notifications")}   style={{ background:"rgba(255,255,255,.07)",border:`1px solid ${T.border}`,borderRadius:12,width:40,height:40,display:"flex",alignItems:"center",justifyContent:"center" }} >
             <i className="fas fa-bell" style={{ fontSize:16,color:T.mutedLight }}/>
           </button>
           <div style={{ position:"absolute",top:-2,right:-2,width:10,height:10,borderRadius:"50%",background:T.green,border:`2px solid #080d10` }}/>
