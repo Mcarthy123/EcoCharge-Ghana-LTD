@@ -9,11 +9,32 @@ const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL        || "";
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY   || "";
 const PAYSTACK_KEY  = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "";
 
+// ── AUTH TOKEN HELPER ─────────────────────────────────────────
+// Reads the real user session token from localStorage (set by
+// Supabase Auth on sign-in). Falls back to anon key for public
+// endpoints. This fixes all RLS policies that use auth.uid().
+const getToken = () => {
+  try {
+    const key = `sb-${SUPABASE_URL.split("//")[1].split(".")[0]}-auth-token`;
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const p = JSON.parse(raw);
+      return p?.access_token || SUPABASE_ANON;
+    }
+  } catch(e) {}
+  return SUPABASE_ANON;
+};
+
 const sb = async (path, opts = {}) => {
   if (!SUPABASE_URL) return null;
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-      headers: { apikey:SUPABASE_ANON, Authorization:`Bearer ${SUPABASE_ANON}`, "Content-Type":"application/json", ...opts.headers },
+      headers: {
+        apikey: SUPABASE_ANON,
+        Authorization: `Bearer ${getToken()}`,
+        "Content-Type": "application/json",
+        ...opts.headers
+      },
       ...opts,
     });
     return res.ok ? res.json() : null;
@@ -124,6 +145,197 @@ const Logo = ({ size=34 }) => {
   );
 };
 
+// ── NOTIFICATIONS ─────────────────────────────────────────────
+const NOTIF_CONFIG={
+  charging_started:   { icon:"fa-bolt",              color:"#38bdf8", label:"Charging Started"   },
+  charging_completed: { icon:"fa-check-circle",      color:"#4ade80", label:"Session Complete"   },
+  low_balance:        { icon:"fa-exclamation-triangle",color:"#f87171",label:"Low Balance"        },
+  booking_confirmed:  { icon:"fa-calendar-check",    color:"#4ade80", label:"Booking Confirmed"  },
+  topup_successful:   { icon:"fa-wallet",             color:"#4ade80", label:"Top-Up Successful" },
+  system:             { icon:"fa-info-circle",        color:"#9ca3af", label:"System"            },
+};
+
+// Uses getToken() so RLS auth.uid() = user_id policies work
+const createNotification = async (userId, type, title, body, metadata={}) => {
+  if (!SUPABASE_URL || !userId) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON,
+        Authorization: `Bearer ${getToken()}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal"
+      },
+      body: JSON.stringify({
+        user_id: userId, type, category: type, title, body,
+        metadata, is_read: false, sent_at: new Date().toISOString()
+      }),
+    });
+  } catch(e) {}
+};
+
+function UnreadBadge({ userId }) {
+  const [count, setCount] = useState(0);
+  useEffect(()=>{
+    if (!SUPABASE_URL || !userId) return;
+    const load = async () => {
+      try {
+        const res = await fetch(
+          `${SUPABASE_URL}/rest/v1/notifications?user_id=eq.${userId}&is_read=eq.false&select=id`,
+          { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` }}
+        );
+        const data = await res.json();
+        if (Array.isArray(data)) setCount(data.length);
+      } catch(e) {}
+    };
+    load();
+    const t = setInterval(load, 30000);
+    return () => clearInterval(t);
+  }, [userId]);
+  if (!count) return null;
+  return (
+    <div style={{ position:"absolute",top:-4,right:-4,minWidth:16,height:16,borderRadius:8,background:"#4ade80",border:"2px solid #080d10",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#000",padding:"0 3px" }}>
+      {count>9?"9+":count}
+    </div>
+  );
+}
+
+function NotificationsScreen({ go, user }) {
+  const [notifs,  setNotifs]  = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [unread,  setUnread]  = useState(0);
+
+  const loadNotifs = async () => {
+    if (!SUPABASE_URL || !user?.id) { setLoading(false); return; }
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/notifications?user_id=eq.${user.id}&order=created_at.desc&limit=50`,
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` }}
+      );
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setNotifs(data);
+        setUnread(data.filter(n=>!n.is_read).length);
+      }
+    } catch(e) {}
+    setLoading(false);
+  };
+
+  const markRead = async (id) => {
+    setNotifs(prev => prev.map(n => n.id===id ? {...n, is_read:true} : n));
+    setUnread(prev => Math.max(0, prev-1));
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/notifications?id=eq.${id}`, {
+        method: "PATCH",
+        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type":"application/json", Prefer:"return=minimal" },
+        body: JSON.stringify({ is_read: true, read_at: new Date().toISOString() }),
+      });
+    } catch(e) {}
+  };
+
+  const markAllRead = async () => {
+    setNotifs(prev => prev.map(n => ({...n, is_read:true})));
+    setUnread(0);
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/notifications?user_id=eq.${user.id}&is_read=eq.false`, {
+        method: "PATCH",
+        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type":"application/json", Prefer:"return=minimal" },
+        body: JSON.stringify({ is_read: true, read_at: new Date().toISOString() }),
+      });
+    } catch(e) {}
+  };
+
+  const deleteNotif = async (id) => {
+    setNotifs(prev => prev.filter(n => n.id !== id));
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/notifications?id=eq.${id}`, {
+        method: "DELETE",
+        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` },
+      });
+    } catch(e) {}
+  };
+
+  useEffect(() => { loadNotifs(); }, [user]);
+
+  const fmtAgo = (iso) => {
+    const diff=Date.now()-new Date(iso).getTime(), m=Math.floor(diff/60000), h=Math.floor(m/60), d=Math.floor(h/24);
+    if (d>0) return d+"d ago";
+    if (h>0) return h+"h ago";
+    if (m>0) return m+"m ago";
+    return "Just now";
+  };
+
+  if (!user) return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Notifications" onBack={()=>go("home")}/>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",textAlign:"center",padding:24 }}>
+        <div>
+          <i className="fas fa-bell-slash" style={{ fontSize:56,color:T.muted,marginBottom:16,display:"block" }}/>
+          <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>Sign in to see notifications</div>
+          <button onClick={()=>go("auth")} className="tap" style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"12px 28px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",marginTop:8 }}>Sign In</button>
+        </div>
+      </div>
+      <Nav active="Profile" go={go}/>
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <div style={{ padding:"14px 18px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
+        <button onClick={()=>go("home")} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
+          <i className="fas fa-arrow-left" style={{ fontSize:20,color:T.text }}/>
+        </button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:800,fontSize:16,color:T.text }}>Notifications</div>
+          {unread>0&&<div style={{ fontSize:11,color:T.green,marginTop:2 }}>{unread} unread</div>}
+        </div>
+        {unread>0&&<button onClick={markAllRead} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit" }}>Mark all read</button>}
+        <Logo size={34}/>
+      </div>
+      <div style={{ flex:1,overflowY:"auto",padding:"12px 14px 100px" }}>
+        {loading&&<div style={{ textAlign:"center",padding:"40px 0" }}><Spinner/></div>}
+        {!loading&&notifs.length===0&&(
+          <div style={{ textAlign:"center",padding:"60px 20px" }}>
+            <div style={{ width:80,height:80,borderRadius:"50%",background:"rgba(255,255,255,0.05)",border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}>
+              <i className="fas fa-bell" style={{ fontSize:32,color:T.muted }}/>
+            </div>
+            <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>No notifications yet</div>
+            <div style={{ fontSize:13,color:T.muted,lineHeight:1.7 }}>You will be notified when your session starts, ends, or wallet is low.</div>
+          </div>
+        )}
+        {notifs.map(n=>{
+          const cfg = NOTIF_CONFIG[n.type] || NOTIF_CONFIG.system;
+          return (
+            <div key={n.id} className="tap" onClick={()=>{ if(!n.is_read) markRead(n.id); if(n.action_url) go(n.action_url); }}
+              style={{ background:n.is_read?T.card:"rgba(74,222,128,0.06)",borderRadius:16,border:`1px solid ${n.is_read?T.border:"rgba(74,222,128,0.2)"}`,padding:"14px",marginBottom:10,display:"flex",alignItems:"flex-start",gap:12,position:"relative" }}>
+              <div style={{ width:42,height:42,borderRadius:12,background:cfg.color+"18",border:"1px solid "+cfg.color+"33",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                <i className={"fas "+cfg.icon} style={{ fontSize:16,color:cfg.color }}/>
+              </div>
+              <div style={{ flex:1,minWidth:0 }}>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:3 }}>
+                  <div style={{ fontWeight:n.is_read?600:700,fontSize:13,color:T.text,flex:1,paddingRight:8 }}>{n.title}</div>
+                  <div style={{ fontSize:10,color:T.muted,flexShrink:0 }}>{fmtAgo(n.created_at)}</div>
+                </div>
+                <div style={{ fontSize:12,color:T.muted,lineHeight:1.6 }}>{n.body}</div>
+                <div style={{ marginTop:6 }}>
+                  <span style={{ fontSize:10,fontWeight:700,color:cfg.color,background:cfg.color+"15",borderRadius:6,padding:"2px 8px" }}>{cfg.label}</span>
+                </div>
+              </div>
+              {!n.is_read&&<div style={{ width:8,height:8,borderRadius:"50%",background:T.green,flexShrink:0,marginTop:4 }}/>}
+              <button onClick={e=>{ e.stopPropagation(); deleteNotif(n.id); }} className="tap"
+                style={{ position:"absolute",top:10,right:10,background:"none",border:"none",color:T.muted,cursor:"pointer",padding:"2px 6px",fontSize:11 }}>
+                <i className="fas fa-times"/>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <Nav active="Profile" go={go}/>
+    </div>
+  );
+}
+
 const NewNav = ({ active, go }) => (
   <div style={{ position:"fixed",bottom:0,left:0,right:0,display:"flex",justifyContent:"space-around",alignItems:"flex-end",padding:"10px 0 26px",borderTop:`1px solid ${T.border}`,background:"rgba(10,13,16,.97)",backdropFilter:"blur(16px)",zIndex:100 }}>
     {[
@@ -152,9 +364,9 @@ const NewNav = ({ active, go }) => (
 const Nav = ({ active, go }) => (
   <div style={{ display:"flex",justifyContent:"space-around",padding:"10px 0 26px",borderTop:`1px solid ${T.border}`,background:T.bg,flexShrink:0,position:"sticky",bottom:0,zIndex:50 }}>
     {[
-      { label:"Home",     screen:"home",   icon:"fa-home"    },
-      { label:"Stations", screen:"detail", icon:"fa-plug"    },
-      { label:"Profile",  screen:"profile",icon:"fa-user"   },
+      { label:"Home",     screen:"home",   icon:"fa-home"       },
+      { label:"Stations", screen:"detail", icon:"fa-plug"       },
+      { label:"Profile",  screen:"profile",icon:"fa-user"       },
       { label:"More",     screen:"about",  icon:"fa-ellipsis-h" },
     ].map(({ label,screen,icon })=>(
       <button key={label} onClick={()=>go(screen)} className="tap"
@@ -203,16 +415,17 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => (
       </div>
       <div style={{ flex:1,overflowY:"auto" }}>
         {[
-          { icon:"fa-home",         label:"Find Stations",   screen:"home"    },
-          { icon:"fa-plug",         label:"All Stations",    screen:"detail"  },
-          { icon:"fa-user",         label:"My Profile",      screen:"profile" },
-          { icon:"fa-info-circle",  label:"About EcoCharge", screen:"about"   },
-          { icon:"fa-bolt",         label:"Verify Booking",  screen:"verify", color:T.yellow },
-          { icon:"fa-charging-station", label:"Charger Admin",   screen:"chargers", color:T.blue   },
-          { icon:"fa-list-alt",        label:"Session Manager", screen:"sessions", color:T.green  },
-          { icon:"fa-wallet",          label:"My Wallet",       screen:"wallet",   color:T.yellow },
-          { icon:"fa-tags",            label:"Pricing Engine",  screen:"pricing",  color:"#a78bfa" },
-          { icon:"fa-shield-alt",      label:"Admin Dashboard", screen:"admin",    color:"#f87171" },
+          { icon:"fa-home",             label:"Find Stations",   screen:"home"          },
+          { icon:"fa-plug",             label:"All Stations",    screen:"detail"        },
+          { icon:"fa-user",             label:"My Profile",      screen:"profile"       },
+          { icon:"fa-bell",             label:"Notifications",   screen:"notifications" },
+          { icon:"fa-info-circle",      label:"About EcoCharge", screen:"about"         },
+          { icon:"fa-bolt",             label:"Verify Booking",  screen:"verify",       color:T.yellow },
+          { icon:"fa-charging-station", label:"Charger Admin",   screen:"chargers",     color:T.blue   },
+          { icon:"fa-list-alt",         label:"Session Manager", screen:"sessions",     color:T.green  },
+          { icon:"fa-wallet",           label:"My Wallet",       screen:"wallet",       color:T.yellow },
+          { icon:"fa-tags",             label:"Pricing Engine",  screen:"pricing",      color:"#a78bfa" },
+          { icon:"fa-shield-alt",       label:"Admin Dashboard", screen:"admin",        color:"#f87171" },
         ].map(item=>(
           <div key={item.label} className="tap row" onClick={()=>{ go(item.screen);onClose(); }}
             style={{ display:"flex",alignItems:"center",gap:14,padding:"16px 20px",borderBottom:`1px solid ${T.border}20` }}>
@@ -233,6 +446,7 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => (
     </div>
   </>
 );
+
 
 function Splash({ onLogin, onRegister, onGuest }) {
   return (
@@ -414,6 +628,7 @@ function Auth({ mode, onBack, onSuccess }) {
   );
 }
 
+
 function MapScreen({ go,stations,setStation }) {
   const mapRef  = useRef(null);
   const mapInst = useRef(null);
@@ -548,10 +763,10 @@ function Home({ go,stations,setStation,user,onMenu }) {
           </div>
         </div>
         <div style={{ position:"relative" }}>
-          <button className="tap" style={{ background:"rgba(255,255,255,.07)",border:`1px solid ${T.border}`,borderRadius:12,width:40,height:40,display:"flex",alignItems:"center",justifyContent:"center" }}>
+          <button onClick={()=>go("notifications")} className="tap" style={{ background:"rgba(255,255,255,.07)",border:`1px solid ${T.border}`,borderRadius:12,width:40,height:40,display:"flex",alignItems:"center",justifyContent:"center" }}>
             <i className="fas fa-bell" style={{ fontSize:16,color:T.mutedLight }}/>
           </button>
-          <div style={{ position:"absolute",top:-2,right:-2,width:10,height:10,borderRadius:"50%",background:T.green,border:`2px solid #080d10` }}/>
+          {user?.id && <UnreadBadge userId={user.id}/>}
         </div>
       </div>
       <div style={{ margin:"0 14px 16px",borderRadius:22,overflow:"hidden",position:"relative",minHeight:200 }}>
@@ -667,6 +882,7 @@ function Home({ go,stations,setStation,user,onMenu }) {
     </div>
   );
 }
+
 
 function Detail({ go,station,stations,setStation }) {
   const s=station||stations[0];
@@ -900,11 +1116,25 @@ function Booking({ go,station,vehicle,user,setBooking }) {
   );
 }
 
-function QRScreen({ go, booking, setBooking, user }) {
-  // ── STATE ─────────────────────────────────────────────────
-  const [phase,       setPhase]      = useState("ready");
-  // ready | verifying | charging | stopping | completed | error
 
+// ── OCPP API HELPER ───────────────────────────────────────────
+const OCPP_URL = import.meta.env.VITE_OCPP_SERVER_URL || "";
+const OCPP_KEY = import.meta.env.VITE_OCPP_API_KEY    || "";
+
+const ocppApi = async (path, method = "GET", body = null) => {
+  if (!OCPP_URL) return null;
+  try {
+    const res = await fetch(`${OCPP_URL}${path}`, {
+      method,
+      headers: { "x-api-key": OCPP_KEY, "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return res.ok ? res.json() : null;
+  } catch(e) { return null; }
+};
+
+function QRScreen({ go, booking, setBooking, user }) {
+  const [phase,       setPhase]      = useState("ready");
   const [elapsed,     setElapsed]    = useState(0);
   const [liveKwh,     setLiveKwh]    = useState(0);
   const [livePower,   setLivePower]  = useState(0);
@@ -924,16 +1154,13 @@ function QRScreen({ go, booking, setBooking, user }) {
   let b = booking;
   if (!b) { try { const s=localStorage.getItem("eco_booking"); if(s) b=JSON.parse(s); } catch(e){} }
 
-  // ── SUPABASE REALTIME + LIVE TIMER ────────────────────
   useEffect(()=>{
     if (phase !== 'charging') return;
 
-    // 1. Local tick every second (always works)
     const tick = setInterval(()=>{
       setElapsed(e => e + 1);
-      // Only use local simulation if no realtime data
       setRealtimeData(prev => {
-        if (prev) return prev; // realtime is live — don't simulate
+        if (prev) return prev;
         const newKwh  = +(liveKwh + 0.00055).toFixed(4);
         const newPow  = +(6.8 + Math.random()*1.4).toFixed(2);
         const newCost = +(costSoFar + 0.000472).toFixed(4);
@@ -947,16 +1174,14 @@ function QRScreen({ go, booking, setBooking, user }) {
       setSignalStr(s => Math.max(20, s + (Math.random()-0.5)*10));
     }, 1000);
 
-    // 2. Supabase Realtime subscription for live meter values
     let sub = null;
     if (SUPABASE_URL && sessionId) {
       try {
-        // Poll meter_values every 5s (Realtime via polling)
         const pollMeter = async () => {
           try {
             const res = await fetch(
               `${SUPABASE_URL}/rest/v1/meter_values?session_id=eq.${sessionId}&order=created_at.desc&limit=1`,
-              { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+              { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` }}
             );
             const data = await res.json();
             if (data?.[0]) {
@@ -973,11 +1198,10 @@ function QRScreen({ go, booking, setBooking, user }) {
                 setPowerHistory(h => [...h.slice(-19), { t: Date.now(), v: mv.value/1000 }]);
               }
             }
-            // Also refresh wallet
             if (user?.id) {
               const wRes = await fetch(
                 `${SUPABASE_URL}/rest/v1/wallets?user_id=eq.${user.id}&select=balance_pesewas`,
-                { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+                { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` }}
               );
               const wData = await wRes.json();
               if (wData?.[0]) setWalletBal(wData[0].balance_pesewas);
@@ -985,7 +1209,7 @@ function QRScreen({ go, booking, setBooking, user }) {
           } catch(e) {}
         };
         const pollInterval = setInterval(pollMeter, 5000);
-        pollMeter(); // immediate first fetch
+        pollMeter();
         sub = pollInterval;
         setRealtimeSub(pollInterval);
       } catch(e) { console.error('Realtime setup error:', e); }
@@ -997,7 +1221,6 @@ function QRScreen({ go, booking, setBooking, user }) {
     };
   }, [phase, sessionId]);
 
-  // ── ESTIMATED REMAINING TIME ──────────────────────────────
   useEffect(()=>{
     if (!b?.duration_min || phase !== 'charging') return;
     const totalSec = b.duration_min * 60;
@@ -1007,13 +1230,12 @@ function QRScreen({ go, booking, setBooking, user }) {
     setEstRemaining(`${rm}m ${rs}s`);
   }, [elapsed, phase]);
 
-  // ── LOAD WALLET BALANCE ───────────────────────────────────
   const loadWallet = async () => {
     if (!SUPABASE_URL || !user?.id) return null;
     try {
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/wallets?user_id=eq.${user.id}&select=balance_pesewas`,
-        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` }}
       );
       const data = await res.json();
       if (data?.[0]) { setWalletBal(data[0].balance_pesewas); return data[0].balance_pesewas; }
@@ -1031,14 +1253,12 @@ function QRScreen({ go, booking, setBooking, user }) {
     ? Math.min(100, Math.round((elapsed/(b.duration_min*60))*100))
     : Math.min(100, Math.round((elapsed/3600)*100));
 
-  // ── START CHARGING ────────────────────────────────────────
   const startCharging = async () => {
     setPhase("verifying"); setError(""); setChecks({});
 
     const step = (key, ok, msg) => setChecks(prev => ({...prev, [key]: { ok, msg }}));
 
     try {
-      // ── CHECK 1: User authenticated ─────────────────────
       step("auth", null, "Checking authentication...");
       if (!user?.id) {
         step("auth", false, "Not authenticated");
@@ -1048,7 +1268,6 @@ function QRScreen({ go, booking, setBooking, user }) {
       step("auth", true, "Authenticated ✓");
       await new Promise(r => setTimeout(r, 300));
 
-      // ── CHECK 2: Booking valid ───────────────────────────
       step("booking", null, "Validating booking...");
       if (!b?.reference) {
         step("booking", false, "No valid booking");
@@ -1063,7 +1282,6 @@ function QRScreen({ go, booking, setBooking, user }) {
       step("booking", true, `Booking ${b.reference} valid ✓`);
       await new Promise(r => setTimeout(r, 300));
 
-      // ── CHECK 3: Wallet balance ──────────────────────────
       step("wallet", null, "Checking wallet balance...");
       const requiredPesewas = (b.amount || 175) * 100;
       const balance = await loadWallet();
@@ -1075,7 +1293,6 @@ function QRScreen({ go, booking, setBooking, user }) {
       step("wallet", true, balance !== null ? `Balance GH₵${(balance/100).toFixed(2)} ✓` : "Balance check skipped (pay on arrival) ✓");
       await new Promise(r => setTimeout(r, 300));
 
-      // ── CHECK 4: Charger available ───────────────────────
       step("charger", null, "Checking charger availability...");
       let chargerId = b.charger_id || "ECOCHARGE-001";
       let chargerOk = false;
@@ -1099,7 +1316,6 @@ function QRScreen({ go, booking, setBooking, user }) {
               setPhase("error"); return;
             }
           } else {
-            // Charger not in OCPP server — allow continue (manual stations)
             chargerOk = true;
             step("charger", true, "Station confirmed ✓");
           }
@@ -1113,13 +1329,12 @@ function QRScreen({ go, booking, setBooking, user }) {
       }
       await new Promise(r => setTimeout(r, 300));
 
-      // ── CHECK 5: Lock wallet funds ───────────────────────
       step("lock", null, "Reserving funds...");
       if (SUPABASE_URL && user?.id && b.pay_method === "wallet") {
         try {
           await fetch(`${SUPABASE_URL}/rest/v1/wallets?user_id=eq.${user.id}`, {
             method: "PATCH",
-            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", Prefer: "return=minimal" },
             body: JSON.stringify({ locked_pesewas: requiredPesewas })
           });
         } catch(e) {}
@@ -1127,7 +1342,6 @@ function QRScreen({ go, booking, setBooking, user }) {
       step("lock", true, "Funds reserved ✓");
       await new Promise(r => setTimeout(r, 200));
 
-      // ── SEND OCPP RemoteStartTransaction ─────────────────
       step("ocpp", null, "Sending start command to charger...");
       let newTxId = Date.now();
       if (OCPP_URL) {
@@ -1145,7 +1359,6 @@ function QRScreen({ go, booking, setBooking, user }) {
             step("ocpp", true, "Start command accepted ✓");
           } else {
             step("ocpp", false, "Charger did not respond");
-            // Don't block — allow manual start
             step("ocpp", true, "Manual activation mode ✓");
           }
         } catch(e) {
@@ -1155,13 +1368,12 @@ function QRScreen({ go, booking, setBooking, user }) {
         step("ocpp", true, "Session started ✓");
       }
 
-      // ── CREATE CHARGING SESSION IN DB ────────────────────
       const newSessionId = `SES-${Date.now().toString(36).toUpperCase()}`;
       if (SUPABASE_URL) {
         try {
           await fetch(`${SUPABASE_URL}/rest/v1/charging_sessions`, {
             method: "POST",
-            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", Prefer: "return=minimal" },
             body: JSON.stringify({
               id:             newSessionId,
               session_ref:    b.reference,
@@ -1183,12 +1395,11 @@ function QRScreen({ go, booking, setBooking, user }) {
         } catch(e) { console.error("Session create error:", e); }
       }
 
-      // ── UPDATE BOOKING STATUS ─────────────────────────────
       if (SUPABASE_URL) {
         try {
           await fetch(`${SUPABASE_URL}/rest/v1/bookings?reference=eq.${b.reference}`, {
             method: "PATCH",
-            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", Prefer: "return=minimal" },
             body: JSON.stringify({ status: "charging", session_id: newSessionId })
           });
         } catch(e) {}
@@ -1199,19 +1410,22 @@ function QRScreen({ go, booking, setBooking, user }) {
       setElapsed(0); setLiveKwh(0); setCostSoFar(0);
       setPhase("charging");
 
+      if (user?.id) {
+        createNotification(user.id, "charging_started", "Charging Started",
+          `Your session at ${b.station || "EcoCharge"} has begun.`, { session_id: newSessionId });
+      }
+
     } catch(e) {
       setError("An unexpected error occurred: " + e.message);
       setPhase("error");
     }
   };
 
-  // ── STOP CHARGING ─────────────────────────────────────────
   const stopCharging = async () => {
     setPhase("stopping");
     const chargerId = b?.charger_id || "ECOCHARGE-001";
 
     try {
-      // 1. Send OCPP RemoteStopTransaction
       if (OCPP_URL && txId) {
         try {
           await fetch(`${OCPP_URL}/api/chargers/${chargerId}/remote-stop`, {
@@ -1224,15 +1438,14 @@ function QRScreen({ go, booking, setBooking, user }) {
 
       const finalKwh    = liveKwh;
       const finalCost   = costSoFar;
-      const finalCostPs = Math.round(finalCost * 100);  // to pesewas
+      const finalCostPs = Math.round(finalCost * 100);
       const now         = new Date().toISOString();
 
-      // 2. Update charging session
       if (SUPABASE_URL && sessionId) {
         try {
           await fetch(`${SUPABASE_URL}/rest/v1/charging_sessions?id=eq.${sessionId}`, {
             method: "PATCH",
-            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", Prefer: "return=minimal" },
             body: JSON.stringify({
               status:       "Completed",
               meter_stop:   Math.round(finalKwh * 1000),
@@ -1247,49 +1460,51 @@ function QRScreen({ go, booking, setBooking, user }) {
         } catch(e) { console.error("Session update error:", e); }
       }
 
-      // 3. Debit wallet
       if (SUPABASE_URL && user?.id && finalCostPs > 0) {
         try {
           await fetch(`${SUPABASE_URL}/rest/v1/rpc/wallet_debit`, {
             method: "POST",
-            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json" },
+            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
             body: JSON.stringify({
-              p_user_id:    user.id,
-              p_amount:     finalCostPs,
-              p_description: `Charging session at ${b?.station || "EcoCharge"} — ${finalKwh.toFixed(3)} kWh`,
-              p_session_id: sessionId,
-              p_booking_ref: b?.reference,
+              p_user_id:        user.id,
+              p_amount_pesewas: finalCostPs,
+              p_type:           "debit",
+              p_description:    `Charging session at ${b?.station || "EcoCharge"} — ${finalKwh.toFixed(3)} kWh`,
+              p_session_id:     sessionId,
+              p_booking_ref:    b?.reference,
             })
           });
-          // Unlock reserved funds
           await fetch(`${SUPABASE_URL}/rest/v1/wallets?user_id=eq.${user.id}`, {
             method: "PATCH",
-            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", Prefer: "return=minimal" },
             body: JSON.stringify({ locked_pesewas: 0 })
           });
         } catch(e) { console.error("Wallet debit error:", e); }
       }
 
-      // 4. Update booking
       if (SUPABASE_URL && b?.reference) {
         try {
           await fetch(`${SUPABASE_URL}/rest/v1/bookings?reference=eq.${b.reference}`, {
             method: "PATCH",
-            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", Prefer: "return=minimal" },
             body: JSON.stringify({ status: "completed" })
           });
         } catch(e) {}
+      }
+
+      if (user?.id) {
+        createNotification(user.id, "charging_completed", "Session Complete",
+          `You used ${finalKwh.toFixed(2)} kWh for GH₵${finalCost.toFixed(2)}.`, { session_id: sessionId });
       }
 
       setPhase("completed");
 
     } catch(e) {
       console.error("Stop charging error:", e);
-      setPhase("completed"); // Still show completed
+      setPhase("completed");
     }
   };
 
-  // ── NO BOOKING ────────────────────────────────────────────
   if (!b) return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Charging Pass" onBack={()=>go("home")}/>
@@ -1311,7 +1526,6 @@ function QRScreen({ go, booking, setBooking, user }) {
   const qrData = encodeURIComponent(`${b.reference}|${b.station}|${b.vehicle}|${b.status}`);
   const qrUrl  = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${qrData}&bgcolor=0f1117&color=4ade80&margin=10`;
 
-  // ── VERIFYING SCREEN ──────────────────────────────────────
   if (phase === "verifying") return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Starting Charge" sub="Running pre-checks..." onBack={()=>setPhase("ready")}/>
@@ -1350,7 +1564,6 @@ function QRScreen({ go, booking, setBooking, user }) {
     </div>
   );
 
-  // ── ERROR SCREEN ──────────────────────────────────────────
   if (phase === "error") return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Cannot Start" onBack={()=>setPhase("ready")}/>
@@ -1377,11 +1590,8 @@ function QRScreen({ go, booking, setBooking, user }) {
     </div>
   );
 
-  // ── LIVE CHARGING DASHBOARD ─────────────────────────────
   if (phase === 'charging' || phase === 'stopping') return (
     <div style={{ display:'flex',flexDirection:'column',height:'100%',background:'#060d08' }}>
-
-      {/* TOP BAR */}
       <div style={{ padding:'14px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid rgba(74,222,128,0.15)`,background:'rgba(0,0,0,0.3)',flexShrink:0 }}>
         <div style={{ display:'flex',alignItems:'center',gap:10 }}>
           <div style={{ width:10,height:10,borderRadius:'50%',background:T.green,boxShadow:'0 0 8px #4ade80',animation:'spin 2s linear infinite' }}/>
@@ -1397,11 +1607,8 @@ function QRScreen({ go, booking, setBooking, user }) {
       </div>
 
       <div style={{ flex:1,overflowY:'auto',padding:'14px 14px 24px' }}>
-
-        {/* HERO: Circular progress + timer */}
         <div style={{ display:'flex',alignItems:'center',justifyContent:'center',marginBottom:18,position:'relative' }}>
           <div style={{ position:'relative',width:210,height:210 }}>
-            {/* Outer glow ring */}
             <div style={{ position:'absolute',inset:-8,borderRadius:'50%',background:'radial-gradient(circle,rgba(74,222,128,0.08) 0%,transparent 70%)' }}/>
             <svg width='210' height='210' style={{ transform:'rotate(-90deg)' }}>
               <circle cx='105' cy='105' r='90' fill='none' stroke='rgba(255,255,255,0.05)' strokeWidth='16'/>
@@ -1426,10 +1633,7 @@ function QRScreen({ go, booking, setBooking, user }) {
           </div>
         </div>
 
-        {/* BIG STATS ROW */}
         <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10 }}>
-
-          {/* Power kW */}
           <div style={{ background:'linear-gradient(135deg,#061520,#0a2030)',borderRadius:16,padding:'16px',border:'1px solid rgba(56,189,248,0.2)' }}>
             <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
               <i className='fas fa-plug' style={{ fontSize:12,color:T.blue }}/>
@@ -1437,14 +1641,12 @@ function QRScreen({ go, booking, setBooking, user }) {
             </div>
             <div style={{ fontWeight:900,fontSize:32,color:T.blue,lineHeight:1 }}>{livePower.toFixed(1)}</div>
             <div style={{ fontSize:12,color:T.muted,marginTop:3 }}>kW</div>
-            {/* Mini power bar */}
             <div style={{ height:4,borderRadius:2,background:'rgba(255,255,255,0.06)',overflow:'hidden',marginTop:8 }}>
               <div style={{ height:'100%',width:`${Math.min(100,(livePower/22)*100)}%`,background:`linear-gradient(90deg,${T.blue},#818cf8)`,borderRadius:2,transition:'width .5s ease' }}/>
             </div>
             <div style={{ fontSize:9,color:T.muted,marginTop:3 }}>Max: 22 kW</div>
           </div>
 
-          {/* Energy kWh */}
           <div style={{ background:'linear-gradient(135deg,#071a09,#0a2510)',borderRadius:16,padding:'16px',border:'1px solid rgba(74,222,128,0.2)' }}>
             <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
               <i className='fas fa-bolt' style={{ fontSize:12,color:T.green }}/>
@@ -1459,10 +1661,7 @@ function QRScreen({ go, booking, setBooking, user }) {
           </div>
         </div>
 
-        {/* COST + WALLET ROW */}
         <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10 }}>
-
-          {/* Cost so far */}
           <div style={{ background:'linear-gradient(135deg,#1a1000,#2a1800)',borderRadius:16,padding:'16px',border:'1px solid rgba(251,191,36,0.2)' }}>
             <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
               <i className='fas fa-money-bill-alt' style={{ fontSize:12,color:T.yellow }}/>
@@ -1472,7 +1671,6 @@ function QRScreen({ go, booking, setBooking, user }) {
             <div style={{ fontSize:11,color:T.muted,marginTop:4 }}>GH₵0.85/kWh + GH₵5 base</div>
           </div>
 
-          {/* Wallet balance */}
           <div style={{ background:'linear-gradient(135deg,#071a09,#0a2510)',borderRadius:16,padding:'16px',border:`1px solid ${walletBal!=null&&walletBal<(costSoFar*100+500)?'rgba(248,113,113,0.3)':'rgba(74,222,128,0.2)'}` }}>
             <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
               <i className='fas fa-wallet' style={{ fontSize:12,color:walletBal!=null&&walletBal<(costSoFar*100+500)?T.red:T.green }}/>
@@ -1487,7 +1685,6 @@ function QRScreen({ go, booking, setBooking, user }) {
           </div>
         </div>
 
-        {/* POWER CHART (mini sparkline) */}
         {powerHistory.length > 2 && (
           <div style={{ background:T.card,borderRadius:16,padding:'14px 16px',marginBottom:10,border:`1px solid ${T.border}` }}>
             <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10 }}>
@@ -1510,7 +1707,6 @@ function QRScreen({ go, booking, setBooking, user }) {
           </div>
         )}
 
-        {/* SESSION DETAILS */}
         <div style={{ background:T.card,borderRadius:16,padding:'14px 16px',marginBottom:14,border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700,fontSize:12,color:T.text,marginBottom:10 }}><i className='fas fa-info-circle' style={{ marginRight:6,color:T.green }}/>Session Details</div>
           {[
@@ -1531,7 +1727,6 @@ function QRScreen({ go, booking, setBooking, user }) {
           </div>
         </div>
 
-        {/* STOP BUTTON */}
         <button onClick={stopCharging} disabled={phase==='stopping'} className='tap'
           style={{ width:'100%',background:`linear-gradient(135deg,${T.red},#dc2626)`,border:'none',borderRadius:14,padding:'17px',fontSize:16,fontWeight:700,color:'#fff',cursor:phase==='stopping'?'default':'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',gap:10,opacity:phase==='stopping'?0.7:1,boxShadow:'0 4px 16px rgba(248,113,113,0.3)' }}>
           {phase==='stopping'?<><Spinner/> Stopping...</>:<><i className='fas fa-stop-circle'/> Stop Charging</>}
@@ -1545,7 +1740,6 @@ function QRScreen({ go, booking, setBooking, user }) {
     </div>
   );
 
-  // ── COMPLETED SCREEN ──────────────────────────────────────
   if (phase === "completed") return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Session Complete" sub="Thank you for charging!" onBack={()=>go("home")}/>
@@ -1558,7 +1752,6 @@ function QRScreen({ go, booking, setBooking, user }) {
           <div style={{ fontSize:13,color:T.muted }}>Session ended · {b.station}</div>
         </div>
 
-        {/* Summary card */}
         <div style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:18,padding:"20px",marginBottom:16,border:`1px solid rgba(74,222,128,0.2)` }}>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16 }}>
             {[
@@ -1582,7 +1775,6 @@ function QRScreen({ go, booking, setBooking, user }) {
           </div>
         </div>
 
-        {/* Wallet update */}
         {walletBal!=null&&(
           <div style={{ background:T.card,borderRadius:14,padding:"14px 16px",marginBottom:16,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:12 }}>
             <div style={{ width:40,height:40,borderRadius:10,background:"rgba(74,222,128,0.12)",display:"flex",alignItems:"center",justifyContent:"center" }}>
@@ -1609,13 +1801,11 @@ function QRScreen({ go, booking, setBooking, user }) {
     </div>
   );
 
-  // ── READY SCREEN (QR Pass) ────────────────────────────────
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Charging Pass" sub="Ready to charge" onBack={()=>go("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 100px" }}>
 
-        {/* Wallet balance pill */}
         {walletBal!=null&&(
           <div style={{ background:"rgba(74,222,128,0.08)",border:`1px solid rgba(74,222,128,0.2)`,borderRadius:12,padding:"10px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
             <div style={{ display:"flex",alignItems:"center",gap:8 }}>
@@ -1626,14 +1816,12 @@ function QRScreen({ go, booking, setBooking, user }) {
           </div>
         )}
 
-        {/* Ready badge */}
         <div style={{ textAlign:"center",marginBottom:16 }}>
           <div style={{ display:"inline-block",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,borderRadius:20,padding:"7px 24px" }}>
             <span style={{ fontSize:12,fontWeight:800,color:"#000",letterSpacing:1 }}>READY TO CHARGE</span>
           </div>
         </div>
 
-        {/* QR Code */}
         <div className="fade" style={{ background:"linear-gradient(135deg,#0a1f12,#0d2d1a)",borderRadius:20,padding:"20px",textAlign:"center",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
           <div style={{ background:"#0f1117",borderRadius:16,padding:14,display:"inline-block",border:`2px solid ${T.greenDim}`,marginBottom:12,position:"relative" }}>
             <img src={qrUrl} alt="QR" width={190} height={190} style={{ borderRadius:8,display:"block" }}/>
@@ -1646,7 +1834,6 @@ function QRScreen({ go, booking, setBooking, user }) {
           <div style={{ fontSize:11,color:T.muted }}>Show to attendant or tap Start below</div>
         </div>
 
-        {/* Booking details */}
         <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
           {[
             { label:"Station",  value:b.station,     icon:"fa-map-marker-alt" },
@@ -1665,7 +1852,6 @@ function QRScreen({ go, booking, setBooking, user }) {
           ))}
         </div>
 
-        {/* START CHARGING BUTTON */}
         <button onClick={startCharging} className="tap"
           style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"18px",fontSize:17,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:10,boxShadow:`0 4px 24px rgba(74,222,128,0.45)` }}>
           <i className="fas fa-bolt"/> Start Charging
@@ -1685,6 +1871,7 @@ function QRScreen({ go, booking, setBooking, user }) {
     </div>
   );
 }
+
 
 function Verify({ go }) {
   const [code,setCode]=useState("");
@@ -1764,15 +1951,42 @@ function Verify({ go }) {
 
 function Profile({ go,user,setUser,onMenu }) {
   const fileRef=useRef(null);
-  const [avatar,setAvatar]=useState(null);useEffect(()=>{if(!SUPABASE_URL||!user?.id)return;fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}&select=avatar_url`,{headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`}}).then(r=>r.json()).then(d=>{if(d?.[0]?.avatar_url)setAvatar(d[0].avatar_url);}).catch(()=>{});},[user]);
-  const handlePhoto=async(e)=>{ const file=e.target.files[0]; if(!file) return; const r=new FileReader(); r.onload=(ev)=>setAvatar(ev.target.result); r.readAsDataURL(file); if(!SUPABASE_URL||!user?.id) return; try{ const ext=file.name.split('.').pop(); const path=`${user.id}/avatar.${ext}`; const res=await fetch(`${SUPABASE_URL}/storage/v1/object/avatars/${path}`,{method:'POST',headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`,'Content-Type':file.type,'x-upsert':'true'},body:file}); if(res.ok){ const url=`${SUPABASE_URL}/storage/v1/object/public/avatars/${path}`; setAvatar(url); if(SUPABASE_URL) await fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}`,{method:'PATCH',headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({avatar_url:url})}); }}catch(e){} };
+  const [avatar,setAvatar]=useState(null);
+  useEffect(()=>{
+    if(!SUPABASE_URL||!user?.id)return;
+    fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}&select=avatar_url`,{headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}`}})
+      .then(r=>r.json()).then(d=>{if(d?.[0]?.avatar_url)setAvatar(d[0].avatar_url);}).catch(()=>{});
+  },[user]);
+  const handlePhoto=async(e)=>{
+    const file=e.target.files[0]; if(!file) return;
+    const r=new FileReader(); r.onload=(ev)=>setAvatar(ev.target.result); r.readAsDataURL(file);
+    if(!SUPABASE_URL||!user?.id) return;
+    try{
+      const ext=file.name.split('.').pop(); const path=`${user.id}/avatar.${ext}`;
+      const res=await fetch(`${SUPABASE_URL}/storage/v1/object/avatars/${path}`,{method:'POST',headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}`,'Content-Type':file.type,'x-upsert':'true'},body:file});
+      if(res.ok){
+        const url=`${SUPABASE_URL}/storage/v1/object/public/avatars/${path}`; setAvatar(url);
+        if(SUPABASE_URL) await fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}`,{method:'PATCH',headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}`,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({avatar_url:url})});
+      }
+    }catch(e){}
+  };
   const booking=(()=>{ try { const b=localStorage.getItem("eco_booking"); return b?JSON.parse(b):null; } catch(e){ return null; } })();
   const totalCharges=booking?1:0;
   const totalSpent=booking?booking.amount:0;
   const co2Saved=totalCharges*4;
   const waterReceived=totalCharges*20;
- const [loyaltyData,setLoyaltyData]=useState({points:0,tier:"Bronze",totalCharges:0,totalKwh:0});useEffect(()=>{if(!SUPABASE_URL||!user?.id)return;fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}&select=loyalty_points,loyalty_tier,total_charges,total_kwh`,{headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`}}).then(r=>r.json()).then(d=>{if(d?.[0])setLoyaltyData({points:d[0].loyalty_points||0,tier:d[0].loyalty_tier||"Bronze",totalCharges:d[0].total_charges||0,totalKwh:d[0].total_kwh||0});}).catch(()=>{});},[user]);const tierColor={"Bronze":"#cd7f32","Silver":"#9ca3af","Gold":"#fbbf24","Platinum":"#38bdf8"}[loyaltyData.tier]||"#cd7f32";const tierNext={"Bronze":500,"Silver":2000,"Gold":5000,"Platinum":5000}[loyaltyData.tier]||500;const tierPct=Math.min(100,Math.round((loyaltyData.points/tierNext)*100)); const menuItems=[
+  const [loyaltyData,setLoyaltyData]=useState({points:0,tier:"Bronze",totalCharges:0,totalKwh:0});
+  useEffect(()=>{
+    if(!SUPABASE_URL||!user?.id)return;
+    fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}&select=loyalty_points,loyalty_tier,total_charges,total_kwh`,{headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}`}})
+      .then(r=>r.json()).then(d=>{if(d?.[0])setLoyaltyData({points:d[0].loyalty_points||0,tier:d[0].loyalty_tier||"Bronze",totalCharges:d[0].total_charges||0,totalKwh:d[0].total_kwh||0});}).catch(()=>{});
+  },[user]);
+  const tierColor={"Bronze":"#cd7f32","Silver":"#9ca3af","Gold":"#fbbf24","Platinum":"#38bdf8"}[loyaltyData.tier]||"#cd7f32";
+  const tierNext={"Bronze":500,"Silver":2000,"Gold":5000,"Platinum":5000}[loyaltyData.tier]||500;
+  const tierPct=Math.min(100,Math.round((loyaltyData.points/tierNext)*100));
+  const menuItems=[
     { icon:"fa-car",label:"My Vehicles",screen:"detail" },
+    { icon:"fa-bell",label:"Notifications",screen:"notifications" },
     { icon:"fa-credit-card",label:"Payment Methods",screen:"home" },
     { icon:"fa-cog",label:"Settings",screen:"about" },
     { icon:"fa-question-circle",label:"Help & Support",screen:"about" },
@@ -1800,7 +2014,20 @@ function Profile({ go,user,setUser,onMenu }) {
               </div>
               <div style={{ fontWeight:800,fontSize:20,color:T.text }}>{user.name||user.email?.split("@")[0]}</div>
               <div style={{ fontSize:12,color:T.muted,marginTop:4,marginBottom:12 }}>{user.email||user.phone}</div>
-              <Badge label="Active Member" color={T.green}/><div style={{marginTop:16,width:"100%",background:"rgba(0,0,0,0.2)",borderRadius:14,padding:"14px 16px",border:`1px solid ${tierColor}33`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:20}}>{"Bronze"===loyaltyData.tier?"🥉":"Silver"===loyaltyData.tier?"🥈":"Gold"===loyaltyData.tier?"🥇":"💎"}</span><div><div style={{fontWeight:800,fontSize:15,color:tierColor}}>{loyaltyData.tier}</div><div style={{fontSize:11,color:"#6b7280"}}>Loyalty Tier</div></div></div><div style={{textAlign:"right"}}><div style={{fontWeight:900,fontSize:22,color:tierColor}}>{loyaltyData.points.toLocaleString()}</div><div style={{fontSize:11,color:"#6b7280"}}>points</div></div></div><div style={{height:6,borderRadius:3,background:"rgba(255,255,255,0.08)",overflow:"hidden",marginBottom:6}}><div style={{height:"100%",width:`${tierPct}%`,background:`linear-gradient(90deg,${tierColor},${tierColor}99)`,borderRadius:3,transition:"width 1s ease"}}/></div><div style={{fontSize:11,color:"#6b7280",textAlign:"right"}}>{loyaltyData.tier==="Platinum"?"Max tier reached!":`${tierNext-loyaltyData.points} points to next tier`}</div></div>
+              <Badge label="Active Member" color={T.green}/>
+              <div style={{marginTop:16,width:"100%",background:"rgba(0,0,0,0.2)",borderRadius:14,padding:"14px 16px",border:`1px solid ${tierColor}33`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:20}}>{"Bronze"===loyaltyData.tier?"🥉":"Silver"===loyaltyData.tier?"🥈":"Gold"===loyaltyData.tier?"🥇":"💎"}</span>
+                    <div><div style={{fontWeight:800,fontSize:15,color:tierColor}}>{loyaltyData.tier}</div><div style={{fontSize:11,color:"#6b7280"}}>Loyalty Tier</div></div>
+                  </div>
+                  <div style={{textAlign:"right"}}><div style={{fontWeight:900,fontSize:22,color:tierColor}}>{loyaltyData.points.toLocaleString()}</div><div style={{fontSize:11,color:"#6b7280"}}>points</div></div>
+                </div>
+                <div style={{height:6,borderRadius:3,background:"rgba(255,255,255,0.08)",overflow:"hidden",marginBottom:6}}>
+                  <div style={{height:"100%",width:`${tierPct}%`,background:`linear-gradient(90deg,${tierColor},${tierColor}99)`,borderRadius:3,transition:"width 1s ease"}}/>
+                </div>
+                <div style={{fontSize:11,color:"#6b7280",textAlign:"right"}}>{loyaltyData.tier==="Platinum"?"Max tier reached!":`${tierNext-loyaltyData.points} points to next tier`}</div>
+              </div>
             </div>
             <div className="fade1" style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16 }}>
               {[{ label:"Total Charges",value:totalCharges,color:T.green,icon:"fa-bolt" },{ label:"CO₂ Saved",value:`${co2Saved} kg`,color:T.green,icon:"fa-leaf" },{ label:"Water Received",value:`${waterReceived} L`,color:T.blue,icon:"fa-tint" },{ label:"Total Spent",value:`GH₵${totalSpent}`,color:T.yellow,icon:"fa-money-bill-alt" }].map(s=>(
@@ -1876,7 +2103,51 @@ function About({ go,onMenu }) {
   );
 }
 
-function StationReview({go,station,user,onClose}){const[rating,setRating]=useState(0);const[comment,setComment]=useState("");const[saving,setSaving]=useState(false);const[done,setDone]=useState(false);const submit=async()=>{if(!rating){return;}setSaving(true);try{await fetch(`${SUPABASE_URL}/rest/v1/station_reviews`,{method:"POST",headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`,"Content-Type":"application/json"},body:JSON.stringify({station_id:station?.id||1,station_name:station?.name||"EcoCharge Station",user_id:user?.id,user_name:user?.name||user?.email,rating,comment})});}catch(e){}setSaving(false);setDone(true);setTimeout(()=>onClose(),1500);};if(done)return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{background:"#13171f",borderRadius:20,padding:"32px 24px",textAlign:"center",border:"1px solid #222632"}}><div style={{fontSize:48,marginBottom:12}}>⭐</div><div style={{fontWeight:800,fontSize:18,color:"#4ade80"}}>Review Submitted!</div><div style={{fontSize:13,color:"#6b7280",marginTop:8}}>Thank you for your feedback</div></div></div>);return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}}><div style={{background:"#13171f",borderRadius:"20px 20px 0 0",padding:"24px 20px 40px",width:"100%",maxWidth:480,border:"1px solid #222632"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}><div style={{fontWeight:800,fontSize:16,color:"#fff"}}>Rate this Station</div><button onClick={onClose} style={{background:"none",border:"none",color:"#6b7280",fontSize:20,cursor:"pointer"}}>✕</button></div><div style={{fontWeight:600,fontSize:14,color:"#9ca3af",marginBottom:16}}>{station?.name||"EcoCharge Station"}</div><div style={{display:"flex",justifyContent:"center",gap:12,marginBottom:20}}>{[1,2,3,4,5].map(s=><button key={s} onClick={()=>setRating(s)} style={{background:"none",border:"none",fontSize:36,cursor:"pointer",opacity:s<=rating?1:0.3}}>⭐</button>)}</div><textarea placeholder="Share your experience (optional)" value={comment} onChange={e=>setComment(e.target.value)} style={{width:"100%",background:"#0c0f18",border:"1px solid #222632",borderRadius:12,padding:"12px 14px",color:"#fff",fontSize:14,fontFamily:"inherit",resize:"none",height:80,marginBottom:16}}/><button onClick={submit} disabled={!rating||saving} style={{width:"100%",background:rating?"linear-gradient(135deg,#4ade80,#22c55e)":"#222632",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,color:rating?"#000":"#6b7280",cursor:rating?"pointer":"not-allowed",fontFamily:"inherit"}}>{saving?"Submitting...":"Submit Review"}</button></div></div>);} function Bookings({ go,booking,user }) {
+function StationReview({go,station,user,onClose}){
+  const[rating,setRating]=useState(0);
+  const[comment,setComment]=useState("");
+  const[saving,setSaving]=useState(false);
+  const[done,setDone]=useState(false);
+  const submit=async()=>{
+    if(!rating){return;}
+    setSaving(true);
+    try{
+      await fetch(`${SUPABASE_URL}/rest/v1/station_reviews`,{
+        method:"POST",
+        headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}`,"Content-Type":"application/json"},
+        body:JSON.stringify({station_id:station?.id||1,station_name:station?.name||"EcoCharge Station",user_id:user?.id,user_name:user?.name||user?.email,rating,comment})
+      });
+    }catch(e){}
+    setSaving(false);setDone(true);setTimeout(()=>onClose(),1500);
+  };
+  if(done)return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#13171f",borderRadius:20,padding:"32px 24px",textAlign:"center",border:"1px solid #222632"}}>
+        <div style={{fontSize:48,marginBottom:12}}>⭐</div>
+        <div style={{fontWeight:800,fontSize:18,color:"#4ade80"}}>Review Submitted!</div>
+        <div style={{fontSize:13,color:"#6b7280",marginTop:8}}>Thank you for your feedback</div>
+      </div>
+    </div>
+  );
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+      <div style={{background:"#13171f",borderRadius:"20px 20px 0 0",padding:"24px 20px 40px",width:"100%",maxWidth:480,border:"1px solid #222632"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+          <div style={{fontWeight:800,fontSize:16,color:"#fff"}}>Rate this Station</div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#6b7280",fontSize:20,cursor:"pointer"}}>✕</button>
+        </div>
+        <div style={{fontWeight:600,fontSize:14,color:"#9ca3af",marginBottom:16}}>{station?.name||"EcoCharge Station"}</div>
+        <div style={{display:"flex",justifyContent:"center",gap:12,marginBottom:20}}>
+          {[1,2,3,4,5].map(s=><button key={s} onClick={()=>setRating(s)} style={{background:"none",border:"none",fontSize:36,cursor:"pointer",opacity:s<=rating?1:0.3}}>⭐</button>)}
+        </div>
+        <textarea placeholder="Share your experience (optional)" value={comment} onChange={e=>setComment(e.target.value)} style={{width:"100%",background:"#0c0f18",border:"1px solid #222632",borderRadius:12,padding:"12px 14px",color:"#fff",fontSize:14,fontFamily:"inherit",resize:"none",height:80,marginBottom:16}}/>
+        <button onClick={submit} disabled={!rating||saving} style={{width:"100%",background:rating?"linear-gradient(135deg,#4ade80,#22c55e)":"#222632",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,color:rating?"#000":"#6b7280",cursor:rating?"pointer":"not-allowed",fontFamily:"inherit"}}>{saving?"Submitting...":"Submit Review"}</button>
+      </div>
+    </div>
+  );
+}
+
+function Bookings({ go,booking,user }) {
   const [now,setNow]=useState(new Date());
   useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return ()=>clearInterval(t); },[]);
   let b=booking;
@@ -1973,23 +2244,6 @@ function StationReview({go,station,user,onClose}){const[rating,setRating]=useSta
 }
 
 
-// ── OCPP API HELPER ───────────────────────────────────────────
-const OCPP_URL = import.meta.env.VITE_OCPP_SERVER_URL || "";
-const OCPP_KEY = import.meta.env.VITE_OCPP_API_KEY    || "";
-
-const ocppApi = async (path, method = "GET", body = null) => {
-  if (!OCPP_URL) return null;
-  try {
-    const res = await fetch(`${OCPP_URL}${path}`, {
-      method,
-      headers: { "x-api-key": OCPP_KEY, "Content-Type": "application/json" },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    return res.ok ? res.json() : null;
-  } catch(e) { return null; }
-};
-
-// ── CHARGER ADMIN SCREEN ──────────────────────────────────────
 function ChargerAdmin({ go }) {
   const [chargers,setChargers]       = useState([]);
   const [sessions,setSessions]       = useState([]);
@@ -2074,7 +2328,6 @@ function ChargerAdmin({ go }) {
       <Header title="Charger Admin" sub="OCPP 1.6J Management" onBack={()=>go("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"12px 14px 100px" }}>
 
-        {/* Tab Bar */}
         <div style={{ display:"flex",background:T.card,borderRadius:12,padding:4,marginBottom:16,border:`1px solid ${T.border}` }}>
           {[{ id:"chargers",label:"Chargers",icon:"fa-charging-station" },{ id:"sessions",label:"Sessions",icon:"fa-list" }].map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)} className="tap"
@@ -2084,7 +2337,6 @@ function ChargerAdmin({ go }) {
           ))}
         </div>
 
-        {/* CHARGERS TAB */}
         {tab==="chargers"&&(
           <>
             <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
@@ -2177,7 +2429,6 @@ function ChargerAdmin({ go }) {
           </>
         )}
 
-        {/* SESSIONS TAB */}
         {tab==="sessions"&&(
           <>
             <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
@@ -2227,7 +2478,6 @@ function ChargerAdmin({ go }) {
   );
 }
 
-// ── SESSION STATUS CONFIG ─────────────────────────────────────
 const SESSION_STATUSES = {
   Ready:      { color:"#9ca3af", icon:"fa-clock",               bg:"rgba(156,163,175,0.12)" },
   Authorized: { color:"#38bdf8", icon:"fa-shield-alt",          bg:"rgba(56,189,248,0.12)"  },
@@ -2253,18 +2503,17 @@ const fmtCost = (c) => c!=null ? `GH₵${Number(c).toFixed(2)}` : "--";
 const fmtKwh  = (k) => k!=null ? `${Number(k).toFixed(3)} kWh` : "--";
 const fmtDate = (d) => d ? new Date(d).toLocaleString("en-GH",{ day:"numeric",month:"short",hour:"2-digit",minute:"2-digit" }) : "--";
 
-// ── SESSION MANAGEMENT SCREEN ─────────────────────────────────
+
 function SessionManager({ go, user }) {
   const [sessions,  setSessions]  = useState([]);
   const [selected,  setSelected]  = useState(null);
   const [events,    setEvents]    = useState([]);
   const [loading,   setLoading]   = useState(false);
   const [filter,    setFilter]    = useState("All");
-  const [tab,       setTab]       = useState("list"); // list | detail | analytics
+  const [tab,       setTab]       = useState("list");
   const [analytics, setAnalytics] = useState(null);
   const [liveTimer, setLiveTimer] = useState(0);
 
-  // Live timer for active sessions
   useEffect(()=>{
     const t = setInterval(()=>setLiveTimer(n=>n+1), 1000);
     return ()=>clearInterval(t);
@@ -2277,7 +2526,7 @@ function SessionManager({ go, user }) {
       let url = `${SUPABASE_URL}/rest/v1/charging_sessions?select=*&order=created_at.desc&limit=50`;
       if (filter !== "All") url += `&status=eq.${filter}`;
       const res = await fetch(url, {
-        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }
+        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` }
       });
       const data = await res.json();
       if (Array.isArray(data)) setSessions(data);
@@ -2290,7 +2539,7 @@ function SessionManager({ go, user }) {
     try {
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/session_events?session_id=eq.${sessionId}&order=created_at.desc`,
-        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` }}
       );
       const data = await res.json();
       if (Array.isArray(data)) setEvents(data);
@@ -2302,7 +2551,7 @@ function SessionManager({ go, user }) {
     try {
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/session_analytics?limit=30`,
-        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` }}
       );
       const data = await res.json();
       if (Array.isArray(data)) setAnalytics(data);
@@ -2324,7 +2573,7 @@ function SessionManager({ go, user }) {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/charging_sessions?id=eq.${sessionId}`, {
         method: "PATCH",
-        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=representation" },
+        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", Prefer: "return=representation" },
         body: JSON.stringify(updates)
       });
       await loadSessions();
@@ -2338,7 +2587,6 @@ function SessionManager({ go, user }) {
   useEffect(()=>{ loadSessions(); },[filter]);
   useEffect(()=>{ if (tab==="analytics") loadAnalytics(); },[tab]);
 
-  // Auto-refresh active sessions every 10s
   useEffect(()=>{
     const t = setInterval(()=>{ if (sessions.some(s=>s.status==="Charging")) loadSessions(); }, 10000);
     return ()=>clearInterval(t);
@@ -2357,7 +2605,6 @@ function SessionManager({ go, user }) {
 
   const FILTERS = ["All","Ready","Authorized","Charging","Paused","Completed","Cancelled","Faulted"];
 
-  // ── DETAIL VIEW ───────────────────────────────────────────
   if (tab==="detail" && selected) {
     const st = SESSION_STATUSES[selected.status] || SESSION_STATUSES.Ready;
     const liveElapsed = selected.started_at && selected.status==="Charging"
@@ -2377,7 +2624,6 @@ function SessionManager({ go, user }) {
         <Header title="Session Detail" sub={selected.session_ref||selected.id} onBack={()=>{ setTab("list");setSelected(null); }}/>
         <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 100px" }}>
 
-          {/* Status Badge */}
           <div className="fade" style={{ background:st.bg,border:`1px solid ${st.color}33`,borderRadius:18,padding:"18px",marginBottom:14,textAlign:"center" }}>
             <div style={{ width:56,height:56,borderRadius:"50%",background:`${st.color}22`,border:`2px solid ${st.color}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px" }}>
               <i className={`fas ${st.icon}`} style={{ fontSize:22,color:st.color }}/>
@@ -2385,7 +2631,6 @@ function SessionManager({ go, user }) {
             <div style={{ fontWeight:900,fontSize:22,color:st.color,letterSpacing:1 }}>{selected.status}</div>
             {selected.status_reason&&<div style={{ fontSize:12,color:T.muted,marginTop:4 }}>{selected.status_reason}</div>}
 
-            {/* Live timer for charging sessions */}
             {liveElapsed!=null&&(
               <div style={{ marginTop:12 }}>
                 <div style={{ fontWeight:900,fontSize:36,color:T.green,fontFamily:"monospace" }}>{fmtDuration(liveElapsed)}</div>
@@ -2394,7 +2639,6 @@ function SessionManager({ go, user }) {
             )}
           </div>
 
-          {/* Key metrics */}
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
             {[
               { label:"Energy",       value:fmtKwh(selected.energy_kwh),    icon:"fa-bolt",        color:T.green  },
@@ -2410,7 +2654,6 @@ function SessionManager({ go, user }) {
             ))}
           </div>
 
-          {/* Full details */}
           <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
             <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}><i className="fas fa-info-circle" style={{ marginRight:8,color:T.green }}/>Session Info</div>
             {[
@@ -2438,7 +2681,6 @@ function SessionManager({ go, user }) {
             ))}
           </div>
 
-          {/* Status Actions */}
           {nextActions[selected.status]?.length > 0 && (
             <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
               <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}><i className="fas fa-play-circle" style={{ marginRight:8,color:T.green }}/>Change Status</div>
@@ -2456,7 +2698,6 @@ function SessionManager({ go, user }) {
             </div>
           )}
 
-          {/* Fault info */}
           {selected.status==="Faulted"&&selected.fault_code&&(
             <div style={{ background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.2)",borderRadius:14,padding:"14px",marginBottom:14 }}>
               <div style={{ fontWeight:700,fontSize:13,color:T.red,marginBottom:8 }}><i className="fas fa-exclamation-triangle" style={{ marginRight:8 }}/>Fault Details</div>
@@ -2465,7 +2706,6 @@ function SessionManager({ go, user }) {
             </div>
           )}
 
-          {/* Event Timeline */}
           {events.length > 0 && (
             <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
               <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}><i className="fas fa-history" style={{ marginRight:8,color:T.blue }}/>Event Timeline</div>
@@ -2488,7 +2728,6 @@ function SessionManager({ go, user }) {
     );
   }
 
-  // ── ANALYTICS VIEW ────────────────────────────────────────
   if (tab==="analytics") {
     const totalSessions  = sessions.length;
     const completedPct   = totalSessions ? Math.round((completedCount/totalSessions)*100) : 0;
@@ -2497,7 +2736,6 @@ function SessionManager({ go, user }) {
         <Header title="Session Analytics" sub="Performance overview" onBack={()=>setTab("list")}/>
         <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 100px" }}>
 
-          {/* Summary cards */}
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16 }}>
             {[
               { label:"Active Now",   value:activeCount,                        color:T.green,  icon:"fa-bolt" },
@@ -2513,7 +2751,6 @@ function SessionManager({ go, user }) {
             ))}
           </div>
 
-          {/* Status breakdown */}
           <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${T.border}` }}>
             <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:14 }}><i className="fas fa-chart-pie" style={{ marginRight:8,color:T.green }}/>Status Breakdown</div>
             {Object.entries(SESSION_STATUSES).map(([status,cfg])=>{
@@ -2536,7 +2773,6 @@ function SessionManager({ go, user }) {
             })}
           </div>
 
-          {/* Completion rate */}
           <div style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:16,padding:"18px",marginBottom:16,border:`1px solid rgba(74,222,128,0.2)`,textAlign:"center" }}>
             <div style={{ fontSize:12,color:T.muted,marginBottom:6 }}>Session Completion Rate</div>
             <div style={{ fontWeight:900,fontSize:48,color:T.green }}>{completedPct}%</div>
@@ -2551,13 +2787,11 @@ function SessionManager({ go, user }) {
     );
   }
 
-  // ── LIST VIEW ─────────────────────────────────────────────
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Sessions" sub="Charging session management" onBack={()=>go("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"12px 14px 100px" }}>
 
-        {/* Top stats bar */}
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14 }}>
           {[
             { label:"Active",   value:activeCount,                  color:T.green  },
@@ -2571,7 +2805,6 @@ function SessionManager({ go, user }) {
           ))}
         </div>
 
-        {/* Action buttons */}
         <div style={{ display:"flex",gap:8,marginBottom:14 }}>
           <button onClick={loadSessions} className="tap"
             style={{ flex:1,background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px",fontSize:12,color:T.green,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
@@ -2583,7 +2816,6 @@ function SessionManager({ go, user }) {
           </button>
         </div>
 
-        {/* Filter chips */}
         <div style={{ display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginBottom:14 }}>
           {FILTERS.map(f=>{
             const cfg = SESSION_STATUSES[f];
@@ -2597,7 +2829,6 @@ function SessionManager({ go, user }) {
           })}
         </div>
 
-        {/* Session list */}
         {loading&&sessions.length===0&&(
           <div style={{ textAlign:"center",padding:"30px 0",color:T.muted,fontSize:13 }}><Spinner/> <span style={{ marginLeft:8 }}>Loading sessions...</span></div>
         )}
@@ -2619,7 +2850,6 @@ function SessionManager({ go, user }) {
             <div key={s.id} className="tap row" onClick={()=>openDetail(s)}
               style={{ background:T.card,borderRadius:16,border:`1px solid ${isActive?T.green:T.border}`,marginBottom:10,overflow:"hidden",boxShadow:isActive?`0 0 12px rgba(74,222,128,0.1)`:"none" }}>
 
-              {/* Active indicator bar */}
               {isActive&&<div style={{ height:3,background:`linear-gradient(90deg,${T.green},${T.blue})` }}/>}
 
               <div style={{ padding:"14px 14px" }}>
@@ -2666,13 +2896,12 @@ function SessionManager({ go, user }) {
   );
 }
 
-// ── WALLET HELPERS ────────────────────────────────────────────
+
 const toGHS    = (p) => p != null ? (p / 100).toFixed(2) : "0.00";
 const toPesewas = (g) => Math.round(parseFloat(g) * 100);
 const fmtGHS   = (p) => `GH₵${toGHS(p)}`;
 
-const TOP_UP_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000]; // pesewas
-// = GH₵10, 20, 50, 100, 200, 500
+const TOP_UP_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000];
 
 const TX_ICONS = {
   TopUp:       { icon:"fa-arrow-down",   color:"#4ade80" },
@@ -2684,13 +2913,12 @@ const TX_ICONS = {
   Adjustment:  { icon:"fa-sliders-h",    color:"#a78bfa" },
 };
 
-// ── WALLET SCREEN ─────────────────────────────────────────────
 function WalletScreen({ go, user }) {
   const [wallet,    setWallet]    = useState(null);
   const [txns,      setTxns]      = useState([]);
   const [loading,   setLoading]   = useState(true);
-  const [tab,       setTab]       = useState("home"); // home | topup | history
-  const [topupAmt,  setTopupAmt]  = useState(5000);   // pesewas
+  const [tab,       setTab]       = useState("home");
+  const [topupAmt,  setTopupAmt]  = useState(5000);
   const [customAmt, setCustomAmt] = useState("");
   const [paying,    setPaying]    = useState(false);
   const [txFilter,  setTxFilter]  = useState("All");
@@ -2699,29 +2927,26 @@ function WalletScreen({ go, user }) {
   const loadWallet = async () => {
     if (!SUPABASE_URL || !user?.id) { setLoading(false); return; }
     try {
-      // Load wallet
       const wRes = await fetch(
         `${SUPABASE_URL}/rest/v1/wallets?user_id=eq.${user.id}&select=*`,
-        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` }}
       );
       const wData = await wRes.json();
       if (wData?.length) {
         setWallet(wData[0]);
       } else {
-        // Auto-create wallet
         const cRes = await fetch(`${SUPABASE_URL}/rest/v1/wallets`, {
           method: "POST",
-          headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=representation" },
+          headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", Prefer: "return=representation" },
           body: JSON.stringify({ user_id: user.id, email: user.email, display_name: user.name, balance_pesewas: 0 })
         });
         const cData = await cRes.json();
         if (cData?.[0]) setWallet(cData[0]);
       }
 
-      // Load transactions
       const tRes = await fetch(
         `${SUPABASE_URL}/rest/v1/wallet_transactions?user_id=eq.${user.id}&order=created_at.desc&limit=50`,
-        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` }}
       );
       const tData = await tRes.json();
       if (Array.isArray(tData)) setTxns(tData);
@@ -2737,7 +2962,6 @@ function WalletScreen({ go, user }) {
     if (!user?.email) { setPayError('Email required for payment'); return; }
     setPaying(true); setPayError('');
     try {
-      // Try server-side initialization first (secure)
       if (OCPP_URL) {
         const initRes = await fetch(OCPP_URL + '/api/payment/initialize', {
           method: 'POST',
@@ -2751,12 +2975,11 @@ function WalletScreen({ go, user }) {
           return;
         }
       }
-      // Fallback: direct Paystack redirect
       const ref = 'WALLET-' + Date.now() + '-' + Math.random().toString(36).slice(2,7).toUpperCase();
       if (SUPABASE_URL) {
         await fetch(SUPABASE_URL + '/rest/v1/topup_requests', {
           method: 'POST',
-          headers: { apikey: SUPABASE_ANON, Authorization: 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json' },
+          headers: { apikey: SUPABASE_ANON, Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ wallet_id: wallet?.id, user_id: user.id, email: user.email, amount_pesewas: amount, payment_ref: ref, status: 'Pending' })
         });
       }
@@ -2790,19 +3013,16 @@ function WalletScreen({ go, user }) {
     </div>
   );
 
-  // ── TOP UP TAB ─────────────────────────────────────────────
   if (tab === "topup") return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Top Up Wallet" sub="Add funds to charge" onBack={()=>setTab("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"16px 16px 100px" }}>
 
-        {/* Current balance */}
         <div style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:18,padding:"18px",marginBottom:20,border:`1px solid rgba(74,222,128,0.2)`,textAlign:"center" }}>
           <div style={{ fontSize:12,color:T.muted,marginBottom:4 }}>Current Balance</div>
           <div style={{ fontWeight:900,fontSize:36,color:T.green }}>{fmtGHS(wallet?.balance_pesewas||0)}</div>
         </div>
 
-        {/* Quick amounts */}
         <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}>Select Amount</div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16 }}>
           {TOP_UP_AMOUNTS.map(amt=>(
@@ -2813,7 +3033,6 @@ function WalletScreen({ go, user }) {
           ))}
         </div>
 
-        {/* Custom amount */}
         <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}>Or enter custom amount</div>
         <div style={{ position:"relative",marginBottom:20 }}>
           <span style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:15,fontWeight:700 }}>GH₵</span>
@@ -2822,7 +3041,6 @@ function WalletScreen({ go, user }) {
             style={{ width:"100%",background:T.card,border:`1px solid ${customAmt?T.green:T.border}`,borderRadius:14,padding:"16px 16px 16px 52px",color:T.text,fontSize:20,fontWeight:700,fontFamily:"inherit" }}/>
         </div>
 
-        {/* Summary */}
         <div style={{ background:T.card,borderRadius:14,padding:"14px 16px",marginBottom:20,border:`1px solid ${T.border}` }}>
           {[
             { label:"Top-up amount",  value: fmtGHS(customAmt ? toPesewas(customAmt) : topupAmt) },
@@ -2836,7 +3054,6 @@ function WalletScreen({ go, user }) {
           ))}
         </div>
 
-        {/* Payment methods */}
         <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}>Pay with</div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20 }}>
           {[
@@ -2863,13 +3080,11 @@ function WalletScreen({ go, user }) {
     </div>
   );
 
-  // ── HISTORY TAB ───────────────────────────────────────────
   if (tab === "history") return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Transaction History" sub={`${txns.length} transactions`} onBack={()=>setTab("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"12px 14px 100px" }}>
 
-        {/* Summary */}
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
           <div style={{ background:"rgba(74,222,128,0.08)",border:`1px solid rgba(74,222,128,0.2)`,borderRadius:14,padding:"14px",textAlign:"center" }}>
             <i className="fas fa-arrow-down" style={{ fontSize:16,color:T.green,marginBottom:6,display:"block" }}/>
@@ -2883,7 +3098,6 @@ function WalletScreen({ go, user }) {
           </div>
         </div>
 
-        {/* Filter chips */}
         <div style={{ display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginBottom:14 }}>
           {["All","TopUp","Debit","Refund","Bonus"].map(f=>(
             <button key={f} onClick={()=>setTxFilter(f)} className="tap"
@@ -2932,7 +3146,6 @@ function WalletScreen({ go, user }) {
     </div>
   );
 
-  // ── WALLET HOME ───────────────────────────────────────────
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="My Wallet" sub="EcoCharge Ghana" onBack={()=>go("home")}/>
@@ -2944,9 +3157,7 @@ function WalletScreen({ go, user }) {
 
         {!loading&&(
           <>
-            {/* Balance Card */}
             <div className="fade" style={{ background:"linear-gradient(135deg,#071a09,#0d2d1a,#071a09)",borderRadius:22,padding:"28px 24px",marginBottom:16,border:`1px solid rgba(74,222,128,0.25)`,position:"relative",overflow:"hidden" }}>
-              {/* Background glow */}
               <div style={{ position:"absolute",top:-40,right:-40,width:160,height:160,borderRadius:"50%",background:"rgba(74,222,128,0.06)" }}/>
               <div style={{ position:"relative",zIndex:1 }}>
                 <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20 }}>
@@ -2981,7 +3192,6 @@ function WalletScreen({ go, user }) {
               </div>
             </div>
 
-            {/* Stats */}
             <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16 }}>
               {[
                 { label:"Total In",     value:fmtGHS(wallet?.total_topped_up||0),  icon:"fa-arrow-down",  color:T.green  },
@@ -2996,7 +3206,6 @@ function WalletScreen({ go, user }) {
               ))}
             </div>
 
-            {/* Recent transactions */}
             <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
               <div style={{ fontWeight:700,fontSize:15,color:T.text }}>Recent Transactions</div>
               {txns.length>3&&(
@@ -3039,7 +3248,6 @@ function WalletScreen({ go, user }) {
               );
             })}
 
-            {/* How it works */}
             <div style={{ background:T.card,borderRadius:16,padding:"16px",marginTop:8,border:`1px solid ${T.border}` }}>
               <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}><i className="fas fa-info-circle" style={{ marginRight:8,color:T.blue }}/>How it works</div>
               {[
@@ -3064,16 +3272,9 @@ function WalletScreen({ go, user }) {
   );
 }
 
-// ── PRICING ENGINE HELPERS ────────────────────────────────────
+
 const PESEWAS = (p) => p != null ? (p/100).toFixed(2) : "0.00";
 const GHS     = (p) => `GH₵${PESEWAS(p)}`;
-
-const PROMO_COLORS = {
-  Percentage:    { color:"#fbbf24", label:"% Off"     },
-  FixedDiscount: { color:"#38bdf8", label:"Flat Off"  },
-  FlatRate:      { color:"#4ade80", label:"Flat Rate" },
-  FreeKwh:       { color:"#a78bfa", label:"Free kWh"  },
-};
 
 const SCHEDULE_LABELS = {
   Always:    "Always active",
@@ -3083,17 +3284,15 @@ const SCHEDULE_LABELS = {
   Combined:  "Time + Days",
 };
 
-// ── PRICING ADMIN SCREEN ──────────────────────────────────────
 function PricingAdmin({ go, user }) {
   const [tariffs,   setTariffs]   = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [selected,  setSelected]  = useState(null);
-  const [editing,   setEditing]   = useState(null);  // tariff being edited
+  const [editing,   setEditing]   = useState(null);
   const [saving,    setSaving]    = useState(false);
-  const [tab,       setTab]       = useState("list"); // list | edit | simulate
+  const [tab,       setTab]       = useState("list");
   const [simResult, setSimResult] = useState(null);
 
-  // Simulator state
   const [simKwh,    setSimKwh]    = useState("10");
   const [simMins,   setSimMins]   = useState("60");
   const [simIdle,   setSimIdle]   = useState("0");
@@ -3105,7 +3304,7 @@ function PricingAdmin({ go, user }) {
     try {
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/tariffs?order=priority.asc,name.asc&select=*`,
-        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` }}
       );
       const data = await res.json();
       if (Array.isArray(data)) {
@@ -3126,7 +3325,7 @@ function PricingAdmin({ go, user }) {
         : `${SUPABASE_URL}/rest/v1/tariffs?id=eq.${editing.id}`;
       await fetch(url, {
         method: isNew ? "POST" : "PATCH",
-        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", Prefer: "return=minimal" },
         body: JSON.stringify(editing),
       });
       await loadTariffs();
@@ -3140,7 +3339,7 @@ function PricingAdmin({ go, user }) {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/tariffs?id=eq.${tariff.id}`, {
         method: "PATCH",
-        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", Prefer: "return=minimal" },
         body: JSON.stringify({ is_active: !tariff.is_active }),
       });
       setTariffs(prev => prev.map(t => t.id===tariff.id ? {...t, is_active: !t.is_active} : t));
@@ -3193,7 +3392,6 @@ function PricingAdmin({ go, user }) {
     </div>
   );
 
-  // ── EDIT TAB ──────────────────────────────────────────────
   if (tab==="edit") return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title={editing?.id?"Edit Tariff":"New Tariff"} sub="Configure pricing" onBack={()=>{ setTab("list");setEditing(null); }}/>
@@ -3310,13 +3508,11 @@ function PricingAdmin({ go, user }) {
     </div>
   );
 
-  // ── SIMULATE TAB ─────────────────────────────────────────
   if (tab==="simulate") return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Price Simulator" sub="Test tariff costs" onBack={()=>setTab("list")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"14px 16px 100px" }}>
 
-        {/* Tariff selector */}
         <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}>Select Tariff</div>
         <div style={{ display:"flex",gap:8,overflowX:"auto",paddingBottom:4,marginBottom:16 }}>
           {tariffs.filter(t=>t.is_active).map(t=>(
@@ -3327,7 +3523,6 @@ function PricingAdmin({ go, user }) {
           ))}
         </div>
 
-        {/* Inputs */}
         <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:14 }}><i className="fas fa-sliders-h" style={{ marginRight:8,color:T.green }}/>Session Parameters</div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10 }}>
@@ -3383,13 +3578,11 @@ function PricingAdmin({ go, user }) {
     </div>
   );
 
-  // ── TARIFF LIST ───────────────────────────────────────────
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Pricing Engine" sub="Manage tariffs" onBack={()=>go("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"12px 14px 100px" }}>
 
-        {/* Action bar */}
         <div style={{ display:"flex",gap:8,marginBottom:14 }}>
           <button onClick={newTariff} className="tap"
             style={{ flex:1,background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
@@ -3405,7 +3598,6 @@ function PricingAdmin({ go, user }) {
           </button>
         </div>
 
-        {/* Summary */}
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14 }}>
           {[
             { label:"Total",    value:tariffs.length,                          color:T.text   },
@@ -3423,7 +3615,6 @@ function PricingAdmin({ go, user }) {
 
         {tariffs.map(t=>(
           <div key={t.id} style={{ background:T.card,borderRadius:16,border:`1px solid ${t.is_active?T.border:"rgba(255,255,255,0.05)"}`,marginBottom:10,overflow:"hidden",opacity:t.is_active?1:0.6 }}>
-            {/* Header */}
             <div style={{ padding:"14px 16px" }}>
               <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
                 <div style={{ flex:1,minWidth:0 }}>
@@ -3434,14 +3625,12 @@ function PricingAdmin({ go, user }) {
                   </div>
                   <div style={{ fontSize:11,color:T.muted }}>{t.description||"No description"}</div>
                 </div>
-                {/* Active toggle */}
                 <button onClick={()=>toggleActive(t)} className="tap"
                   style={{ background:t.is_active?`linear-gradient(135deg,${T.green},${T.greenDark})`:"rgba(255,255,255,0.08)",border:"none",borderRadius:20,padding:"5px 14px",fontSize:11,fontWeight:700,color:t.is_active?"#000":T.muted,cursor:"pointer",fontFamily:"inherit",flexShrink:0,marginLeft:8 }}>
                   {t.is_active?"ON":"OFF"}
                 </button>
               </div>
 
-              {/* Pricing chips */}
               <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:10 }}>
                 {t.price_per_kwh>0&&(
                   <div style={{ background:"rgba(74,222,128,0.1)",border:"1px solid rgba(74,222,128,0.2)",borderRadius:8,padding:"4px 10px",display:"flex",alignItems:"center",gap:4 }}>
@@ -3476,7 +3665,6 @@ function PricingAdmin({ go, user }) {
                 )}
               </div>
 
-              {/* Schedule + edit */}
               <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
                 <div style={{ fontSize:11,color:T.muted }}>
                   <i className="fas fa-clock" style={{ marginRight:4 }}/>{SCHEDULE_LABELS[t.schedule_type]||t.schedule_type}
@@ -3497,7 +3685,7 @@ function PricingAdmin({ go, user }) {
   );
 }
 
-// ── ADMIN DASHBOARD ───────────────────────────────────────────
+
 const ADMIN_TABS = [
   { id:"overview",  label:"Overview",  icon:"fa-tachometer-alt" },
   { id:"chargers",  label:"Chargers",  icon:"fa-charging-station" },
@@ -3513,7 +3701,6 @@ function AdminDashboard({ go, user }) {
   const [tab,         setTab]       = useState("overview");
   const [loading,     setLoading]   = useState(false);
 
-  // Data states
   const [overview,    setOverview]  = useState(null);
   const [chargers,    setChargers]  = useState([]);
   const [stations,    setStations]  = useState([]);
@@ -3523,19 +3710,17 @@ function AdminDashboard({ go, user }) {
   const [revenue,     setRevenue]   = useState([]);
   const [tariffs,     setTariffs]   = useState([]);
 
-  // Edit states
   const [editStation, setEditStation] = useState(null);
   const [editTariff,  setEditTariff]  = useState(null);
   const [saving,      setSaving]      = useState(false);
   const [msg,         setMsg]         = useState("");
 
-  // ── DATA LOADERS ────────────────────────────────────────────
   const load = async (table, setter, query="") => {
     if (!SUPABASE_URL) return;
     try {
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/${table}${query}`,
-        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` }}
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` }}
       );
       const data = await res.json();
       if (Array.isArray(data)) setter(data);
@@ -3547,10 +3732,10 @@ function AdminDashboard({ go, user }) {
     setLoading(true);
     try {
       const [sesRes, walRes, charRes, faultRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/charging_sessions?select=status,cost_total,energy_kwh,created_at&order=created_at.desc&limit=100`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${SUPABASE_ANON}` }}),
-        fetch(`${SUPABASE_URL}/rest/v1/wallets?select=balance_pesewas,total_spent,total_topped_up`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${SUPABASE_ANON}` }}),
-        fetch(`${SUPABASE_URL}/rest/v1/chargers?select=id,status,online,has_fault`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${SUPABASE_ANON}` }}),
-        fetch(`${SUPABASE_URL}/rest/v1/chargers?select=id,status,error_code&has_fault=eq.true`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${SUPABASE_ANON}` }}),
+        fetch(`${SUPABASE_URL}/rest/v1/charging_sessions?select=status,cost_total,energy_kwh,created_at&order=created_at.desc&limit=100`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` }}),
+        fetch(`${SUPABASE_URL}/rest/v1/wallets?select=balance_pesewas,total_spent,total_topped_up`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` }}),
+        fetch(`${SUPABASE_URL}/rest/v1/chargers?select=id,status,online,has_fault`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` }}),
+        fetch(`${SUPABASE_URL}/rest/v1/chargers?select=id,status,error_code&has_fault=eq.true`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` }}),
       ]);
       const [ses, wal, chr, flt] = await Promise.all([sesRes.json(), walRes.json(), charRes.json(), faultRes.json()]);
 
@@ -3588,7 +3773,7 @@ function AdminDashboard({ go, user }) {
   useEffect(()=>{ loadOverview(); },[]);
   useEffect(()=>{
     if (tab==="chargers")  loadOcppChargers();
-    if (tab==="stations")  load("stations","order=id", setStations, "?select=*&order=id");
+    if (tab==="stations")  load("stations", setStations, "?select=*&order=id");
     if (tab==="sessions")  load("charging_sessions", setSessions, "?select=*&order=created_at.desc&limit=100");
     if (tab==="wallets")   load("wallets", setWallets, "?select=*&order=updated_at.desc&limit=100");
     if (tab==="faults")    load("chargers", setFaults, "?select=*&has_fault=eq.true&order=updated_at.desc");
@@ -3602,7 +3787,7 @@ function AdminDashboard({ go, user }) {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
         method:"PATCH",
-        headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${SUPABASE_ANON}`, "Content-Type":"application/json", Prefer:"return=minimal" },
+        headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json", Prefer:"return=minimal" },
         body: JSON.stringify(data)
       });
       setMsg("Saved ✅"); setTimeout(()=>setMsg(""),2000);
@@ -3629,7 +3814,6 @@ function AdminDashboard({ go, user }) {
     return T.yellow;
   };
 
-  // ── STAT CARD ─────────────────────────────────────────────
   const StatCard = ({ label, value, icon, color, sub }) => (
     <div style={{ background:T.card,borderRadius:14,padding:"14px 12px",border:`1px solid ${T.border}`,textAlign:"center" }}>
       <i className={`fas ${icon}`} style={{ fontSize:18,color,marginBottom:8,display:"block" }}/>
@@ -3639,7 +3823,6 @@ function AdminDashboard({ go, user }) {
     </div>
   );
 
-  // ── OVERVIEW TAB ─────────────────────────────────────────
   const OverviewTab = () => (
     <div>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
@@ -3653,7 +3836,6 @@ function AdminDashboard({ go, user }) {
 
       {overview&&(
         <>
-          {/* Top KPIs */}
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
             <div style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:16,padding:"18px",border:"1px solid rgba(74,222,128,0.25)",gridColumn:"1/-1" }}>
               <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Total Revenue</div>
@@ -3679,7 +3861,6 @@ function AdminDashboard({ go, user }) {
             <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Across {overview.totalWallets} user wallets</div>
           </div>
 
-          {/* Quick actions */}
           <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}>Quick Actions</div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
             {[
@@ -3699,7 +3880,6 @@ function AdminDashboard({ go, user }) {
     </div>
   );
 
-  // ── CHARGER MANAGEMENT TAB ────────────────────────────────
   const ChargersTab = () => (
     <div>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
@@ -3766,7 +3946,6 @@ function AdminDashboard({ go, user }) {
     </div>
   );
 
-  // ── STATION MANAGEMENT TAB ────────────────────────────────
   const StationsTab = () => {
     const [localStations, setLocalStations] = useState(stations);
     useEffect(()=>setLocalStations(stations),[stations]);
@@ -3776,7 +3955,7 @@ function AdminDashboard({ go, user }) {
       try {
         await fetch(`${SUPABASE_URL}/rest/v1/stations?id=eq.${s.id}`, {
           method:"PATCH",
-          headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${SUPABASE_ANON}`, "Content-Type":"application/json", Prefer:"return=minimal" },
+          headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json", Prefer:"return=minimal" },
           body: JSON.stringify({ name:s.name, city:s.city, bays:s.bays, open:s.open, solar:s.solar, hydrogen:s.hydrogen, time:s.time, lat:s.lat, lng:s.lng })
         });
         setMsg("Station saved ✅"); setTimeout(()=>setMsg(""),2000);
@@ -3852,7 +4031,6 @@ function AdminDashboard({ go, user }) {
     );
   };
 
-  // ── SESSION MONITORING TAB ────────────────────────────────
   const SessionsTab = () => {
     const active = sessions.filter(s=>s.status==="Charging");
     return (
@@ -3903,7 +4081,6 @@ function AdminDashboard({ go, user }) {
     );
   };
 
-  // ── WALLET MONITORING TAB ─────────────────────────────────
   const WalletsTab = () => {
     const totalBal  = wallets.reduce((a,w)=>a+(w.balance_pesewas||0),0);
     const totalIn   = wallets.reduce((a,w)=>a+(w.total_topped_up||0),0);
@@ -3950,14 +4127,12 @@ function AdminDashboard({ go, user }) {
     );
   };
 
-  // ── REVENUE ANALYTICS TAB ─────────────────────────────────
   const RevenueTab = () => {
     const completed = revenue.filter(s=>s.status==="Completed"&&s.cost_total);
     const totalRev  = completed.reduce((a,s)=>a+(s.cost_total||0),0);
     const totalKwh  = completed.reduce((a,s)=>a+(s.energy_kwh||0),0);
     const avgRev    = completed.length ? totalRev/completed.length : 0;
 
-    // Group by day
     const byDay = {};
     completed.forEach(s=>{
       const day = s.created_at?.slice(0,10)||"Unknown";
@@ -3985,7 +4160,6 @@ function AdminDashboard({ go, user }) {
           ))}
         </div>
 
-        {/* Revenue by day bar chart */}
         <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:14 }}>Revenue by Day</div>
           {days.map(([day,d])=>(
@@ -4002,7 +4176,6 @@ function AdminDashboard({ go, user }) {
           {days.length===0&&<div style={{ textAlign:"center",color:T.muted,fontSize:13,padding:"20px 0" }}>No completed sessions yet</div>}
         </div>
 
-        {/* CO2 impact */}
         <div style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:14,padding:"16px",border:"1px solid rgba(74,222,128,0.2)" }}>
           <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}><i className="fas fa-leaf" style={{ marginRight:8,color:T.green }}/>Environmental Impact</div>
           {[
@@ -4020,7 +4193,6 @@ function AdminDashboard({ go, user }) {
     );
   };
 
-  // ── PRICING TAB ───────────────────────────────────────────
   const PricingTab = () => (
     <div>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
@@ -4054,7 +4226,6 @@ function AdminDashboard({ go, user }) {
     </div>
   );
 
-  // ── FAULT MONITORING TAB ──────────────────────────────────
   const FaultsTab = () => (
     <div>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
@@ -4099,7 +4270,6 @@ function AdminDashboard({ go, user }) {
           </div>
         </div>
       ))}
-      {/* Fault log from charger_logs */}
       <div style={{ background:T.card,borderRadius:14,padding:"14px",marginTop:10,border:`1px solid ${T.border}` }}>
         <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}><i className="fas fa-history" style={{ marginRight:8,color:T.muted }}/>View Full Logs</div>
         <button onClick={()=>go("chargers")} className="tap"
@@ -4110,7 +4280,6 @@ function AdminDashboard({ go, user }) {
     </div>
   );
 
-  // ── RENDER ────────────────────────────────────────────────
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <div style={{ padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
@@ -4129,7 +4298,6 @@ function AdminDashboard({ go, user }) {
         </div>
       </div>
 
-      {/* Tab bar — scrollable */}
       <div style={{ display:"flex",gap:6,overflowX:"auto",padding:"10px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0 }}>
         {ADMIN_TABS.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)} className="tap"
@@ -4139,7 +4307,6 @@ function AdminDashboard({ go, user }) {
         ))}
       </div>
 
-      {/* Tab content */}
       <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 100px" }}>
         {tab==="overview" && <OverviewTab/>}
         {tab==="chargers" && <ChargersTab/>}
@@ -4155,6 +4322,7 @@ function AdminDashboard({ go, user }) {
     </div>
   );
 }
+
 export default function App() {
   const [screen,setScreen]   = useState(()=>{ try { return localStorage.getItem("eco_user")?"home":"splash"; } catch(e){ return "splash"; } });
   const [authMode,setAuthMode]= useState("login");
@@ -4203,18 +4371,21 @@ export default function App() {
               const vData = await vRes.json();
               if (vData.success) { setScreen('wallet'); return; }
             }
-            // Fallback direct credit
             if (SUPABASE_URL && topupPending.userId) {
               await fetch(SUPABASE_URL + '/rest/v1/rpc/wallet_credit', {
                 method: 'POST',
-                headers: { apikey: SUPABASE_ANON, Authorization: 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ p_user_id: topupPending.userId, p_amount: topupPending.amount, p_type: 'TopUp', p_description: 'Wallet top-up via Paystack', p_payment_ref: ref })
+                headers: { apikey: SUPABASE_ANON, Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ p_user_id: topupPending.userId, p_amount_pesewas: topupPending.amount, p_type: 'TopUp', p_description: 'Wallet top-up via Paystack', p_payment_ref: ref })
               });
               await fetch(SUPABASE_URL + '/rest/v1/topup_requests?payment_ref=eq.' + ref, {
                 method: 'PATCH',
-                headers: { apikey: SUPABASE_ANON, Authorization: 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+                headers: { apikey: SUPABASE_ANON, Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
                 body: JSON.stringify({ status: 'Completed', completed_at: new Date().toISOString() })
               });
+              if (topupPending.userId) {
+                createNotification(topupPending.userId, "topup_successful", "Top-Up Successful",
+                  `GH₵${(topupPending.amount/100).toFixed(2)} added to your wallet.`, { reference: ref });
+              }
             }
           } catch(e) { console.error('Wallet verify error:', e); }
           setScreen('wallet');
@@ -4238,7 +4409,24 @@ export default function App() {
   if (screen==="splash") return <><style>{CSS}</style><Splash onLogin={()=>{ setAuthMode("login");go("auth"); }} onRegister={()=>{ setAuthMode("register");go("auth"); }} onGuest={()=>go("home")}/></>;
   if (screen==="auth") return <><style>{CSS}</style><Auth mode={authMode} onBack={(mode)=>{ if(mode){ setAuthMode(mode); } else { go("splash"); } }} onSuccess={(u)=>{ setUser(u);go("home"); }}/></>;
 
-  const views={chargers:<ChargerAdmin go={goSecure}/>,sessions:<SessionManager go={goSecure} user={user}/>,wallet:<WalletScreen go={goSecure} user={user}/>,pricing:<PricingAdmin go={goSecure} user={user}/>,admin:<AdminDashboard go={goSecure} user={user}/>, home:<Home {...props}/>,map:<MapScreen {...props}/>,detail:<Detail {...props}/>,vehicles:<Vehicles {...props}/>,booking:<Booking {...props}/>,bookings:<Bookings {...props}/>,qr:<QRScreen {...props}/>,verify:<Verify {...props}/>,profile:<Profile {...props}/>,about:<About {...props}/> };
+  const views={
+    chargers:<ChargerAdmin go={goSecure}/>,
+    sessions:<SessionManager go={goSecure} user={user}/>,
+    wallet:<WalletScreen go={goSecure} user={user}/>,
+    pricing:<PricingAdmin go={goSecure} user={user}/>,
+    admin:<AdminDashboard go={goSecure} user={user}/>,
+    notifications:<NotificationsScreen go={goSecure} user={user}/>,
+    home:<Home {...props}/>,
+    map:<MapScreen {...props}/>,
+    detail:<Detail {...props}/>,
+    vehicles:<Vehicles {...props}/>,
+    booking:<Booking {...props}/>,
+    bookings:<Bookings {...props}/>,
+    qr:<QRScreen {...props}/>,
+    verify:<Verify {...props}/>,
+    profile:<Profile {...props}/>,
+    about:<About {...props}/>
+  };
 
   return (
     <><style>{CSS}</style>
