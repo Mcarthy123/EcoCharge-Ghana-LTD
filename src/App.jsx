@@ -159,7 +159,7 @@ const NOTIF_CONFIG={
 const createNotification = async (userId, type, title, body, metadata={}) => {
   if (!SUPABASE_URL || !userId) return;
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
       method: "POST",
       headers: {
         apikey: SUPABASE_ANON,
@@ -172,7 +172,13 @@ const createNotification = async (userId, type, title, body, metadata={}) => {
         metadata, is_read: false, sent_at: new Date().toISOString()
       }),
     });
-  } catch(e) {}
+    if (!res.ok) {
+      const errText = await res.text().catch(()=>"");
+      console.error(`[createNotification] failed (${res.status}):`, errText);
+    }
+  } catch(e) {
+    console.error("[createNotification] network error:", e);
+  }
 };
 
 function UnreadBadge({ userId }) {
@@ -1019,7 +1025,7 @@ function Booking({ go,station,vehicle,user,setBooking }) {
     if (!email.trim()||!email.includes("@")) { setErr("Enter a valid email");return; }
     setLoad(true);setErr("");
     const ref=genRef();
-    const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",slot_time:slots[slotIdx].toISOString(),duration_min:dur.value,amount:total,name,phone,email,pay_method:payHow,status:payHow==="now"?"pending_payment":"confirmed",created_at:new Date().toISOString() };
+    const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",slot_time:slots[slotIdx].toISOString(),duration_min:dur.value,amount:total,name,phone,email,user_id:user?.id||null,pay_method:payHow,status:payHow==="now"?"pending_payment":"confirmed",created_at:new Date().toISOString() };
     if (SUPABASE_URL) await sb("bookings",{ method:"POST",headers:{ Prefer:"return=minimal" },body:JSON.stringify(data) });
     setBooking(data);
     try { localStorage.setItem("eco_booking",JSON.stringify(data)); } catch(e){}
@@ -4361,7 +4367,7 @@ export default function App() {
       window.history.replaceState({},"",window.location.pathname);
       try { const saved=localStorage.getItem("eco_booking"); if(saved){ const parsed=JSON.parse(saved); const updated={ ...parsed,status:"confirmed",pay_method:"now" }; setBooking(updated); localStorage.setItem("eco_booking",JSON.stringify(updated)); } } catch(e){}
       if (SUPABASE_URL) {
-        sb(`bookings?reference=eq.${ref}&select=*`).then(data=>{ if(data&&data.length>0){ const b=data[0]; sb(`bookings?id=eq.${b.id}`,{ method:"PATCH",headers:{ Prefer:"return=minimal" },body:JSON.stringify({ status:"confirmed",payment_confirmed:true }) }); const updated={ ...b,status:"confirmed",pay_method:"now" }; setBooking(updated); try { localStorage.setItem("eco_booking",JSON.stringify(updated)); } catch(e){} if(user?.id){ createNotification(user.id,"booking_confirmed","Booking Confirmed",`${b.station} reserved and paid. Ref: ${ref}`,{ reference: ref }); } } });
+        sb(`bookings?reference=eq.${ref}&select=*`).then(data=>{ if(data&&data.length>0){ const b=data[0]; sb(`bookings?id=eq.${b.id}`,{ method:"PATCH",headers:{ Prefer:"return=minimal" },body:JSON.stringify({ status:"confirmed",payment_confirmed:true }) }); const updated={ ...b,status:"confirmed",pay_method:"now" }; setBooking(updated); try { localStorage.setItem("eco_booking",JSON.stringify(updated)); } catch(e){} const notifyUserId=b.user_id||user?.id; if(notifyUserId){ createNotification(notifyUserId,"booking_confirmed","Booking Confirmed",`${b.station} reserved and paid. Ref: ${ref}`,{ reference: ref }); } } });
       }
       const topupPending = (() => { try { return JSON.parse(localStorage.getItem('eco_topup')||'null'); } catch(e){ return null; } })();
       if (topupPending && ref.startsWith('WALLET-')) {
