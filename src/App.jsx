@@ -1025,7 +1025,13 @@ function Booking({ go,station,vehicle,user,setBooking }) {
     try { localStorage.setItem("eco_booking",JSON.stringify(data)); } catch(e){}
     if (payHow==="now") {
       window.location.href=`https://paystack.shop/pay/bldaqwywt5?email=${encodeURIComponent(email)}&amount=${total*100}&reference=${ref}`;
-    } else { setLoad(false);go("qr"); }
+    } else {
+      if (user?.id) {
+        createNotification(user.id, "booking_confirmed", "Booking Confirmed",
+          `${s.name} reserved for ${fmtTime(slots[slotIdx])}. Pay on arrival.`, { reference: ref });
+      }
+      setLoad(false);go("qr");
+    }
   };
   const inp=(ph,val,set,type="text",icon="fa-user")=>(
     <div style={{ position:"relative",marginBottom:10 }}>
@@ -4355,7 +4361,7 @@ export default function App() {
       window.history.replaceState({},"",window.location.pathname);
       try { const saved=localStorage.getItem("eco_booking"); if(saved){ const parsed=JSON.parse(saved); const updated={ ...parsed,status:"confirmed",pay_method:"now" }; setBooking(updated); localStorage.setItem("eco_booking",JSON.stringify(updated)); } } catch(e){}
       if (SUPABASE_URL) {
-        sb(`bookings?reference=eq.${ref}&select=*`).then(data=>{ if(data&&data.length>0){ const b=data[0]; sb(`bookings?id=eq.${b.id}`,{ method:"PATCH",headers:{ Prefer:"return=minimal" },body:JSON.stringify({ status:"confirmed",payment_confirmed:true }) }); const updated={ ...b,status:"confirmed",pay_method:"now" }; setBooking(updated); try { localStorage.setItem("eco_booking",JSON.stringify(updated)); } catch(e){} } });
+        sb(`bookings?reference=eq.${ref}&select=*`).then(data=>{ if(data&&data.length>0){ const b=data[0]; sb(`bookings?id=eq.${b.id}`,{ method:"PATCH",headers:{ Prefer:"return=minimal" },body:JSON.stringify({ status:"confirmed",payment_confirmed:true }) }); const updated={ ...b,status:"confirmed",pay_method:"now" }; setBooking(updated); try { localStorage.setItem("eco_booking",JSON.stringify(updated)); } catch(e){} if(user?.id){ createNotification(user.id,"booking_confirmed","Booking Confirmed",`${b.station} reserved and paid. Ref: ${ref}`,{ reference: ref }); } } });
       }
       const topupPending = (() => { try { return JSON.parse(localStorage.getItem('eco_topup')||'null'); } catch(e){ return null; } })();
       if (topupPending && ref.startsWith('WALLET-')) {
