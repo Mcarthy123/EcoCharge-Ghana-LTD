@@ -1025,19 +1025,21 @@ function Booking({ go,station,vehicle,user,setBooking }) {
     if (!email.trim()||!email.includes("@")) { setErr("Enter a valid email");return; }
     setLoad(true);setErr("");
     const ref=genRef();
-    const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",slot_time:slots[slotIdx].toISOString(),duration_min:dur.value,amount:total,name,phone,email,user_id:user?.id||null,pay_method:payHow,status:payHow==="now"?"pending_payment":"confirmed",created_at:new Date().toISOString() };
-    if (SUPABASE_URL) await sb("bookings",{ method:"POST",headers:{ Prefer:"return=minimal" },body:JSON.stringify(data) });
+    const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",slot_time:slots[slotIdx].toISOString(),duration_min:dur.value,amount:total,name,phone,email,user_id:user?.id||null,pay_method:payHow,status:"confirmed",created_at:new Date().toISOString() };
+    let saved=true;
+    if (SUPABASE_URL) saved=await sb("bookings",{ method:"POST",headers:{ Prefer:"return=minimal" },body:JSON.stringify(data) });
+    if (!saved) {
+      setErr("Could not save booking. Please check your connection and try again.");
+      setLoad(false);
+      return;
+    }
     setBooking(data);
     try { localStorage.setItem("eco_booking",JSON.stringify(data)); } catch(e){}
-    if (payHow==="now") {
-      window.location.href=`https://paystack.shop/pay/bldaqwywt5?email=${encodeURIComponent(email)}&amount=${total*100}&reference=${ref}`;
-    } else {
-      if (user?.id) {
-        createNotification(user.id, "booking_confirmed", "Booking Confirmed",
-          `${s.name} reserved for ${fmtTime(slots[slotIdx])}. Pay on arrival.`, { reference: ref });
-      }
-      setLoad(false);go("qr");
+    if (user?.id) {
+      createNotification(user.id, "booking_confirmed", "Booking Confirmed",
+        `${s.name} reserved for ${fmtTime(slots[slotIdx])}. You'll be charged from your wallet when charging starts.`, { reference: ref });
     }
+    setLoad(false);go("qr");
   };
   const inp=(ph,val,set,type="text",icon="fa-user")=>(
     <div style={{ position:"relative",marginBottom:10 }}>
@@ -1092,7 +1094,7 @@ function Booking({ go,station,vehicle,user,setBooking }) {
           ))}
           <Divider/>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-            <span style={{ fontWeight:700,color:T.text,fontSize:14 }}>Total</span>
+            <span style={{ fontWeight:700,color:T.text,fontSize:14 }}>Estimated Total</span>
             <span style={{ fontWeight:800,fontSize:24,color:T.green }}>GH₵{total}</span>
           </div>
         </div>
@@ -1104,7 +1106,8 @@ function Booking({ go,station,vehicle,user,setBooking }) {
         </div>
         <div className="fade3" style={{ background:T.card,borderRadius:16,padding:"14px 16px",marginBottom:14,border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}><i className="fas fa-credit-card" style={{ marginRight:8,color:T.green }}/> Payment</div>
-          {[{ id:"now",label:"Pay now to confirm",sub:"Instant booking via Paystack",icon:"fa-lock" },{ id:"arrive",label:"Pay on arrival",sub:"Reserve now, pay at station",icon:"fa-store" }].map(m=>(
+          <div style={{ fontSize:12,color:T.muted,marginBottom:12,lineHeight:1.6 }}>No payment now — you'll be charged from your wallet only when your charging session starts.</div>
+          {[{ id:"now",label:"Pay from Wallet",sub:"Charged when charging starts",icon:"fa-wallet" },{ id:"arrive",label:"Pay on arrival",sub:"Charged when charging starts",icon:"fa-store" }].map(m=>(
             <div key={m.id} className="tap row" onClick={()=>setPayHow(m.id)}
               style={{ display:"flex",alignItems:"center",gap:14,padding:"13px 12px",borderRadius:12,marginBottom:8,cursor:"pointer",background:payHow===m.id?"#132010":"transparent",border:`1px solid ${payHow===m.id?T.greenDim:T.border}` }}>
               <i className={`fas ${m.icon}`} style={{ fontSize:16,color:payHow===m.id?T.green:T.muted }}/>
@@ -1121,7 +1124,7 @@ function Booking({ go,station,vehicle,user,setBooking }) {
         {error&&<div style={{ background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",borderRadius:10,padding:"11px 14px",marginBottom:12,color:T.red,fontSize:12,display:"flex",alignItems:"center",gap:8 }}><i className="fas fa-exclamation-triangle"/> {error}</div>}
         <button onClick={book} disabled={loading} className="tap"
           style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:16,fontWeight:800,color:"#000",cursor:loading?"default":"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:loading?.7:1 }}>
-          {loading?<><Spinner/> Processing…</>:payHow==="now"?<><i className="fas fa-lock"/> Pay GH₵{total} & Confirm</>:<><i className="fas fa-calendar-check"/> Reserve Slot — Pay on Arrival</>}
+          {loading?<><Spinner/> Processing…</>:<><i className="fas fa-calendar-check"/> Reserve Slot — GH₵{total} Est.</>}
         </button>
       </div>
     </div>
@@ -1852,7 +1855,7 @@ function QRScreen({ go, booking, setBooking, user }) {
             { label:"Vehicle",  value:b.vehicle,      icon:"fa-car"            },
             { label:"Duration", value:`${b.duration_min} min`, icon:"fa-hourglass-half" },
             { label:"Amount",   value:`GH₵${b.amount}`, icon:"fa-money-bill-alt" },
-            { label:"Payment",  value:b.pay_method==="now"?"Paid ✅":"Pay on Arrival", icon:"fa-credit-card" },
+            { label:"Payment",  value:b.pay_method==="now"?"Charged on charge start":"Pay on Arrival", icon:"fa-credit-card" },
           ].map(r=>(
             <div key={r.label} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,paddingBottom:10,borderBottom:`1px solid rgba(255,255,255,0.05)` }}>
               <div style={{ display:"flex",alignItems:"center",gap:8 }}>
@@ -2212,7 +2215,7 @@ function Bookings({ go,booking,user }) {
                       {cd.active&&<div style={{ textAlign:"center",marginTop:12 }}><div style={{ fontWeight:900,fontSize:36,color:T.green,fontFamily:"monospace",letterSpacing:2 }}>{cd.label}</div><div style={{ fontSize:11,color:T.muted,marginTop:4 }}>charging in progress</div></div>}
                     </div>
                   )}
-                  {[{ label:"Reference",value:b.reference },{ label:"Amount",value:`GH₵${b.amount}` },{ label:"Payment",value:b.pay_method==="now"?"Paid ✅":"Pay on Arrival" },{ label:"Water",value:"20L included 💧" }].map(r=>(
+                  {[{ label:"Reference",value:b.reference },{ label:"Amount",value:`GH₵${b.amount}` },{ label:"Payment",value:b.pay_method==="now"?"Charged on charge start":"Pay on Arrival" },{ label:"Water",value:"20L included 💧" }].map(r=>(
                     <div key={r.label} style={{ display:"flex",justifyContent:"space-between",marginBottom:8,paddingBottom:8,borderBottom:`1px solid rgba(255,255,255,0.06)` }}>
                       <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
                       <span style={{ color:T.text,fontWeight:600,fontSize:13 }}>{r.value}</span>
@@ -4365,10 +4368,6 @@ export default function App() {
     const ref=params.get("reference")||params.get("trxref");
     if (ref) {
       window.history.replaceState({},"",window.location.pathname);
-      try { const saved=localStorage.getItem("eco_booking"); if(saved){ const parsed=JSON.parse(saved); const updated={ ...parsed,status:"confirmed",pay_method:"now" }; setBooking(updated); localStorage.setItem("eco_booking",JSON.stringify(updated)); } } catch(e){}
-      if (SUPABASE_URL) {
-        sb(`bookings?reference=eq.${ref}&select=*`).then(data=>{ if(data&&data.length>0){ const b=data[0]; sb(`bookings?id=eq.${b.id}`,{ method:"PATCH",headers:{ Prefer:"return=minimal" },body:JSON.stringify({ status:"confirmed",payment_confirmed:true }) }); const updated={ ...b,status:"confirmed",pay_method:"now" }; setBooking(updated); try { localStorage.setItem("eco_booking",JSON.stringify(updated)); } catch(e){} const notifyUserId=b.user_id||user?.id; if(notifyUserId){ createNotification(notifyUserId,"booking_confirmed","Booking Confirmed",`${b.station} reserved and paid. Ref: ${ref}`,{ reference: ref }); } } });
-      }
       const topupPending = (() => { try { return JSON.parse(localStorage.getItem('eco_topup')||'null'); } catch(e){ return null; } })();
       if (topupPending && ref.startsWith('WALLET-')) {
         try { localStorage.removeItem('eco_topup'); } catch(e) {}
@@ -4403,15 +4402,6 @@ export default function App() {
           setScreen('wallet');
         };
         setTimeout(verifyWalletPayment, 150);
-      } else {
-        if (OCPP_URL) {
-          fetch(OCPP_URL + '/api/payment/verify', {
-            method: 'POST',
-            headers: { 'x-api-key': OCPP_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ reference: ref })
-          }).catch(e => console.error('Booking verify:', e));
-        }
-        setTimeout(()=>setScreen('qr'), 150);
       }
     }
   },[]);
