@@ -3,7 +3,7 @@
 // Font Awesome Free icons + Inter font
 // Paystack, Supabase, QR, Booking, Verify, Map
 // ============================================================
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useContext, createContext } from "react";
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL        || "";
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY   || "";
@@ -41,12 +41,51 @@ const sb = async (path, opts = {}) => {
   } catch(e) { return null; }
 };
 
-const T = {
-  bg:"#0a0d10", card:"#13171f", card2:"#1a1f2a", border:"#222632",
-  green:"#4ade80", greenDark:"#22c55e", greenDim:"#166534",
-  text:"#ffffff", muted:"#6b7280", mutedLight:"#9ca3af",
-  blue:"#38bdf8", yellow:"#fbbf24", red:"#f87171",
+// ── THEME ─────────────────────────────────────────────────────
+// Two palettes (dark/light), same keys, same green accent.
+// T is a mutable object — components already read T.xxx directly.
+// ThemeProvider mutates T's contents in place on toggle, then
+// triggers a re-render via context so the whole tree picks it up.
+const PALETTES = {
+  dark: {
+    bg:"#0a0d10", card:"#13171f", card2:"#1a1f2a", border:"#222632",
+    green:"#4ade80", greenDark:"#22c55e", greenDim:"#166534",
+    text:"#ffffff", muted:"#6b7280", mutedLight:"#9ca3af",
+    blue:"#38bdf8", yellow:"#fbbf24", red:"#f87171",
+  },
+  light: {
+    bg:"#f7f9fa", card:"#ffffff", card2:"#f0f2f4", border:"#e2e5e9",
+    green:"#16a34a", greenDark:"#15803d", greenDim:"#bbf7d0",
+    text:"#0f172a", muted:"#64748b", mutedLight:"#475569",
+    blue:"#0284c7", yellow:"#b45309", red:"#dc2626",
+  },
 };
+
+const T = { ...PALETTES.dark };
+
+const getStoredTheme = () => {
+  try { return localStorage.getItem("eco_theme") === "light" ? "light" : "dark"; } catch(e) { return "dark"; }
+};
+
+Object.assign(T, PALETTES[getStoredTheme()]);
+
+const ThemeContext = createContext({ mode:"dark", toggleTheme:()=>{} });
+const useTheme = () => useContext(ThemeContext);
+
+function ThemeProvider({ children }) {
+  const [mode, setMode] = useState(getStoredTheme());
+  const toggleTheme = () => {
+    const next = mode === "dark" ? "light" : "dark";
+    Object.assign(T, PALETTES[next]);
+    try { localStorage.setItem("eco_theme", next); } catch(e) {}
+    setMode(next);
+  };
+  return (
+    <ThemeContext.Provider value={{ mode, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
 
 const STATIONS = [
   { id:1, name:"Accra Central",  city:"Accra",      bays:6, open:6, solar:85, hydrogen:15, time:"23 mins", lat:5.6037,  lng:-0.1870 },
@@ -399,7 +438,9 @@ const Header = ({ title,sub,onBack,onMenu }) => (
   </div>
 );
 
-const Drawer = ({ open,onClose,go,user,onLogout }) => (
+const Drawer = ({ open,onClose,go,user,onLogout }) => {
+  const { mode, toggleTheme } = useTheme();
+  return (
   <>
     {open&&<div onClick={onClose} style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.65)",zIndex:200 }}/>}
     <div style={{ position:"fixed",top:0,left:0,height:"100%",width:285,background:T.card,zIndex:201,borderRight:`1px solid ${T.border}`,transform:open?"translateX(0)":"translateX(-100%)",transition:"transform .3s cubic-bezier(.4,0,.2,1)",display:"flex",flexDirection:"column" }}>
@@ -420,6 +461,14 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => (
         }
       </div>
       <div style={{ flex:1,overflowY:"auto" }}>
+        <div className="tap row" onClick={toggleTheme}
+          style={{ display:"flex",alignItems:"center",gap:14,padding:"16px 20px",borderBottom:`1px solid ${T.border}20` }}>
+          <i className={`fas ${mode==="dark"?"fa-moon":"fa-sun"}`} style={{ fontSize:16,color:mode==="dark"?T.blue:T.yellow,width:20,textAlign:"center" }}/>
+          <span style={{ color:T.text,fontSize:14,fontWeight:500,flex:1 }}>{mode==="dark"?"Dark Mode":"Light Mode"}</span>
+          <div style={{ width:44,height:24,borderRadius:12,background:mode==="dark"?T.border:T.green,position:"relative",transition:"background .2s" }}>
+            <div style={{ width:18,height:18,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:mode==="dark"?3:23,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,0.3)" }}/>
+          </div>
+        </div>
         {[
           { icon:"fa-home",             label:"Find Stations",   screen:"home"          },
           { icon:"fa-plug",             label:"All Stations",    screen:"detail"        },
@@ -451,7 +500,8 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => (
       )}
     </div>
   </>
-);
+  );
+};
 
 
 function Splash({ onLogin, onRegister, onGuest }) {
@@ -4338,7 +4388,7 @@ function AdminDashboard({ go, user }) {
   );
 }
 
-export default function App() {
+function AppInner() {
   const [screen,setScreen]   = useState(()=>{ try { return localStorage.getItem("eco_user")?"home":"splash"; } catch(e){ return "splash"; } });
   const [authMode,setAuthMode]= useState("login");
   const [station,setStation]  = useState(null);
@@ -4439,5 +4489,13 @@ export default function App() {
       </div>
     </div>
     </>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppInner/>
+    </ThemeProvider>
   );
 }
