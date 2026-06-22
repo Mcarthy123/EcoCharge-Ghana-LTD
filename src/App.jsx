@@ -1684,7 +1684,7 @@ function QRScreen({ go, booking, setBooking, user }) {
           <div style={{ position:'relative',width:210,height:210 }}>
             <div style={{ position:'absolute',inset:-8,borderRadius:'50%',background:'radial-gradient(circle,rgba(74,222,128,0.08) 0%,transparent 70%)' }}/>
             <svg width='210' height='210' style={{ transform:'rotate(-90deg)' }}>
-              <circle cx='105' cy='105' r='90' fill='none' stroke=T.surface strokeWidth='16'/>
+              <circle cx='105' cy='105' r='90' fill='none' stroke={T.surface} strokeWidth='16'/>
               <circle cx='105' cy='105' r='90' fill='none' stroke='url(#dashGrad)' strokeWidth='16'
                 strokeDasharray={`${2*Math.PI*90}`}
                 strokeDashoffset={`${2*Math.PI*90*(1-pct/100)}`}
