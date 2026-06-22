@@ -52,12 +52,20 @@ const PALETTES = {
     green:"#4ade80", greenDark:"#22c55e", greenDim:"#166534",
     text:"#ffffff", muted:"#6b7280", mutedLight:"#9ca3af",
     blue:"#38bdf8", yellow:"#fbbf24", red:"#f87171",
+    inputBg:"#0c0f18", highlightGrad:"linear-gradient(135deg,#071a09,#0a2510)",
+    highlightGrad2:"linear-gradient(135deg,#0a1f12,#0d2d1a)", highlightSolid:"#0a1f12",
+    track:"rgba(255,255,255,0.08)", surface:"rgba(255,255,255,0.06)", surfaceBorder:"rgba(255,255,255,0.15)",
+    surfaceFaint:"rgba(255,255,255,0.04)",
   },
   light: {
     bg:"#f7f9fa", card:"#ffffff", card2:"#f0f2f4", border:"#e2e5e9",
     green:"#16a34a", greenDark:"#15803d", greenDim:"#bbf7d0",
     text:"#0f172a", muted:"#64748b", mutedLight:"#475569",
     blue:"#0284c7", yellow:"#b45309", red:"#dc2626",
+    inputBg:"#f0f2f4", highlightGrad:"linear-gradient(135deg,#ecfdf3,#dcfce7)",
+    highlightGrad2:"linear-gradient(135deg,#ecfdf3,#dcfce7)", highlightSolid:"#ecfdf3",
+    track:"rgba(15,23,42,0.08)", surface:"rgba(15,23,42,0.05)", surfaceBorder:"rgba(15,23,42,0.12)",
+    surfaceFaint:"rgba(15,23,42,0.035)",
   },
 };
 
@@ -342,7 +350,7 @@ function NotificationsScreen({ go, user }) {
         {loading&&<div style={{ textAlign:"center",padding:"40px 0" }}><Spinner/></div>}
         {!loading&&notifs.length===0&&(
           <div style={{ textAlign:"center",padding:"60px 20px" }}>
-            <div style={{ width:80,height:80,borderRadius:"50%",background:"rgba(255,255,255,0.05)",border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}>
+            <div style={{ width:80,height:80,borderRadius:"50%",background:T.surface,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}>
               <i className="fas fa-bell" style={{ fontSize:32,color:T.muted }}/>
             </div>
             <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>No notifications yet</div>
@@ -444,7 +452,7 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => {
   <>
     {open&&<div onClick={onClose} style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.65)",zIndex:200 }}/>}
     <div style={{ position:"fixed",top:0,left:0,height:"100%",width:285,background:T.card,zIndex:201,borderRight:`1px solid ${T.border}`,transform:open?"translateX(0)":"translateX(-100%)",transition:"transform .3s cubic-bezier(.4,0,.2,1)",display:"flex",flexDirection:"column" }}>
-      <div style={{ padding:"52px 20px 20px",background:"linear-gradient(135deg,#0a1f12,#0f2b18)" }}>
+      <div style={{ padding:"52px 20px 20px",background:T.highlightGrad2 }}>
         <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:16 }}>
           <Logo size={48}/>
           <div>
@@ -520,7 +528,7 @@ function Splash({ onLogin, onRegister, onGuest }) {
           <button onClick={onLogin} className="tap" style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:16,padding:"17px",fontSize:16,fontWeight:700,color:"#000",cursor:"pointer",marginBottom:12,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:`0 4px 24px rgba(74,222,128,0.4)` }}>
             <i className="fas fa-sign-in-alt"/> Sign In
           </button>
-          <button onClick={onRegister} className="tap" style={{ width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.18)",borderRadius:16,padding:"17px",fontSize:16,fontWeight:600,color:T.text,cursor:"pointer",marginBottom:22,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10 }}>
+          <button onClick={onRegister} className="tap" style={{ width:"100%",background:T.surface,border:"1px solid rgba(255,255,255,0.18)",borderRadius:16,padding:"17px",fontSize:16,fontWeight:600,color:T.text,cursor:"pointer",marginBottom:22,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10 }}>
             <i className="fas fa-user-plus"/> Create Account
           </button>
           <button onClick={onGuest} className="tap" style={{ width:"100%",background:"none",border:"none",fontSize:14,color:"rgba(255,255,255,0.45)",cursor:"pointer",fontFamily:"inherit" }}>Continue as Guest →</button>
@@ -592,7 +600,7 @@ function Auth({ mode, onBack, onSuccess }) {
     <div style={{ position:"relative",marginBottom:14 }}>
       <i className={`fas ${icon}`} style={{ position:"absolute",left:16,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:14,zIndex:1 }}/>
       <input type={type} placeholder={ph} value={val} onChange={e=>{ set(e.target.value);setErr(""); }}
-        style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 14px 14px 46px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+        style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 14px 14px 46px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
     </div>
   );
 
@@ -616,7 +624,7 @@ function Auth({ mode, onBack, onSuccess }) {
             <div style={{ position:"relative",marginBottom:14 }}>
               <i className="fas fa-lock" style={{ position:"absolute",left:16,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:14,zIndex:1 }}/>
               <input type={showPass?"text":"password"} placeholder="Password" value={password} onChange={e=>{ setPass(e.target.value);setErr(""); }}
-                style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 46px 14px 46px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+                style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 46px 14px 46px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
               <button onClick={()=>setShowPass(!showPass)} style={{ position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.muted }}>
                 <i className={`fas ${showPass?"fa-eye-slash":"fa-eye"}`}/>
               </button>
@@ -636,7 +644,7 @@ function Auth({ mode, onBack, onSuccess }) {
               <div style={{ width:1,height:16,background:T.border }}/>
             </div>
             <input type="tel" placeholder="XX XXX XXXX" value={phone} onChange={e=>{ setPhone(e.target.value);setErr(""); }}
-              style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 14px 14px 95px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+              style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 14px 14px 95px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
           </div>
         )}
         {tab==="phone" && otpSent && (
@@ -644,7 +652,7 @@ function Auth({ mode, onBack, onSuccess }) {
             {success&&<div style={{ color:T.green,fontSize:12,marginBottom:12,background:"rgba(74,222,128,.08)",borderRadius:8,padding:"10px 14px",display:"flex",alignItems:"center",gap:8 }}><i className="fas fa-check-circle"/> {success}</div>}
             <div style={{ fontSize:13,color:T.muted,marginBottom:12,textAlign:"center" }}>Enter the 6-digit code sent to your phone</div>
             <input type="number" placeholder="000000" value={otp} onChange={e=>{ setOtp(e.target.value);setErr(""); }}
-              style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:12,padding:"16px",color:T.text,fontSize:28,fontFamily:"monospace",letterSpacing:10,textAlign:"center",marginBottom:14 }}/>
+              style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"16px",color:T.text,fontSize:28,fontFamily:"monospace",letterSpacing:10,textAlign:"center",marginBottom:14 }}/>
           </>
         )}
         {error&&<div style={{ color:T.red,fontSize:12,marginBottom:14,background:"rgba(248,113,113,.08)",borderRadius:8,padding:"10px 14px",display:"flex",alignItems:"center",gap:8 }}><i className="fas fa-exclamation-circle"/> {error}</div>}
@@ -668,7 +676,7 @@ function Auth({ mode, onBack, onSuccess }) {
             Google
           </button>
           <button onClick={()=>setTab(tab==="phone"?"email":"phone")} className="tap"
-            style={{ background:"rgba(255,255,255,0.07)",border:`1px solid ${T.border}`,borderRadius:12,padding:"13px",fontSize:14,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+            style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px",fontSize:14,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
             <i className="fas fa-phone" style={{ color:T.green }}/> Phone
           </button>
         </div>
@@ -767,7 +775,7 @@ function SolarWidget() {
               <div style={{ fontWeight:800,fontSize:18,color:T.green }}>{solar?.efficiency}%</div>
             </div>
           </div>
-          <div style={{ height:6,borderRadius:3,background:"rgba(255,255,255,0.08)",overflow:"hidden",marginBottom:12 }}>
+          <div style={{ height:6,borderRadius:3,background:T.track,overflow:"hidden",marginBottom:12 }}>
             <div style={{ height:"100%",width:`${solar?.efficiency}%`,background:`linear-gradient(90deg,${T.yellow},${T.green})`,borderRadius:3,transition:"width 1s ease" }}/>
           </div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
@@ -808,7 +816,7 @@ function Home({ go,stations,setStation,user,onMenu }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:"#080d10",overflowY:"auto" }}>
       <div style={{ padding:"48px 18px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0 }}>
-        <button onClick={onMenu} className="tap" style={{ background:"rgba(255,255,255,.07)",border:`1px solid ${T.border}`,borderRadius:12,width:40,height:40,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
+        <button onClick={onMenu} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,width:40,height:40,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
           <i className="fas fa-bars" style={{ fontSize:16,color:T.mutedLight }}/>
         </button>
         <div style={{ display:"flex",alignItems:"center",gap:8 }}>
@@ -819,7 +827,7 @@ function Home({ go,stations,setStation,user,onMenu }) {
           </div>
         </div>
         <div style={{ position:"relative" }}>
-          <button onClick={()=>go("notifications")} className="tap" style={{ background:"rgba(255,255,255,.07)",border:`1px solid ${T.border}`,borderRadius:12,width:40,height:40,display:"flex",alignItems:"center",justifyContent:"center" }}>
+          <button onClick={()=>go("notifications")} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,width:40,height:40,display:"flex",alignItems:"center",justifyContent:"center" }}>
             <i className="fas fa-bell" style={{ fontSize:16,color:T.mutedLight }}/>
           </button>
           {user?.id && <UnreadBadge userId={user.id}/>}
@@ -849,7 +857,7 @@ function Home({ go,stations,setStation,user,onMenu }) {
         <i className="fas fa-search" style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:14 }}/>
         <input placeholder="Search station or location" value={search} onChange={e=>setSearch(e.target.value)}
           style={{ width:"100%",background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"13px 48px 13px 42px",fontSize:14,fontFamily:"inherit" }}/>
-        <div style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"rgba(255,255,255,.06)",borderRadius:8,padding:"5px 9px" }}>
+        <div style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:T.surface,borderRadius:8,padding:"5px 9px" }}>
           <i className="fas fa-sliders-h" style={{ fontSize:13,color:T.mutedLight }}/>
         </div>
       </div>
@@ -867,7 +875,7 @@ function Home({ go,stations,setStation,user,onMenu }) {
           </button>
         ))}
       </div>
-      <div style={{ margin:"0 14px 16px",background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:18,padding:"16px",border:`1px solid rgba(74,222,128,0.2)`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+      <div style={{ margin:"0 14px 16px",background:T.highlightGrad,borderRadius:18,padding:"16px",border:`1px solid rgba(74,222,128,0.2)`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
         <div style={{ display:"flex",gap:12,alignItems:"center" }}>
           <div style={{ width:44,height:44,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
             <i className="fas fa-leaf" style={{ fontSize:18,color:"#000" }}/>
@@ -900,8 +908,8 @@ function Home({ go,stations,setStation,user,onMenu }) {
                 <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{s.name}</div>
                 <div style={{ fontSize:11,color:T.muted,marginBottom:8 }}><i className="fas fa-clock" style={{ marginRight:4 }}/>{s.time} away · {s.city}</div>
                 <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
-                  <div style={{ background:"rgba(255,255,255,.06)",borderRadius:6,padding:"3px 8px",display:"flex",alignItems:"center",gap:3 }}><i className="fas fa-bolt" style={{ fontSize:9,color:T.mutedLight }}/><span style={{ fontSize:10,color:T.mutedLight }}>{kw} kW Max</span></div>
-                  <div style={{ background:"rgba(255,255,255,.06)",borderRadius:6,padding:"3px 8px",display:"flex",alignItems:"center",gap:3 }}><i className="fas fa-sun" style={{ fontSize:9,color:T.yellow }}/><span style={{ fontSize:10,color:T.mutedLight }}>{s.solar}% Solar</span></div>
+                  <div style={{ background:T.surface,borderRadius:6,padding:"3px 8px",display:"flex",alignItems:"center",gap:3 }}><i className="fas fa-bolt" style={{ fontSize:9,color:T.mutedLight }}/><span style={{ fontSize:10,color:T.mutedLight }}>{kw} kW Max</span></div>
+                  <div style={{ background:T.surface,borderRadius:6,padding:"3px 8px",display:"flex",alignItems:"center",gap:3 }}><i className="fas fa-sun" style={{ fontSize:9,color:T.yellow }}/><span style={{ fontSize:10,color:T.mutedLight }}>{s.solar}% Solar</span></div>
                 </div>
               </div>
               <div style={{ flexShrink:0,display:"flex",flexDirection:"column",alignItems:"flex-end",justifyContent:"space-between",padding:"12px" }}>
@@ -1095,14 +1103,14 @@ function Booking({ go,station,vehicle,user,setBooking }) {
     <div style={{ position:"relative",marginBottom:10 }}>
       <i className={`fas ${icon}`} style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:13 }}/>
       <input type={type} placeholder={ph} value={val} onChange={e=>{ set(e.target.value);setErr(""); }}
-        style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px 12px 40px",color:T.text,fontSize:14 }}/>
+        style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px 12px 40px",color:T.text,fontSize:14 }}/>
     </div>
   );
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Book a Slot" sub={`${s.name} · ${s.city}`} onBack={()=>go("vehicles")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 120px" }}>
-        <div className="fade" style={{ background:"linear-gradient(135deg,#0a1f12,#0d2d1a)",borderRadius:16,padding:"14px 16px",marginBottom:14,border:`1px solid ${T.greenDim}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+        <div className="fade" style={{ background:T.highlightGrad2,borderRadius:16,padding:"14px 16px",marginBottom:14,border:`1px solid ${T.greenDim}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
           <div>
             <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Booking for</div>
             <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{s.name}</div>
@@ -1614,7 +1622,7 @@ function QRScreen({ go, booking, setBooking, user }) {
             const c = checks[item.key];
             return (
               <div key={item.key} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:`1px solid rgba(255,255,255,0.05)` }}>
-                <div style={{ width:36,height:36,borderRadius:10,background:c?.ok===true?"rgba(74,222,128,0.12)":c?.ok===false?"rgba(248,113,113,0.12)":"rgba(255,255,255,0.05)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                <div style={{ width:36,height:36,borderRadius:10,background:c?.ok===true?"rgba(74,222,128,0.12)":c?.ok===false?"rgba(248,113,113,0.12)":T.surface,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
                   {c?.ok===null ? <Spinner/> : c?.ok===true ? <i className="fas fa-check" style={{ color:T.green,fontSize:14 }}/> : c?.ok===false ? <i className="fas fa-times" style={{ color:T.red,fontSize:14 }}/> : <i className={`fas ${item.icon}`} style={{ color:T.muted,fontSize:14 }}/>}
                 </div>
                 <div style={{ flex:1 }}>
@@ -1676,7 +1684,7 @@ function QRScreen({ go, booking, setBooking, user }) {
           <div style={{ position:'relative',width:210,height:210 }}>
             <div style={{ position:'absolute',inset:-8,borderRadius:'50%',background:'radial-gradient(circle,rgba(74,222,128,0.08) 0%,transparent 70%)' }}/>
             <svg width='210' height='210' style={{ transform:'rotate(-90deg)' }}>
-              <circle cx='105' cy='105' r='90' fill='none' stroke='rgba(255,255,255,0.05)' strokeWidth='16'/>
+              <circle cx='105' cy='105' r='90' fill='none' stroke=T.surface strokeWidth='16'/>
               <circle cx='105' cy='105' r='90' fill='none' stroke='url(#dashGrad)' strokeWidth='16'
                 strokeDasharray={`${2*Math.PI*90}`}
                 strokeDashoffset={`${2*Math.PI*90*(1-pct/100)}`}
@@ -1706,20 +1714,20 @@ function QRScreen({ go, booking, setBooking, user }) {
             </div>
             <div style={{ fontWeight:900,fontSize:32,color:T.blue,lineHeight:1 }}>{livePower.toFixed(1)}</div>
             <div style={{ fontSize:12,color:T.muted,marginTop:3 }}>kW</div>
-            <div style={{ height:4,borderRadius:2,background:'rgba(255,255,255,0.06)',overflow:'hidden',marginTop:8 }}>
+            <div style={{ height:4,borderRadius:2,background:T.surface,overflow:'hidden',marginTop:8 }}>
               <div style={{ height:'100%',width:`${Math.min(100,(livePower/22)*100)}%`,background:`linear-gradient(90deg,${T.blue},#818cf8)`,borderRadius:2,transition:'width .5s ease' }}/>
             </div>
             <div style={{ fontSize:9,color:T.muted,marginTop:3 }}>Max: 22 kW</div>
           </div>
 
-          <div style={{ background:'linear-gradient(135deg,#071a09,#0a2510)',borderRadius:16,padding:'16px',border:'1px solid rgba(74,222,128,0.2)' }}>
+          <div style={{ background:T.highlightGrad,borderRadius:16,padding:'16px',border:'1px solid rgba(74,222,128,0.2)' }}>
             <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
               <i className='fas fa-bolt' style={{ fontSize:12,color:T.green }}/>
               <span style={{ fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:0.8,fontWeight:700 }}>Energy</span>
             </div>
             <div style={{ fontWeight:900,fontSize:32,color:T.green,lineHeight:1 }}>{liveKwh.toFixed(3)}</div>
             <div style={{ fontSize:12,color:T.muted,marginTop:3 }}>kWh consumed</div>
-            <div style={{ height:4,borderRadius:2,background:'rgba(255,255,255,0.06)',overflow:'hidden',marginTop:8 }}>
+            <div style={{ height:4,borderRadius:2,background:T.surface,overflow:'hidden',marginTop:8 }}>
               <div style={{ height:'100%',width:`${Math.min(100,(liveKwh/50)*100)}%`,background:`linear-gradient(90deg,${T.green},#86efac)`,borderRadius:2,transition:'width .5s ease' }}/>
             </div>
             <div style={{ fontSize:9,color:T.muted,marginTop:3 }}>CO₂ saved: {(liveKwh*0.5).toFixed(2)} kg</div>
@@ -1736,7 +1744,7 @@ function QRScreen({ go, booking, setBooking, user }) {
             <div style={{ fontSize:11,color:T.muted,marginTop:4 }}>GH₵0.85/kWh + GH₵5 base</div>
           </div>
 
-          <div style={{ background:'linear-gradient(135deg,#071a09,#0a2510)',borderRadius:16,padding:'16px',border:`1px solid ${walletBal!=null&&walletBal<(costSoFar*100+500)?'rgba(248,113,113,0.3)':'rgba(74,222,128,0.2)'}` }}>
+          <div style={{ background:T.highlightGrad,borderRadius:16,padding:'16px',border:`1px solid ${walletBal!=null&&walletBal<(costSoFar*100+500)?'rgba(248,113,113,0.3)':'rgba(74,222,128,0.2)'}` }}>
             <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
               <i className='fas fa-wallet' style={{ fontSize:12,color:walletBal!=null&&walletBal<(costSoFar*100+500)?T.red:T.green }}/>
               <span style={{ fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:0.8,fontWeight:700 }}>Wallet</span>
@@ -1817,7 +1825,7 @@ function QRScreen({ go, booking, setBooking, user }) {
           <div style={{ fontSize:13,color:T.muted }}>Session ended · {b.station}</div>
         </div>
 
-        <div style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:18,padding:"20px",marginBottom:16,border:`1px solid rgba(74,222,128,0.2)` }}>
+        <div style={{ background:T.highlightGrad,borderRadius:18,padding:"20px",marginBottom:16,border:`1px solid rgba(74,222,128,0.2)` }}>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16 }}>
             {[
               { label:"Energy Delivered", value:`${liveKwh.toFixed(3)} kWh`, color:T.green  },
@@ -1887,7 +1895,7 @@ function QRScreen({ go, booking, setBooking, user }) {
           </div>
         </div>
 
-        <div className="fade" style={{ background:"linear-gradient(135deg,#0a1f12,#0d2d1a)",borderRadius:20,padding:"20px",textAlign:"center",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
+        <div className="fade" style={{ background:T.highlightGrad2,borderRadius:20,padding:"20px",textAlign:"center",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
           <div style={{ background:"#0f1117",borderRadius:16,padding:14,display:"inline-block",border:`2px solid ${T.greenDim}`,marginBottom:12,position:"relative" }}>
             <img src={qrUrl} alt="QR" width={190} height={190} style={{ borderRadius:8,display:"block" }}/>
             <div style={{ position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:36,height:36,borderRadius:8,background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",border:`2px solid ${T.greenDim}` }}>
@@ -1928,7 +1936,7 @@ function QRScreen({ go, booking, setBooking, user }) {
         </div>
 
         <button onClick={()=>go("map")} className="tap"
-          style={{ width:"100%",background:"rgba(255,255,255,0.05)",border:`1px solid ${T.border}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+          style={{ width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
           <i className="fas fa-map-marker-alt"/> View Station on Map
         </button>
       </div>
@@ -1980,7 +1988,7 @@ function Verify({ go }) {
           <div style={{ position:"relative",marginBottom:12 }}>
             <i className="fas fa-hashtag" style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:14 }}/>
             <input placeholder="ECO-XXXXXX" value={code} onChange={e=>{ setCode(e.target.value.toUpperCase());setErr("");setResult(null); }}
-              style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 14px 14px 40px",color:T.text,fontSize:16,fontFamily:"monospace",letterSpacing:1 }}/>
+              style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 14px 14px 40px",color:T.text,fontSize:16,fontFamily:"monospace",letterSpacing:1 }}/>
           </div>
           <button onClick={verify} disabled={loading} className="tap"
             style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10 }}>
@@ -1989,7 +1997,7 @@ function Verify({ go }) {
         </div>
         {error&&<div style={{ background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",borderRadius:12,padding:"12px 16px",marginBottom:12,color:T.red,fontSize:13,display:"flex",alignItems:"center",gap:8 }}><i className="fas fa-exclamation-triangle"/> {error}</div>}
         {result&&(
-          <div className="fade" style={{ background:"#0a1f12",border:`1px solid ${T.greenDim}`,borderRadius:16,padding:"18px",marginBottom:12 }}>
+          <div className="fade" style={{ background:T.highlightSolid,border:`1px solid ${T.greenDim}`,borderRadius:16,padding:"18px",marginBottom:12 }}>
             <div style={{ textAlign:"center",marginBottom:16 }}>
               <div style={{ width:56,height:56,borderRadius:"50%",background:T.green,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px" }}>
                 <i className="fas fa-check" style={{ fontSize:26,color:"#000" }}/>
@@ -2063,7 +2071,7 @@ function Profile({ go,user,setUser,onMenu }) {
       <div style={{ flex:1,overflowY:"auto",padding:"20px 14px 100px" }}>
         {user ? (
           <>
-            <div className="fade" style={{ background:"linear-gradient(135deg,#0a1f12,#0e2716)",borderRadius:18,padding:"24px",marginBottom:16,border:`1px solid ${T.greenDim}`,textAlign:"center" }}>
+            <div className="fade" style={{ background:T.highlightGrad2,borderRadius:18,padding:"24px",marginBottom:16,border:`1px solid ${T.greenDim}`,textAlign:"center" }}>
               <div style={{ position:"relative",display:"inline-block",marginBottom:14 }}>
                 <div style={{ width:82,height:82,borderRadius:"50%",overflow:"hidden",border:`3px solid ${T.green}`,margin:"0 auto" }}>
                   {avatar
@@ -2088,7 +2096,7 @@ function Profile({ go,user,setUser,onMenu }) {
                   </div>
                   <div style={{textAlign:"right"}}><div style={{fontWeight:900,fontSize:22,color:tierColor}}>{loyaltyData.points.toLocaleString()}</div><div style={{fontSize:11,color:"#6b7280"}}>points</div></div>
                 </div>
-                <div style={{height:6,borderRadius:3,background:"rgba(255,255,255,0.08)",overflow:"hidden",marginBottom:6}}>
+                <div style={{height:6,borderRadius:3,background:T.track,overflow:"hidden",marginBottom:6}}>
                   <div style={{height:"100%",width:`${tierPct}%`,background:`linear-gradient(90deg,${tierColor},${tierColor}99)`,borderRadius:3,transition:"width 1s ease"}}/>
                 </div>
                 <div style={{fontSize:11,color:"#6b7280",textAlign:"right"}}>{loyaltyData.tier==="Platinum"?"Max tier reached!":`${tierNext-loyaltyData.points} points to next tier`}</div>
@@ -2107,7 +2115,7 @@ function Profile({ go,user,setUser,onMenu }) {
               {menuItems.map((item,i)=>(
                 <div key={item.label} className="tap row" onClick={()=>go(item.screen)}
                   style={{ display:"flex",alignItems:"center",gap:14,padding:"16px",borderBottom:i<menuItems.length-1?`1px solid ${T.border}20`:"none",cursor:"pointer" }}>
-                  <div style={{ width:36,height:36,borderRadius:10,background:"rgba(255,255,255,0.05)",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                  <div style={{ width:36,height:36,borderRadius:10,background:T.surface,display:"flex",alignItems:"center",justifyContent:"center" }}>
                     <i className={`fas ${item.icon}`} style={{ fontSize:15,color:T.mutedLight }}/>
                   </div>
                   <span style={{ color:T.text,fontSize:14,fontWeight:500,flex:1 }}>{item.label}</span>
@@ -2187,26 +2195,26 @@ function StationReview({go,station,user,onClose}){
   };
   if(done)return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:"#13171f",borderRadius:20,padding:"32px 24px",textAlign:"center",border:"1px solid #222632"}}>
+      <div style={{background:T.card,borderRadius:20,padding:"32px 24px",textAlign:"center",border:`1px solid ${T.border}`}}>
         <div style={{fontSize:48,marginBottom:12}}>⭐</div>
-        <div style={{fontWeight:800,fontSize:18,color:"#4ade80"}}>Review Submitted!</div>
-        <div style={{fontSize:13,color:"#6b7280",marginTop:8}}>Thank you for your feedback</div>
+        <div style={{fontWeight:800,fontSize:18,color:T.green}}>Review Submitted!</div>
+        <div style={{fontSize:13,color:T.muted,marginTop:8}}>Thank you for your feedback</div>
       </div>
     </div>
   );
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-      <div style={{background:"#13171f",borderRadius:"20px 20px 0 0",padding:"24px 20px 40px",width:"100%",maxWidth:480,border:"1px solid #222632"}}>
+      <div style={{background:T.card,borderRadius:"20px 20px 0 0",padding:"24px 20px 40px",width:"100%",maxWidth:480,border:`1px solid ${T.border}`}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-          <div style={{fontWeight:800,fontSize:16,color:"#fff"}}>Rate this Station</div>
-          <button onClick={onClose} style={{background:"none",border:"none",color:"#6b7280",fontSize:20,cursor:"pointer"}}>✕</button>
+          <div style={{fontWeight:800,fontSize:16,color:T.text}}>Rate this Station</div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:T.muted,fontSize:20,cursor:"pointer"}}>✕</button>
         </div>
-        <div style={{fontWeight:600,fontSize:14,color:"#9ca3af",marginBottom:16}}>{station?.name||"EcoCharge Station"}</div>
+        <div style={{fontWeight:600,fontSize:14,color:T.mutedLight,marginBottom:16}}>{station?.name||"EcoCharge Station"}</div>
         <div style={{display:"flex",justifyContent:"center",gap:12,marginBottom:20}}>
           {[1,2,3,4,5].map(s=><button key={s} onClick={()=>setRating(s)} style={{background:"none",border:"none",fontSize:36,cursor:"pointer",opacity:s<=rating?1:0.3}}>⭐</button>)}
         </div>
-        <textarea placeholder="Share your experience (optional)" value={comment} onChange={e=>setComment(e.target.value)} style={{width:"100%",background:"#0c0f18",border:"1px solid #222632",borderRadius:12,padding:"12px 14px",color:"#fff",fontSize:14,fontFamily:"inherit",resize:"none",height:80,marginBottom:16}}/>
-        <button onClick={submit} disabled={!rating||saving} style={{width:"100%",background:rating?"linear-gradient(135deg,#4ade80,#22c55e)":"#222632",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,color:rating?"#000":"#6b7280",cursor:rating?"pointer":"not-allowed",fontFamily:"inherit"}}>{saving?"Submitting...":"Submit Review"}</button>
+        <textarea placeholder="Share your experience (optional)" value={comment} onChange={e=>setComment(e.target.value)} style={{width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 14px",color:T.text,fontSize:14,fontFamily:"inherit",resize:"none",height:80,marginBottom:16}}/>
+        <button onClick={submit} disabled={!rating||saving} style={{width:"100%",background:rating?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.border,border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,color:rating?"#000":T.muted,cursor:rating?"pointer":"not-allowed",fontFamily:"inherit"}}>{saving?"Submitting...":"Submit Review"}</button>
       </div>
     </div>
   );
@@ -2242,7 +2250,7 @@ function Bookings({ go,booking,user }) {
             {(()=>{
               const cd=getCountdown(b);
               return (
-                <div className="fade" style={{ background:"linear-gradient(135deg,#0a1f12,#0d2d1a)",borderRadius:18,padding:"18px",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
+                <div className="fade" style={{ background:T.highlightGrad2,borderRadius:18,padding:"18px",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
                   <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14 }}>
                     <div>
                       <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Active Booking</div>
@@ -2259,7 +2267,7 @@ function Bookings({ go,booking,user }) {
                         <span style={{ fontSize:12,color:T.muted }}>{cd.done?"Session complete":cd.waiting?cd.label:"Time remaining"}</span>
                         <span style={{ fontSize:12,fontWeight:700,color:T.green }}>{cd.done?"Done ✅":cd.active?cd.label:""}</span>
                       </div>
-                      <div style={{ height:8,borderRadius:4,background:"rgba(255,255,255,0.08)",overflow:"hidden" }}>
+                      <div style={{ height:8,borderRadius:4,background:T.track,overflow:"hidden" }}>
                         <div style={{ height:"100%",width:`${cd.pct}%`,background:`linear-gradient(90deg,${T.green},${T.blue})`,transition:"width 1s linear",borderRadius:4 }}/>
                       </div>
                       {cd.active&&<div style={{ textAlign:"center",marginTop:12 }}><div style={{ fontWeight:900,fontSize:36,color:T.green,fontFamily:"monospace",letterSpacing:2 }}>{cd.label}</div><div style={{ fontSize:11,color:T.muted,marginTop:4 }}>charging in progress</div></div>}
@@ -2447,7 +2455,7 @@ function ChargerAdmin({ go }) {
                         { label:"Last Beat", value:c.lastHeartbeat?new Date(c.lastHeartbeat).toLocaleTimeString("en-GH",{ hour:"2-digit",minute:"2-digit" }):"--" },
                         { label:"Active TX", value:c.activeTransactions||0 },
                       ].map(r=>(
-                        <div key={r.label} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"8px 10px" }}>
+                        <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"8px 10px" }}>
                           <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.5 }}>{r.label}</div>
                           <div style={{ fontWeight:700,fontSize:13,color:T.text,marginTop:3 }}>{r.value}</div>
                         </div>
@@ -2527,7 +2535,7 @@ function ChargerAdmin({ go }) {
                     { label:"Duration", value:s.duration_min!=null?`${s.duration_min} min`:"--" },
                     { label:"Start",    value:s.start_time?new Date(s.start_time).toLocaleTimeString("en-GH",{ hour:"2-digit",minute:"2-digit" }):"--" },
                   ].map(r=>(
-                    <div key={r.label} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"8px" }}>
+                    <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"8px" }}>
                       <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.5 }}>{r.label}</div>
                       <div style={{ fontWeight:700,fontSize:13,color:T.text,marginTop:3 }}>{r.value}</div>
                     </div>
@@ -2830,7 +2838,7 @@ function SessionManager({ go, user }) {
                     </div>
                     <span style={{ fontSize:12,color:T.muted }}>{count} ({pct}%)</span>
                   </div>
-                  <div style={{ height:5,borderRadius:3,background:"rgba(255,255,255,0.06)",overflow:"hidden" }}>
+                  <div style={{ height:5,borderRadius:3,background:T.surface,overflow:"hidden" }}>
                     <div style={{ height:"100%",width:`${pct}%`,background:cfg.color,borderRadius:3,transition:"width .5s ease" }}/>
                   </div>
                 </div>
@@ -2838,10 +2846,10 @@ function SessionManager({ go, user }) {
             })}
           </div>
 
-          <div style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:16,padding:"18px",marginBottom:16,border:`1px solid rgba(74,222,128,0.2)`,textAlign:"center" }}>
+          <div style={{ background:T.highlightGrad,borderRadius:16,padding:"18px",marginBottom:16,border:`1px solid rgba(74,222,128,0.2)`,textAlign:"center" }}>
             <div style={{ fontSize:12,color:T.muted,marginBottom:6 }}>Session Completion Rate</div>
             <div style={{ fontWeight:900,fontSize:48,color:T.green }}>{completedPct}%</div>
-            <div style={{ height:8,borderRadius:4,background:"rgba(255,255,255,0.08)",overflow:"hidden",margin:"12px 0 8px" }}>
+            <div style={{ height:8,borderRadius:4,background:T.track,overflow:"hidden",margin:"12px 0 8px" }}>
               <div style={{ height:"100%",width:`${completedPct}%`,background:`linear-gradient(90deg,${T.green},${T.blue})`,borderRadius:4 }}/>
             </div>
             <div style={{ fontSize:11,color:T.muted }}>{completedCount} of {totalSessions} sessions completed</div>
@@ -2945,7 +2953,7 @@ function SessionManager({ go, user }) {
                     { label:"Time",    value:fmtDuration(s.duration_sec),    color:T.blue   },
                     { label:"Payment", value:s.payment_status||"Unpaid",     color:s.payment_status==="Paid"?T.green:T.muted },
                   ].map(m=>(
-                    <div key={m.label} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"6px 4px",textAlign:"center" }}>
+                    <div key={m.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"6px 4px",textAlign:"center" }}>
                       <div style={{ fontWeight:700,fontSize:11,color:m.color }}>{m.value}</div>
                       <div style={{ fontSize:9,color:T.muted,marginTop:2 }}>{m.label}</div>
                     </div>
@@ -3083,7 +3091,7 @@ function WalletScreen({ go, user }) {
       <Header title="Top Up Wallet" sub="Add funds to charge" onBack={()=>setTab("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"16px 16px 100px" }}>
 
-        <div style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:18,padding:"18px",marginBottom:20,border:`1px solid rgba(74,222,128,0.2)`,textAlign:"center" }}>
+        <div style={{ background:T.highlightGrad,borderRadius:18,padding:"18px",marginBottom:20,border:`1px solid rgba(74,222,128,0.2)`,textAlign:"center" }}>
           <div style={{ fontSize:12,color:T.muted,marginBottom:4 }}>Current Balance</div>
           <div style={{ fontWeight:900,fontSize:36,color:T.green }}>{fmtGHS(wallet?.balance_pesewas||0)}</div>
         </div>
@@ -3222,7 +3230,7 @@ function WalletScreen({ go, user }) {
 
         {!loading&&(
           <>
-            <div className="fade" style={{ background:"linear-gradient(135deg,#071a09,#0d2d1a,#071a09)",borderRadius:22,padding:"28px 24px",marginBottom:16,border:`1px solid rgba(74,222,128,0.25)`,position:"relative",overflow:"hidden" }}>
+            <div className="fade" style={{ background:T.highlightGrad,borderRadius:22,padding:"28px 24px",marginBottom:16,border:`1px solid rgba(74,222,128,0.25)`,position:"relative",overflow:"hidden" }}>
               <div style={{ position:"absolute",top:-40,right:-40,width:160,height:160,borderRadius:"50%",background:"rgba(74,222,128,0.06)" }}/>
               <div style={{ position:"relative",zIndex:1 }}>
                 <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20 }}>
@@ -3250,7 +3258,7 @@ function WalletScreen({ go, user }) {
                     <i className="fas fa-plus"/> Top Up
                   </button>
                   <button onClick={()=>setTab("history")} className="tap"
-                    style={{ flex:1,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:12,padding:"13px",fontSize:14,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+                    style={{ flex:1,background:T.track,border:"1px solid rgba(255,255,255,0.15)",borderRadius:12,padding:"13px",fontSize:14,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
                     <i className="fas fa-history"/> History
                   </button>
                 </div>
@@ -3453,7 +3461,7 @@ function PricingAdmin({ go, user }) {
       <div style={{ fontSize:11,color:T.muted,marginBottom:5,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5 }}>{label}</div>
       <input type={type} placeholder={placeholder} value={editing?.[key]||""}
         onChange={e=>setEditing(prev=>({...prev,[key]:type==="number"?parseFloat(e.target.value)||0:e.target.value}))}
-        style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+        style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
     </div>
   );
 
@@ -3470,7 +3478,7 @@ function PricingAdmin({ go, user }) {
           <div style={{ marginBottom:12 }}>
             <div style={{ fontSize:11,color:T.muted,marginBottom:5,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5 }}>Priority (higher = used first)</div>
             <input type="number" value={editing?.priority||0} onChange={e=>setEditing(p=>({...p,priority:parseInt(e.target.value)||0}))}
-              style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+              style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
           </div>
         </div>
 
@@ -3491,7 +3499,7 @@ function PricingAdmin({ go, user }) {
               <div key={f.key}>
                 <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600 }}>{f.label}</div>
                 <input type="number" value={editing?.[f.key]||0} onChange={e=>setEditing(p=>({...p,[f.key]:parseInt(e.target.value)||0}))}
-                  style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+                  style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
               </div>
             ))}
           </div>
@@ -3540,12 +3548,12 @@ function PricingAdmin({ go, user }) {
               <div>
                 <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600 }}>FROM TIME</div>
                 <input type="time" value={editing?.active_from_time||""} onChange={e=>setEditing(p=>({...p,active_from_time:e.target.value}))}
-                  style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+                  style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
               </div>
               <div>
                 <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600 }}>TO TIME</div>
                 <input type="time" value={editing?.active_to_time||""} onChange={e=>setEditing(p=>({...p,active_to_time:e.target.value}))}
-                  style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+                  style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
               </div>
             </div>
           )}
@@ -3554,12 +3562,12 @@ function PricingAdmin({ go, user }) {
               <div>
                 <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600 }}>FROM DATE</div>
                 <input type="date" value={editing?.active_from_date||""} onChange={e=>setEditing(p=>({...p,active_from_date:e.target.value}))}
-                  style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+                  style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
               </div>
               <div>
                 <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600 }}>TO DATE</div>
                 <input type="date" value={editing?.active_to_date||""} onChange={e=>setEditing(p=>({...p,active_to_date:e.target.value}))}
-                  style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+                  style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
               </div>
             </div>
           )}
@@ -3599,7 +3607,7 @@ function PricingAdmin({ go, user }) {
               <div key={f.label}>
                 <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600 }}>{f.label}</div>
                 <input type="number" value={f.val} onChange={e=>f.set(e.target.value)}
-                  style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:15,fontWeight:700,fontFamily:"inherit",textAlign:"center" }}/>
+                  style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px",color:T.text,fontSize:15,fontWeight:700,fontFamily:"inherit",textAlign:"center" }}/>
               </div>
             ))}
           </div>
@@ -3611,7 +3619,7 @@ function PricingAdmin({ go, user }) {
         </button>
 
         {simResult&&(
-          <div className="fade" style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:18,padding:"18px",border:`1px solid rgba(74,222,128,0.25)` }}>
+          <div className="fade" style={{ background:T.highlightGrad,borderRadius:18,padding:"18px",border:`1px solid rgba(74,222,128,0.25)` }}>
             <div style={{ textAlign:"center",marginBottom:16 }}>
               <div style={{ fontSize:12,color:T.muted,marginBottom:4 }}>Estimated Cost — {simTariff?.name}</div>
               <div style={{ fontWeight:900,fontSize:44,color:T.green }}>{GHS(simResult.total)}</div>
@@ -3679,7 +3687,7 @@ function PricingAdmin({ go, user }) {
         {loading&&<div style={{ textAlign:"center",padding:"30px 0" }}><Spinner/></div>}
 
         {tariffs.map(t=>(
-          <div key={t.id} style={{ background:T.card,borderRadius:16,border:`1px solid ${t.is_active?T.border:"rgba(255,255,255,0.05)"}`,marginBottom:10,overflow:"hidden",opacity:t.is_active?1:0.6 }}>
+          <div key={t.id} style={{ background:T.card,borderRadius:16,border:`1px solid ${t.is_active?T.border:T.surface}`,marginBottom:10,overflow:"hidden",opacity:t.is_active?1:0.6 }}>
             <div style={{ padding:"14px 16px" }}>
               <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
                 <div style={{ flex:1,minWidth:0 }}>
@@ -3691,7 +3699,7 @@ function PricingAdmin({ go, user }) {
                   <div style={{ fontSize:11,color:T.muted }}>{t.description||"No description"}</div>
                 </div>
                 <button onClick={()=>toggleActive(t)} className="tap"
-                  style={{ background:t.is_active?`linear-gradient(135deg,${T.green},${T.greenDark})`:"rgba(255,255,255,0.08)",border:"none",borderRadius:20,padding:"5px 14px",fontSize:11,fontWeight:700,color:t.is_active?"#000":T.muted,cursor:"pointer",fontFamily:"inherit",flexShrink:0,marginLeft:8 }}>
+                  style={{ background:t.is_active?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.track,border:"none",borderRadius:20,padding:"5px 14px",fontSize:11,fontWeight:700,color:t.is_active?"#000":T.muted,cursor:"pointer",fontFamily:"inherit",flexShrink:0,marginLeft:8 }}>
                   {t.is_active?"ON":"OFF"}
                 </button>
               </div>
@@ -3737,7 +3745,7 @@ function PricingAdmin({ go, user }) {
                   <span style={{ marginLeft:8 }}>Priority: {t.priority}</span>
                 </div>
                 <button onClick={()=>{ setEditing({...t});setTab("edit"); }} className="tap"
-                  style={{ background:"rgba(255,255,255,0.06)",border:`1px solid ${T.border}`,borderRadius:8,padding:"5px 12px",fontSize:11,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+                  style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"5px 12px",fontSize:11,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
                   <i className="fas fa-pencil-alt"/> Edit
                 </button>
               </div>
@@ -3902,7 +3910,7 @@ function AdminDashboard({ go, user }) {
       {overview&&(
         <>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
-            <div style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:16,padding:"18px",border:"1px solid rgba(74,222,128,0.25)",gridColumn:"1/-1" }}>
+            <div style={{ background:T.highlightGrad,borderRadius:16,padding:"18px",border:"1px solid rgba(74,222,128,0.25)",gridColumn:"1/-1" }}>
               <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Total Revenue</div>
               <div style={{ fontWeight:900,fontSize:36,color:T.green }}>GH₵{(overview.totalRevenue/100).toFixed(2)}</div>
               <div style={{ fontSize:11,color:T.muted,marginTop:4 }}>{overview.totalSessions} sessions · {overview.totalEnergy.toFixed(1)} kWh delivered</div>
@@ -3987,7 +3995,7 @@ function AdminDashboard({ go, user }) {
                 { label:"Firmware",  value:c.firmware||c.info?.firmwareVersion||"--" },
                 { label:"Active TX", value:c.active_transaction||c.activeTransactions||0 },
               ].map(r=>(
-                <div key={r.label} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"7px" }}>
+                <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"7px" }}>
                   <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase" }}>{r.label}</div>
                   <div style={{ fontWeight:700,fontSize:11,color:T.text,marginTop:2 }}>{r.value}</div>
                 </div>
@@ -4051,7 +4059,7 @@ function AdminDashboard({ go, user }) {
             <div key={f.key} style={{ marginBottom:10 }}>
               <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600,textTransform:"uppercase" }}>{f.label}</div>
               <input type={f.type} value={editStation[f.key]||""} onChange={e=>setEditStation(p=>({...p,[f.key]:f.type==="number"?parseFloat(e.target.value)||0:e.target.value}))}
-                style={{ width:"100%",background:"#0c0f18",border:`1px solid ${T.border}`,borderRadius:10,padding:"11px 14px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+                style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"11px 14px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
             </div>
           ))}
           <button onClick={()=>saveStation(editStation)} disabled={saving} className="tap"
@@ -4084,7 +4092,7 @@ function AdminDashboard({ go, user }) {
                 { label:"H₂",   value:`${s.hydrogen}%`,       color:T.blue },
                 { label:"Wait", value:s.time,                 color:T.muted },
               ].map(r=>(
-                <div key={r.label} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"6px",textAlign:"center" }}>
+                <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"6px",textAlign:"center" }}>
                   <div style={{ fontWeight:700,fontSize:11,color:r.color }}>{r.value}</div>
                   <div style={{ fontSize:9,color:T.muted }}>{r.label}</div>
                 </div>
@@ -4133,7 +4141,7 @@ function AdminDashboard({ go, user }) {
                   { label:"Cost",   value:s.cost_total?`₵${(s.cost_total/100).toFixed(0)}`:"--" },
                   { label:"Pay",    value:s.payment_status||"--" },
                 ].map(r=>(
-                  <div key={r.label} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"6px",textAlign:"center" }}>
+                  <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"6px",textAlign:"center" }}>
                     <div style={{ fontWeight:700,fontSize:11,color:T.text }}>{r.value}</div>
                     <div style={{ fontSize:9,color:T.muted }}>{r.label}</div>
                   </div>
@@ -4180,7 +4188,7 @@ function AdminDashboard({ go, user }) {
                 { label:"Spent",     value:`GH₵${((w.total_spent||0)/100).toFixed(0)}` },
                 { label:"Sessions",  value:w.session_count||0 },
               ].map(r=>(
-                <div key={r.label} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"6px",textAlign:"center" }}>
+                <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"6px",textAlign:"center" }}>
                   <div style={{ fontWeight:700,fontSize:11,color:T.text }}>{r.value}</div>
                   <div style={{ fontSize:9,color:T.muted }}>{r.label}</div>
                 </div>
@@ -4233,7 +4241,7 @@ function AdminDashboard({ go, user }) {
                 <span style={{ fontSize:11,color:T.muted }}>{new Date(day).toLocaleDateString("en-GH",{day:"numeric",month:"short"})}</span>
                 <span style={{ fontSize:11,fontWeight:700,color:T.green }}>GH₵{(d.rev/100).toFixed(2)} · {d.count} sessions</span>
               </div>
-              <div style={{ height:8,borderRadius:4,background:"rgba(255,255,255,0.06)",overflow:"hidden" }}>
+              <div style={{ height:8,borderRadius:4,background:T.surface,overflow:"hidden" }}>
                 <div style={{ height:"100%",width:`${(d.rev/maxRev)*100}%`,background:`linear-gradient(90deg,${T.green},${T.blue})`,borderRadius:4,transition:"width .5s ease" }}/>
               </div>
             </div>
@@ -4241,7 +4249,7 @@ function AdminDashboard({ go, user }) {
           {days.length===0&&<div style={{ textAlign:"center",color:T.muted,fontSize:13,padding:"20px 0" }}>No completed sessions yet</div>}
         </div>
 
-        <div style={{ background:"linear-gradient(135deg,#071a09,#0a2510)",borderRadius:14,padding:"16px",border:"1px solid rgba(74,222,128,0.2)" }}>
+        <div style={{ background:T.highlightGrad,borderRadius:14,padding:"16px",border:"1px solid rgba(74,222,128,0.2)" }}>
           <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}><i className="fas fa-leaf" style={{ marginRight:8,color:T.green }}/>Environmental Impact</div>
           {[
             { label:"CO₂ Prevented", value:`${(totalKwh*0.5).toFixed(1)} kg`,    color:T.green  },
@@ -4268,7 +4276,7 @@ function AdminDashboard({ go, user }) {
         </button>
       </div>
       {tariffs.map(t=>(
-        <div key={t.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${t.is_active?T.border:"rgba(255,255,255,0.05)"}`,padding:"13px 14px",marginBottom:8,opacity:t.is_active?1:0.55 }}>
+        <div key={t.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${t.is_active?T.border:T.surface}`,padding:"13px 14px",marginBottom:8,opacity:t.is_active?1:0.55 }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6 }}>
             <div>
               <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{t.name}</div>
@@ -4276,7 +4284,7 @@ function AdminDashboard({ go, user }) {
             </div>
             <div style={{ display:"flex",gap:6,alignItems:"center" }}>
               {t.is_promo&&<Badge label="PROMO" color={T.yellow}/>}
-              <div style={{ background:t.is_active?`${T.green}15`:"rgba(255,255,255,0.05)",borderRadius:8,padding:"3px 10px" }}>
+              <div style={{ background:t.is_active?`${T.green}15`:T.surface,borderRadius:8,padding:"3px 10px" }}>
                 <span style={{ fontSize:10,fontWeight:700,color:t.is_active?T.green:T.muted }}>{t.is_active?"ON":"OFF"}</span>
               </div>
             </div>
