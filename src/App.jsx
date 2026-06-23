@@ -56,6 +56,7 @@ const PALETTES = {
     highlightGrad2:"linear-gradient(135deg,#0a1f12,#0d2d1a)", highlightSolid:"#0a1f12",
     track:"rgba(255,255,255,0.08)", surface:"rgba(255,255,255,0.06)", surfaceBorder:"rgba(255,255,255,0.15)",
     surfaceFaint:"rgba(255,255,255,0.04)", highlightBlue:"linear-gradient(135deg,#061520,#09202e)",
+    navBg:"rgba(10,13,16,.97)", highlightAmber:"linear-gradient(135deg,#1a1000,#2d1a00)", innerTint:"rgba(0,0,0,0.2)",
   },
   light: {
     bg:"#f7f9fa", card:"#ffffff", card2:"#f0f2f4", border:"#e2e5e9",
@@ -66,6 +67,7 @@ const PALETTES = {
     highlightGrad2:"linear-gradient(135deg,#ecfdf3,#dcfce7)", highlightSolid:"#ecfdf3",
     track:"rgba(15,23,42,0.08)", surface:"rgba(15,23,42,0.05)", surfaceBorder:"rgba(15,23,42,0.12)",
     surfaceFaint:"rgba(15,23,42,0.035)", highlightBlue:"linear-gradient(135deg,#e0f2fe,#bae6fd)",
+    navBg:"rgba(255,255,255,.92)", highlightAmber:"linear-gradient(135deg,#fffbeb,#fef3c7)", innerTint:"rgba(15,23,42,0.04)",
   },
 };
 
@@ -390,7 +392,7 @@ function NotificationsScreen({ go, user }) {
 }
 
 const NewNav = ({ active, go }) => (
-  <div style={{ position:"fixed",bottom:0,left:0,right:0,display:"flex",justifyContent:"space-around",alignItems:"flex-end",padding:"10px 0 26px",borderTop:`1px solid ${T.border}`,background:"rgba(10,13,16,.97)",backdropFilter:"blur(16px)",zIndex:100 }}>
+  <div style={{ position:"fixed",bottom:0,left:0,right:0,display:"flex",justifyContent:"space-around",alignItems:"flex-end",padding:"10px 0 26px",borderTop:`1px solid ${T.border}`,background:T.navBg,backdropFilter:"blur(16px)",zIndex:100 }}>
     {[
       { label:"Home",     screen:"home",    icon:"fa-home"     },
       { label:"Stations", screen:"detail",  icon:"fa-plug"     },
@@ -749,7 +751,7 @@ function SolarWidget() {
   };
   const strength = solar ? getStrength(solar.radiation) : null;
   return (
-    <div style={{ margin:"0 14px 16px",background:"linear-gradient(135deg,#1a1000,#2d1a00)",borderRadius:18,padding:"16px",border:`1px solid rgba(251,191,36,0.2)` }}>
+    <div style={{ margin:"0 14px 16px",background:T.highlightAmber,borderRadius:18,padding:"16px",border:`1px solid rgba(251,191,36,0.2)` }}>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
         <div style={{ display:"flex",alignItems:"center",gap:8 }}>
           <div style={{ width:36,height:36,borderRadius:"50%",background:"rgba(251,191,36,0.15)",display:"flex",alignItems:"center",justifyContent:"center" }}>
@@ -784,7 +786,7 @@ function SolarWidget() {
               { label:"Cloud Cover",value:`${solar?.cloudCover}`,unit:"%",icon:"fa-cloud",color:T.mutedLight },
               { label:"Sunshine",value:`${solar?.sunshine}`,unit:"min",icon:"fa-clock",color:T.blue },
             ].map(s=>(
-              <div key={s.label} style={{ background:"rgba(0,0,0,0.2)",borderRadius:10,padding:"10px 8px",textAlign:"center" }}>
+              <div key={s.label} style={{ background:T.innerTint,borderRadius:10,padding:"10px 8px",textAlign:"center" }}>
                 <i className={`fas ${s.icon}`} style={{ fontSize:12,color:s.color,marginBottom:4,display:"block" }}/>
                 <div style={{ fontWeight:800,fontSize:14,color:T.text }}>{s.value}<span style={{ fontSize:10,color:T.muted,fontWeight:400 }}> {s.unit}</span></div>
                 <div style={{ fontSize:9,color:T.muted,marginTop:2,textTransform:"uppercase",letterSpacing:0.3 }}>{s.label}</div>
@@ -2088,18 +2090,18 @@ function Profile({ go,user,setUser,onMenu }) {
               <div style={{ fontWeight:800,fontSize:20,color:T.text }}>{user.name||user.email?.split("@")[0]}</div>
               <div style={{ fontSize:12,color:T.muted,marginTop:4,marginBottom:12 }}>{user.email||user.phone}</div>
               <Badge label="Active Member" color={T.green}/>
-              <div style={{marginTop:16,width:"100%",background:"rgba(0,0,0,0.2)",borderRadius:14,padding:"14px 16px",border:`1px solid ${tierColor}33`}}>
+              <div style={{marginTop:16,width:"100%",background:T.innerTint,borderRadius:14,padding:"14px 16px",border:`1px solid ${tierColor}33`}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <span style={{fontSize:20}}>{"Bronze"===loyaltyData.tier?"🥉":"Silver"===loyaltyData.tier?"🥈":"Gold"===loyaltyData.tier?"🥇":"💎"}</span>
-                    <div><div style={{fontWeight:800,fontSize:15,color:tierColor}}>{loyaltyData.tier}</div><div style={{fontSize:11,color:"#6b7280"}}>Loyalty Tier</div></div>
+                    <div><div style={{fontWeight:800,fontSize:15,color:tierColor}}>{loyaltyData.tier}</div><div style={{fontSize:11,color:T.muted}}>Loyalty Tier</div></div>
                   </div>
-                  <div style={{textAlign:"right"}}><div style={{fontWeight:900,fontSize:22,color:tierColor}}>{loyaltyData.points.toLocaleString()}</div><div style={{fontSize:11,color:"#6b7280"}}>points</div></div>
+                  <div style={{textAlign:"right"}}><div style={{fontWeight:900,fontSize:22,color:tierColor}}>{loyaltyData.points.toLocaleString()}</div><div style={{fontSize:11,color:T.muted}}>points</div></div>
                 </div>
                 <div style={{height:6,borderRadius:3,background:T.track,overflow:"hidden",marginBottom:6}}>
                   <div style={{height:"100%",width:`${tierPct}%`,background:`linear-gradient(90deg,${tierColor},${tierColor}99)`,borderRadius:3,transition:"width 1s ease"}}/>
                 </div>
-                <div style={{fontSize:11,color:"#6b7280",textAlign:"right"}}>{loyaltyData.tier==="Platinum"?"Max tier reached!":`${tierNext-loyaltyData.points} points to next tier`}</div>
+                <div style={{fontSize:11,color:T.muted,textAlign:"right"}}>{loyaltyData.tier==="Platinum"?"Max tier reached!":`${tierNext-loyaltyData.points} points to next tier`}</div>
               </div>
             </div>
             <div className="fade1" style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16 }}>
