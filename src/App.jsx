@@ -55,7 +55,7 @@ const PALETTES = {
     inputBg:"#0c0f18", highlightGrad:"linear-gradient(135deg,#071a09,#0a2510)",
     highlightGrad2:"linear-gradient(135deg,#0a1f12,#0d2d1a)", highlightSolid:"#0a1f12",
     track:"rgba(255,255,255,0.08)", surface:"rgba(255,255,255,0.06)", surfaceBorder:"rgba(255,255,255,0.15)",
-    surfaceFaint:"rgba(255,255,255,0.04)",
+    surfaceFaint:"rgba(255,255,255,0.04)", highlightBlue:"linear-gradient(135deg,#061520,#09202e)",
   },
   light: {
     bg:"#f7f9fa", card:"#ffffff", card2:"#f0f2f4", border:"#e2e5e9",
@@ -65,7 +65,7 @@ const PALETTES = {
     inputBg:"#f0f2f4", highlightGrad:"linear-gradient(135deg,#ecfdf3,#dcfce7)",
     highlightGrad2:"linear-gradient(135deg,#ecfdf3,#dcfce7)", highlightSolid:"#ecfdf3",
     track:"rgba(15,23,42,0.08)", surface:"rgba(15,23,42,0.05)", surfaceBorder:"rgba(15,23,42,0.12)",
-    surfaceFaint:"rgba(15,23,42,0.035)",
+    surfaceFaint:"rgba(15,23,42,0.035)", highlightBlue:"linear-gradient(135deg,#e0f2fe,#bae6fd)",
   },
 };
 
@@ -814,7 +814,7 @@ function Home({ go,stations,setStation,user,onMenu }) {
     { icon:"fa-tint",label:"Water Points",sub:"Find clean water",screen:"detail",bg:"rgba(56,189,248,0.18)",color:T.blue },
   ];
   return (
-    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:"#080d10",overflowY:"auto" }}>
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,overflowY:"auto" }}>
       <div style={{ padding:"48px 18px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0 }}>
         <button onClick={onMenu} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,width:40,height:40,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
           <i className="fas fa-bars" style={{ fontSize:16,color:T.mutedLight }}/>
@@ -931,7 +931,7 @@ function Home({ go,stations,setStation,user,onMenu }) {
           </div>
         )}
       </div>
-      <div style={{ margin:"0 14px 110px",background:"linear-gradient(135deg,#061520,#09202e)",borderRadius:18,overflow:"hidden",border:`1px solid rgba(56,189,248,0.2)`,display:"flex",alignItems:"center",cursor:"pointer",position:"relative",minHeight:80 }} onClick={()=>go("detail")}>
+      <div style={{ margin:"0 14px 110px",background:T.highlightBlue,borderRadius:18,overflow:"hidden",border:`1px solid rgba(56,189,248,0.2)`,display:"flex",alignItems:"center",cursor:"pointer",position:"relative",minHeight:80 }} onClick={()=>go("detail")}>
         <div style={{ position:"absolute",left:0,top:0,bottom:0,width:80,overflow:"hidden" }}>
           <img src="/station3.jpg" alt="water" style={{ width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.5) hue-rotate(180deg) saturate(1.5)" }} onError={e=>{ e.target.style.display="none"; }}/>
           <div style={{ position:"absolute",inset:0,background:"linear-gradient(to right,transparent,rgba(6,21,32,0.9))" }}/>
