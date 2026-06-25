@@ -48,19 +48,19 @@ const sb = async (path, opts = {}) => {
 // triggers a re-render via context so the whole tree picks it up.
 const PALETTES = {
   dark: {
-    bg:"#0a0d10", card:"#13171f", card2:"#1a1f2a", border:"#222632",
-    green:"#4ade80", greenDark:"#22c55e", greenDim:"#166534",
+    bg:"#0B0F14", card:"#111827", card2:"#1a1f2a", border:"#222632",
+    green:"#22C55E", greenDark:"#16A34A", greenDim:"#166534",
     text:"#ffffff", muted:"#6b7280", mutedLight:"#9ca3af",
     blue:"#38bdf8", yellow:"#fbbf24", red:"#f87171",
     inputBg:"#0c0f18", highlightGrad:"linear-gradient(135deg,#071a09,#0a2510)",
     highlightGrad2:"linear-gradient(135deg,#0a1f12,#0d2d1a)", highlightSolid:"#0a1f12",
     track:"rgba(255,255,255,0.08)", surface:"rgba(255,255,255,0.06)", surfaceBorder:"rgba(255,255,255,0.15)",
     surfaceFaint:"rgba(255,255,255,0.04)", highlightBlue:"linear-gradient(135deg,#061520,#09202e)",
-    navBg:"rgba(10,13,16,.97)", highlightAmber:"linear-gradient(135deg,#1a1000,#2d1a00)", innerTint:"rgba(0,0,0,0.2)",
+    navBg:"rgba(11,15,20,.97)", highlightAmber:"linear-gradient(135deg,#1a1000,#2d1a00)", innerTint:"rgba(0,0,0,0.2)",
   },
   light: {
-    bg:"#f7f9fa", card:"#ffffff", card2:"#f0f2f4", border:"#e2e5e9",
-    green:"#16a34a", greenDark:"#15803d", greenDim:"#bbf7d0",
+    bg:"#F8FAFC", card:"#FFFFFF", card2:"#f0f2f4", border:"#e2e5e9",
+    green:"#16A34A", greenDark:"#15803d", greenDim:"#bbf7d0",
     text:"#0f172a", muted:"#64748b", mutedLight:"#475569",
     blue:"#0284c7", yellow:"#b45309", red:"#dc2626",
     inputBg:"#f0f2f4", highlightGrad:"linear-gradient(135deg,#ecfdf3,#dcfce7)",
@@ -206,7 +206,7 @@ const NOTIF_CONFIG={
 
 // Uses getToken() so RLS auth.uid() = user_id policies work
 const createNotification = async (userId, type, title, body, metadata={}) => {
-  if (!SUPABASE_URL || !userId) return;
+  if (!SUPABASE_URL || !userId) return false;
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
       method: "POST",
@@ -224,9 +224,14 @@ const createNotification = async (userId, type, title, body, metadata={}) => {
     if (!res.ok) {
       const errText = await res.text().catch(()=>"");
       console.error(`[createNotification] failed (${res.status}):`, errText);
+      try { localStorage.setItem("eco_last_notif_error", JSON.stringify({ status:res.status, body:errText, type, time:new Date().toISOString() })); } catch(e){}
+      return false;
     }
+    return true;
   } catch(e) {
     console.error("[createNotification] network error:", e);
+    try { localStorage.setItem("eco_last_notif_error", JSON.stringify({ status:"network", body:String(e), type, time:new Date().toISOString() })); } catch(e2){}
+    return false;
   }
 };
 
@@ -260,6 +265,19 @@ function NotificationsScreen({ go, user }) {
   const [notifs,  setNotifs]  = useState([]);
   const [loading, setLoading] = useState(true);
   const [unread,  setUnread]  = useState(0);
+  const [lastErr, setLastErr] = useState(null);
+
+  useEffect(()=>{
+    try {
+      const raw = localStorage.getItem("eco_last_notif_error");
+      if (raw) setLastErr(JSON.parse(raw));
+    } catch(e){}
+  },[]);
+
+  const dismissErr = () => {
+    try { localStorage.removeItem("eco_last_notif_error"); } catch(e){}
+    setLastErr(null);
+  };
 
   const loadNotifs = async () => {
     if (!SUPABASE_URL || !user?.id) { setLoading(false); return; }
@@ -349,6 +367,18 @@ function NotificationsScreen({ go, user }) {
         <Logo size={34}/>
       </div>
       <div style={{ flex:1,overflowY:"auto",padding:"12px 14px 100px" }}>
+        {lastErr&&(
+          <div style={{ background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.25)",borderRadius:14,padding:"12px 14px",marginBottom:14 }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6 }}>
+              <div style={{ fontWeight:700,fontSize:12,color:T.red }}><i className="fas fa-bug" style={{ marginRight:6 }}/>Notification send failed</div>
+              <button onClick={dismissErr} className="tap" style={{ background:"none",border:"none",color:T.muted,fontSize:11,cursor:"pointer",fontFamily:"inherit" }}>Dismiss</button>
+            </div>
+            <div style={{ fontSize:11,color:T.mutedLight,lineHeight:1.6,wordBreak:"break-word" }}>
+              Type: {lastErr.type} · Status: {lastErr.status}<br/>
+              {lastErr.body && lastErr.body.slice(0,200)}
+            </div>
+          </div>
+        )}
         {loading&&<div style={{ textAlign:"center",padding:"40px 0" }}><Spinner/></div>}
         {!loading&&notifs.length===0&&(
           <div style={{ textAlign:"center",padding:"60px 20px" }}>
@@ -801,20 +831,82 @@ function SolarWidget() {
 
 function Home({ go,stations,setStation,user,onMenu }) {
   const [search,setSearch] = useState("");
-  const [slideIdx,setSlideIdx] = useState(0);
-  const slides = ["/station1.jpg","/station2.jpg","/station3.jpg"];
-  useEffect(()=>{ const t=setInterval(()=>setSlideIdx(i=>(i+1)%slides.length),3500); return ()=>clearInterval(t); },[]);
   const hour=new Date().getHours();
   const greeting=hour<12?"Good morning":hour<17?"Good afternoon":"Good evening";
-  const greetEmoji=hour<12?"👋":hour<17?"☀️":"🌙";
   const displayName=user?.name||user?.email?.split("@")[0]||"Welcome";
   const filtered=search?stations.filter(s=>s.name.toLowerCase().includes(search.toLowerCase())||s.city.toLowerCase().includes(search.toLowerCase())):stations;
+
+  // Wallet summary — reuses the same wallets/wallet_transactions tables as WalletScreen
+  const [wallet,setWallet]=useState(null);
+  const [lastTxn,setLastTxn]=useState(null);
+  const [walletLoading,setWalletLoading]=useState(true);
+  useEffect(()=>{
+    if (!SUPABASE_URL||!user?.id) { setWalletLoading(false); return; }
+    (async()=>{
+      try {
+        const wRes=await fetch(`${SUPABASE_URL}/rest/v1/wallets?user_id=eq.${user.id}&select=balance_pesewas`,
+          { headers:{ apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}` }});
+        const wData=await wRes.json();
+        if (wData?.[0]) setWallet(wData[0]);
+        const tRes=await fetch(`${SUPABASE_URL}/rest/v1/wallet_transactions?user_id=eq.${user.id}&order=created_at.desc&limit=1`,
+          { headers:{ apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}` }});
+        const tData=await tRes.json();
+        if (tData?.[0]) setLastTxn(tData[0]);
+      } catch(e) {}
+      setWalletLoading(false);
+    })();
+  },[user]);
+
+  // Impact summary — derived from real completed charging_sessions, not hardcoded
+  const [impact,setImpact]=useState({ charges:0,kwh:0,water:0 });
+  useEffect(()=>{
+    if (!SUPABASE_URL||!user?.id) return;
+    (async()=>{
+      try {
+        const res=await fetch(`${SUPABASE_URL}/rest/v1/charging_sessions?user_id=eq.${user.id}&status=eq.Completed&select=energy_kwh`,
+          { headers:{ apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}` }});
+        const data=await res.json();
+        if (Array.isArray(data)) {
+          const kwh=data.reduce((a,s)=>a+(s.energy_kwh||0),0);
+          setImpact({ charges:data.length, kwh, water:data.length*20 });
+        }
+      } catch(e) {}
+    })();
+  },[user]);
+
+  // Active session — checks the persisted signal QRScreen writes, so this card
+  // reflects reality even if the user isn't on the QR screen right now.
+  const [activeSession,setActiveSession]=useState(null);
+  useEffect(()=>{
+    if (!SUPABASE_URL||!user?.id) return;
+    (async()=>{
+      try {
+        const res=await fetch(`${SUPABASE_URL}/rest/v1/charging_sessions?user_id=eq.${user.id}&status=eq.Charging&order=started_at.desc&limit=1`,
+          { headers:{ apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}` }});
+        const data=await res.json();
+        if (data?.[0]) setActiveSession(data[0]);
+      } catch(e) {}
+    })();
+  },[user]);
+  const [elapsed,setElapsed]=useState(0);
+  useEffect(()=>{
+    if (!activeSession?.started_at) return;
+    const tick=()=>setElapsed(Math.floor((Date.now()-new Date(activeSession.started_at).getTime())/1000));
+    tick();
+    const t=setInterval(tick,1000);
+    return ()=>clearInterval(t);
+  },[activeSession]);
+  const fmtElapsed=(s)=>{ const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60; return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`; };
+
   const quickActions=[
-    { icon:"fa-bolt",label:"Find Stations",sub:"Nearby",screen:"map",bg:`linear-gradient(135deg,${T.green},${T.greenDark})`,color:"#000" },
-    { icon:"fa-calendar",label:"My Bookings",sub:"View all",screen:"bookings",bg:"rgba(255,255,255,0.12)",color:T.mutedLight },
-    { icon:"fa-qrcode",label:"Charging Pass",sub:"Show QR",screen:"qr",bg:"rgba(255,255,255,0.12)",color:T.mutedLight },
-    { icon:"fa-tint",label:"Water Points",sub:"Find clean water",screen:"detail",bg:"rgba(56,189,248,0.18)",color:T.blue },
+    { icon:"fa-bolt",label:"Find Stations",screen:"map" },
+    { icon:"fa-calendar",label:"My Bookings",screen:"bookings" },
+    { icon:"fa-qrcode",label:"Charging Pass",screen:"qr" },
+    { icon:"fa-tint",label:"Water Points",screen:"detail" },
   ];
+
+  const card = { background:T.card,borderRadius:16,border:`1px solid ${T.border}` };
+
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,overflowY:"auto" }}>
       <div style={{ padding:"48px 18px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0 }}>
@@ -822,10 +914,10 @@ function Home({ go,stations,setStation,user,onMenu }) {
           <i className="fas fa-bars" style={{ fontSize:16,color:T.mutedLight }}/>
         </button>
         <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-          <Logo size={30}/>
+          <Logo size={28}/>
           <div>
-            <div style={{ fontWeight:800,fontSize:16,color:T.text,lineHeight:1.1,letterSpacing:-0.3 }}>EcoCharge</div>
-            <div style={{ fontSize:10,color:T.green,fontWeight:700,letterSpacing:1 }}>Ghana</div>
+            <div style={{ fontWeight:800,fontSize:15,color:T.text,lineHeight:1.1,letterSpacing:-0.2 }}>EcoCharge</div>
+            <div style={{ fontSize:10,color:T.green,fontWeight:700,letterSpacing:1 }}>GHANA</div>
           </div>
         </div>
         <div style={{ position:"relative" }}>
@@ -835,115 +927,141 @@ function Home({ go,stations,setStation,user,onMenu }) {
           {user?.id && <UnreadBadge userId={user.id}/>}
         </div>
       </div>
-      <div style={{ margin:"0 14px 16px",borderRadius:22,overflow:"hidden",position:"relative",minHeight:200 }}>
-        {slides.map((src,i)=>(
-          <img key={src} src={src} alt="station" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:i===slideIdx?1:0,transition:"opacity 1.2s ease",filter:"brightness(0.5) saturate(1.1)" }} onError={e=>{ e.target.style.display="none"; }}/>
-        ))}
-        <div style={{ position:"absolute",inset:0,background:"linear-gradient(135deg,rgba(5,20,8,0.92) 0%,rgba(5,20,8,0.5) 55%,rgba(0,0,0,0.1) 100%)" }}/>
-        <div style={{ position:"relative",zIndex:2,padding:"22px 20px 20px" }}>
-          <div style={{ fontSize:14,color:"rgba(255,255,255,.7)",marginBottom:4 }}>{greeting} {greetEmoji}</div>
-          <div style={{ fontWeight:800,fontSize:28,color:T.text,marginBottom:8,letterSpacing:-0.5 }}>{displayName}</div>
-          <div style={{ fontSize:13,color:"rgba(255,255,255,0.65)",lineHeight:1.7,marginBottom:16 }}>
-            Powering Ghana with <span style={{ color:T.green,fontWeight:700 }}>clean energy</span> and <span style={{ color:T.blue,fontWeight:700 }}>clean water</span>
-          </div>
+
+      {/* HERO */}
+      <div style={{ margin:"4px 14px 16px",borderRadius:20,overflow:"hidden",position:"relative",minHeight:200 }}>
+        <img src="/station1.jpg" alt="" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.55) saturate(1.05)" }} onError={e=>{ e.target.style.display="none"; }}/>
+        <div style={{ position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(11,15,20,0.55) 0%,rgba(11,15,20,0.88) 100%)" }}/>
+        <div style={{ position:"relative",zIndex:2,padding:"24px 20px" }}>
+          <div style={{ fontSize:13,color:"rgba(255,255,255,0.6)",fontWeight:500,marginBottom:6 }}>{greeting}</div>
+          <div style={{ fontWeight:700,fontSize:26,color:"#fff",marginBottom:10,letterSpacing:-0.4 }}>{displayName}</div>
+          <div style={{ fontSize:13,color:"rgba(255,255,255,0.65)",marginBottom:20 }}>Powering Ghana with clean energy</div>
           <div style={{ display:"flex",gap:10 }}>
-            <button onClick={()=>go("map")} className="tap" style={{ background:T.green,border:"none",borderRadius:12,padding:"10px 20px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}><i className="fas fa-map-marker-alt"/> Find Station</button>
-            <button onClick={()=>go("qr")} className="tap" style={{ background:"rgba(255,255,255,.12)",border:"1px solid rgba(255,255,255,.2)",borderRadius:12,padding:"10px 18px",fontSize:14,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}><i className="fas fa-qrcode"/> My Pass</button>
+            <button onClick={()=>go("qr")} className="tap" style={{ flex:1,background:T.green,border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>Start Charging</button>
+            <button onClick={()=>go("map")} className="tap" style={{ flex:1,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.22)",borderRadius:12,padding:"13px",fontSize:14,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:"inherit" }}>Find Stations</button>
           </div>
-        </div>
-        <div style={{ position:"absolute",bottom:12,right:14,display:"flex",gap:5,zIndex:3 }}>
-          {slides.map((_,i)=>(<div key={i} onClick={()=>setSlideIdx(i)} style={{ width:i===slideIdx?20:6,height:6,borderRadius:3,background:i===slideIdx?T.green:"rgba(255,255,255,0.35)",transition:"all .3s",cursor:"pointer" }}/>))}
         </div>
       </div>
+
+      {/* SEARCH */}
       <div style={{ margin:"0 14px 16px",position:"relative" }}>
         <i className="fas fa-search" style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:14 }}/>
         <input placeholder="Search station or location" value={search} onChange={e=>setSearch(e.target.value)}
-          style={{ width:"100%",background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"13px 48px 13px 42px",fontSize:14,fontFamily:"inherit" }}/>
-        <div style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:T.surface,borderRadius:8,padding:"5px 9px" }}>
-          <i className="fas fa-sliders-h" style={{ fontSize:13,color:T.mutedLight }}/>
-        </div>
+          style={{ width:"100%",background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"13px 16px 13px 42px",fontSize:14,fontFamily:"inherit",color:T.text }}/>
       </div>
-      <div style={{ margin:"0 14px 16px",background:T.card,borderRadius:18,border:`1px solid ${T.border}`,display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr" }}>
-        {quickActions.map((a,i)=>(
+
+      {/* WALLET CARD */}
+      {user&&(
+        <div style={{ margin:"0 14px 16px",...card,padding:"18px" }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
+            <div>
+              <div style={{ fontSize:11,color:T.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Wallet Balance</div>
+              <div style={{ fontWeight:700,fontSize:28,color:T.text,letterSpacing:-0.5 }}>
+                {walletLoading?"GH₵ ––":fmtGHS(wallet?.balance_pesewas||0)}
+              </div>
+            </div>
+            <button onClick={()=>go("wallet")} className="tap" style={{ background:T.green,border:"none",borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:700,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>Top Up</button>
+          </div>
+          {lastTxn&&(
+            <div style={{ marginTop:14,paddingTop:14,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+              <span style={{ fontSize:12,color:T.muted }}>{lastTxn.description||lastTxn.type}</span>
+              <span style={{ fontSize:13,fontWeight:700,color:["TopUp","Refund","Bonus"].includes(lastTxn.type)?T.green:T.text }}>
+                {["TopUp","Refund","Bonus"].includes(lastTxn.type)?"+":"-"}{fmtGHS(lastTxn.amount_pesewas)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ACTIVE CHARGING SESSION */}
+      {activeSession&&(
+        <div style={{ margin:"0 14px 16px",background:T.card,borderRadius:16,border:`1px solid ${T.green}`,padding:"18px" }}>
+          <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:14 }}>
+            <div style={{ width:8,height:8,borderRadius:"50%",background:T.green }}/>
+            <span style={{ fontSize:13,fontWeight:700,color:T.green,letterSpacing:0.3 }}>CHARGING NOW</span>
+          </div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:16 }}>
+            <div>
+              <div style={{ fontSize:11,color:T.muted,marginBottom:3 }}>Duration</div>
+              <div style={{ fontWeight:700,fontSize:20,color:T.text,fontFamily:"monospace" }}>{fmtElapsed(elapsed)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize:11,color:T.muted,marginBottom:3 }}>Station</div>
+              <div style={{ fontWeight:700,fontSize:14,color:T.text,marginTop:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{activeSession.charger_id||"EcoCharge"}</div>
+            </div>
+          </div>
+          <button onClick={()=>go("qr")} className="tap" style={{ width:"100%",background:T.green,border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>View Session</button>
+        </div>
+      )}
+
+      {/* QUICK ACTIONS */}
+      <div style={{ margin:"0 14px 16px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+        {quickActions.map(a=>(
           <button key={a.label} onClick={()=>go(a.screen)} className="tap"
-            style={{ background:"none",border:"none",cursor:"pointer",padding:"16px 6px",display:"flex",flexDirection:"column",alignItems:"center",gap:8,borderRight:i<3?`1px solid ${T.border}`:"none",fontFamily:"inherit" }}>
-            <div style={{ width:44,height:44,borderRadius:"50%",background:a.bg,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:i===0?`0 4px 12px rgba(74,222,128,0.4)`:"none" }}>
-              <i className={`fas ${a.icon}`} style={{ fontSize:18,color:a.color }}/>
+            style={{ ...card,padding:"18px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:10,cursor:"pointer",fontFamily:"inherit" }}>
+            <div style={{ width:40,height:40,borderRadius:10,background:T.surface,display:"flex",alignItems:"center",justifyContent:"center" }}>
+              <i className={`fas ${a.icon}`} style={{ fontSize:16,color:T.green }}/>
             </div>
-            <div style={{ textAlign:"center" }}>
-              <div style={{ fontSize:11,fontWeight:700,color:T.text,lineHeight:1.3 }}>{a.label}</div>
-              <div style={{ fontSize:9,color:T.muted,marginTop:2 }}>{a.sub}</div>
-            </div>
+            <div style={{ fontSize:13,fontWeight:600,color:T.text,textAlign:"left" }}>{a.label}</div>
           </button>
         ))}
       </div>
-      <div style={{ margin:"0 14px 16px",background:T.highlightGrad,borderRadius:18,padding:"16px",border:`1px solid rgba(74,222,128,0.2)`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-        <div style={{ display:"flex",gap:12,alignItems:"center" }}>
-          <div style={{ width:44,height:44,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-            <i className="fas fa-leaf" style={{ fontSize:18,color:"#000" }}/>
-          </div>
-          <div>
-            <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:5 }}>You're making impact!</div>
-            <div style={{ fontSize:12,color:T.mutedLight }}><strong style={{ color:T.text }}>12 charges</strong>{" · "}<strong style={{ color:T.text }}>48 kg CO₂</strong> saved</div>
-            <div style={{ fontSize:12,color:T.mutedLight,marginTop:3 }}><i className="fas fa-tint" style={{ color:T.blue,marginRight:4 }}/><strong style={{ color:T.blue }}>240 L</strong> clean water received</div>
-          </div>
+
+      {/* IMPACT CARD */}
+      <div style={{ margin:"0 14px 16px",...card,padding:"18px" }}>
+        <div style={{ fontSize:13,fontWeight:700,color:T.text,marginBottom:16 }}>Your Impact</div>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
+          {[
+            { label:"Total Charges",value:impact.charges },
+            { label:"CO₂ Saved",value:`${(impact.kwh*0.5).toFixed(1)}kg` },
+            { label:"Water Generated",value:`${impact.water}L` },
+          ].map(m=>(
+            <div key={m.label}>
+              <div style={{ fontWeight:700,fontSize:20,color:T.text,letterSpacing:-0.3 }}>{m.value}</div>
+              <div style={{ fontSize:10,color:T.muted,marginTop:4,lineHeight:1.4 }}>{m.label}</div>
+            </div>
+          ))}
         </div>
-        <i className="fas fa-globe-africa" style={{ fontSize:40,color:T.green,opacity:0.6 }}/>
       </div>
-      <SolarWidget/>
-      <div style={{ margin:"0 14px 14px" }}>
+
+      {/* NEARBY STATIONS */}
+      <div style={{ margin:"0 14px 16px" }}>
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
-          <div style={{ fontWeight:800,fontSize:16,color:T.text }}>Nearby Stations</div>
-          <button onClick={()=>go("detail")} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>View all <i className="fas fa-arrow-right" style={{ fontSize:11 }}/></button>
+          <div style={{ fontWeight:700,fontSize:15,color:T.text }}>Nearby Stations</div>
+          <button onClick={()=>go("detail")} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit" }}>View all</button>
         </div>
         {(search?filtered:stations).slice(0,3).map((s,idx)=>{
           const kw=Math.round((s.solar||80)*1.5);
           const stationImgs=["/station1.jpg","/station2.jpg","/station3.jpg"];
           return (
             <div key={s.id} className="tap row" onClick={()=>{ setStation(s);go("detail"); }}
-              style={{ background:T.card,borderRadius:18,border:`1px solid ${T.border}`,marginBottom:10,display:"flex",alignItems:"stretch",overflow:"hidden" }}>
-              <div style={{ width:90,flexShrink:0,position:"relative",overflow:"hidden" }}>
-                <img src={stationImgs[idx%3]} alt="station" style={{ width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.75) saturate(1.1)" }} onError={e=>{ e.target.parentElement.style.background="linear-gradient(135deg,#0a2010,#0d3018)"; e.target.style.display="none"; }}/>
-                <div style={{ position:"absolute",inset:0,background:"linear-gradient(to right,transparent 60%,rgba(19,23,31,0.8))" }}/>
+              style={{ ...card,marginBottom:10,display:"flex",alignItems:"stretch",overflow:"hidden" }}>
+              <div style={{ width:84,flexShrink:0,position:"relative",overflow:"hidden" }}>
+                <img src={stationImgs[idx%3]} alt="" style={{ width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.8)" }} onError={e=>{ e.target.parentElement.style.background=T.surface; e.target.style.display="none"; }}/>
               </div>
-              <div style={{ flex:1,padding:"12px 10px",minWidth:0 }}>
-                <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{s.name}</div>
-                <div style={{ fontSize:11,color:T.muted,marginBottom:8 }}><i className="fas fa-clock" style={{ marginRight:4 }}/>{s.time} away · {s.city}</div>
-                <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
-                  <div style={{ background:T.surface,borderRadius:6,padding:"3px 8px",display:"flex",alignItems:"center",gap:3 }}><i className="fas fa-bolt" style={{ fontSize:9,color:T.mutedLight }}/><span style={{ fontSize:10,color:T.mutedLight }}>{kw} kW Max</span></div>
-                  <div style={{ background:T.surface,borderRadius:6,padding:"3px 8px",display:"flex",alignItems:"center",gap:3 }}><i className="fas fa-sun" style={{ fontSize:9,color:T.yellow }}/><span style={{ fontSize:10,color:T.mutedLight }}>{s.solar}% Solar</span></div>
+              <div style={{ flex:1,padding:"12px 12px",minWidth:0 }}>
+                <div style={{ fontWeight:600,fontSize:14,color:T.text,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{s.name}</div>
+                <div style={{ fontSize:11,color:T.muted,marginBottom:6 }}>{s.time} away</div>
+                <div style={{ display:"flex",gap:6 }}>
+                  <span style={{ fontSize:10,color:T.mutedLight,background:T.surface,borderRadius:6,padding:"3px 7px" }}>{s.open}/{s.bays} bays</span>
+                  <span style={{ fontSize:10,color:T.mutedLight,background:T.surface,borderRadius:6,padding:"3px 7px" }}>{kw}kW</span>
                 </div>
               </div>
-              <div style={{ flexShrink:0,display:"flex",flexDirection:"column",alignItems:"flex-end",justifyContent:"space-between",padding:"12px" }}>
-                <div style={{ background:"rgba(74,222,128,0.12)",border:`1px solid rgba(74,222,128,0.25)`,borderRadius:10,padding:"5px 10px",textAlign:"center" }}>
-                  <div style={{ fontWeight:800,fontSize:14,color:T.green,lineHeight:1 }}>{s.open}/{s.bays}</div>
-                  <div style={{ fontSize:9,color:T.green,marginTop:2 }}>Bays avail.</div>
-                </div>
-                <button onClick={e=>{ e.stopPropagation();setStation(s);go("detail"); }} className="tap"
-                  style={{ width:32,height:32,background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
-                  <i className="fas fa-external-link-alt" style={{ fontSize:12,color:"#000" }}/>
-                </button>
+              <div style={{ flexShrink:0,display:"flex",alignItems:"center",padding:"0 14px" }}>
+                <span style={{ fontSize:10,fontWeight:700,color:s.open>0?T.green:T.red }}>{s.open>0?"Available":"Full"}</span>
               </div>
             </div>
           );
         })}
         {search&&filtered.length===0&&(
-          <div style={{ textAlign:"center",padding:"30px 0",color:T.muted,fontSize:13 }}>
-            <i className="fas fa-search" style={{ fontSize:24,marginBottom:10,display:"block" }}/>No stations found for "{search}"
-          </div>
+          <div style={{ textAlign:"center",padding:"30px 0",color:T.muted,fontSize:13 }}>No stations found for "{search}"</div>
         )}
       </div>
-      <div style={{ margin:"0 14px 110px",background:T.highlightBlue,borderRadius:18,overflow:"hidden",border:`1px solid rgba(56,189,248,0.2)`,display:"flex",alignItems:"center",cursor:"pointer",position:"relative",minHeight:80 }} onClick={()=>go("detail")}>
-        <div style={{ position:"absolute",left:0,top:0,bottom:0,width:80,overflow:"hidden" }}>
-          <img src="/station3.jpg" alt="water" style={{ width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.5) hue-rotate(180deg) saturate(1.5)" }} onError={e=>{ e.target.style.display="none"; }}/>
-          <div style={{ position:"absolute",inset:0,background:"linear-gradient(to right,transparent,rgba(6,21,32,0.9))" }}/>
-        </div>
-        <div style={{ flex:1,padding:"16px 16px 16px 90px" }}>
-          <div style={{ fontWeight:700,fontSize:14,color:T.blue,marginBottom:4 }}>Every charge includes <span style={{ color:T.blue }}>20L Clean Water</span></div>
-          <div style={{ fontSize:12,color:T.muted }}>Clean energy for your ride. Clean water for life.</div>
-        </div>
-        <i className="fas fa-chevron-right" style={{ color:T.muted,fontSize:14,marginRight:16 }}/>
-      </div>
+
+      {/* SOLAR RADIATION — secondary info, moved below Nearby Stations */}
+      <SolarWidget/>
+
+      <div style={{ height:90 }}/>
       <NewNav active="Home" go={go}/>
     </div>
   );
@@ -952,6 +1070,8 @@ function Home({ go,stations,setStation,user,onMenu }) {
 
 function Detail({ go,station,stations,setStation,setBookingMode }) {
   const s=station||stations[0];
+  const scrollRef=useRef(null);
+  useEffect(()=>{ scrollRef.current?.scrollTo({ top:0,behavior:"smooth" }); },[s.id]);
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title={s.name} sub={`${s.city} · Solar & Hydrogen`} onBack={()=>go("home")}/>
@@ -974,7 +1094,7 @@ function Detail({ go,station,stations,setStation,setBookingMode }) {
           <Badge label={`Wait: ${s.time}`} color={T.yellow}/>
         </div>
       </div>
-      <div style={{ flex:1,overflowY:"auto",padding:"12px 12px 0" }}>
+      <div ref={scrollRef} style={{ flex:1,overflowY:"auto",padding:"12px 12px 0" }}>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12 }}>
           {[{ label:"Bays Open",value:`${s.open}/${s.bays}`,color:T.green,icon:"fa-plug" },{ label:"Est. Wait",value:s.time,color:T.yellow,icon:"fa-clock" },{ label:"Solar",value:`${s.solar}%`,color:T.blue,icon:"fa-sun" }].map(x=>(
             <div key={x.label} style={{ background:T.card,borderRadius:12,padding:"12px 8px",border:`1px solid ${T.border}`,textAlign:"center" }}>
@@ -1020,7 +1140,7 @@ function Detail({ go,station,stations,setStation,setBookingMode }) {
                 <div style={{ color:T.green,fontWeight:700,fontSize:13 }}>{st.time}</div>
                 <div style={{ color:T.muted,fontSize:10 }}>{st.open} open</div>
               </div>
-              <button className="tap" onClick={e=>{ e.stopPropagation();setStation(st); }}
+              <button className="tap" onClick={e=>{ e.stopPropagation();setStation(st);go("detail"); }}
                 style={{ background:T.green,border:"none",borderRadius:9,padding:"7px 13px",fontSize:11,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>Select</button>
             </div>
           </div>
@@ -2115,6 +2235,8 @@ function Verify({ go }) {
 function Profile({ go,user,setUser,onMenu }) {
   const fileRef=useRef(null);
   const [avatar,setAvatar]=useState(null);
+  const [avatarErr,setAvatarErr]=useState("");
+  const [avatarSaving,setAvatarSaving]=useState(false);
   useEffect(()=>{
     if(!SUPABASE_URL||!user?.id)return;
     fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}&select=avatar_url`,{headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}`}})
@@ -2122,16 +2244,37 @@ function Profile({ go,user,setUser,onMenu }) {
   },[user]);
   const handlePhoto=async(e)=>{
     const file=e.target.files[0]; if(!file) return;
+    setAvatarErr(""); setAvatarSaving(true);
     const r=new FileReader(); r.onload=(ev)=>setAvatar(ev.target.result); r.readAsDataURL(file);
-    if(!SUPABASE_URL||!user?.id) return;
+    if(!SUPABASE_URL||!user?.id) { setAvatarSaving(false); return; }
     try{
       const ext=file.name.split('.').pop(); const path=`${user.id}/avatar.${ext}`;
       const res=await fetch(`${SUPABASE_URL}/storage/v1/object/avatars/${path}`,{method:'POST',headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}`,'Content-Type':file.type,'x-upsert':'true'},body:file});
-      if(res.ok){
-        const url=`${SUPABASE_URL}/storage/v1/object/public/avatars/${path}`; setAvatar(url);
-        if(SUPABASE_URL) await fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}`,{method:'PATCH',headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}`,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({avatar_url:url})});
+      if(!res.ok){
+        const errText=await res.text().catch(()=>"");
+        setAvatarErr(`Upload failed (${res.status}): ${errText.slice(0,160)}`);
+        setAvatarSaving(false);
+        return;
       }
-    }catch(e){}
+      const url=`${SUPABASE_URL}/storage/v1/object/public/avatars/${path}?t=${Date.now()}`;
+      setAvatar(url);
+      const patchRes=await fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}`,{method:'PATCH',headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}`,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({avatar_url:url})});
+      if(!patchRes.ok){
+        const errText=await patchRes.text().catch(()=>"");
+        setAvatarErr(`Save failed (${patchRes.status}): ${errText.slice(0,160)}`);
+        setAvatarSaving(false);
+        return;
+      }
+      const patchData=await patchRes.json().catch(()=>[]);
+      if(!Array.isArray(patchData)||patchData.length===0){
+        setAvatarErr("Save did not match any user record — your account row may be missing or auth_id doesn't match.");
+        setAvatarSaving(false);
+        return;
+      }
+    }catch(e){
+      setAvatarErr("Network error while saving photo: "+String(e));
+    }
+    setAvatarSaving(false);
   };
   const booking=(()=>{ try { const b=localStorage.getItem("eco_booking"); return b?JSON.parse(b):null; } catch(e){ return null; } })();
   const totalCharges=booking?1:0;
@@ -2169,12 +2312,17 @@ function Profile({ go,user,setUser,onMenu }) {
                     : <div style={{ width:"100%",height:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center" }}><i className="fas fa-user" style={{ fontSize:34,color:"#000" }}/></div>
                   }
                 </div>
-                <button onClick={()=>fileRef.current?.click()} className="tap"
-                  style={{ position:"absolute",bottom:-2,right:-2,width:28,height:28,borderRadius:"50%",background:T.green,border:`2px solid ${T.bg}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
-                  <i className="fas fa-camera" style={{ fontSize:11,color:"#000" }}/>
+                <button onClick={()=>fileRef.current?.click()} className="tap" disabled={avatarSaving}
+                  style={{ position:"absolute",bottom:-2,right:-2,width:28,height:28,borderRadius:"50%",background:T.green,border:`2px solid ${T.bg}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:avatarSaving?"default":"pointer" }}>
+                  {avatarSaving?<Spinner/>:<i className="fas fa-camera" style={{ fontSize:11,color:"#000" }}/>}
                 </button>
                 <input ref={fileRef} type="file" accept="image/*" onChange={handlePhoto} style={{ display:"none" }}/>
               </div>
+              {avatarErr&&(
+                <div style={{ background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.25)",borderRadius:10,padding:"10px 14px",marginBottom:12,color:T.red,fontSize:11,lineHeight:1.6,textAlign:"left" }}>
+                  <i className="fas fa-exclamation-triangle" style={{ marginRight:6 }}/>{avatarErr}
+                </div>
+              )}
               <div style={{ fontWeight:800,fontSize:20,color:T.text }}>{user.name||user.email?.split("@")[0]}</div>
               <div style={{ fontSize:12,color:T.muted,marginTop:4,marginBottom:12 }}>{user.email||user.phone}</div>
               <Badge label="Active Member" color={T.green}/>
