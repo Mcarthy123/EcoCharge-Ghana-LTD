@@ -950,7 +950,7 @@ function Home({ go,stations,setStation,user,onMenu }) {
 }
 
 
-function Detail({ go,station,stations,setStation }) {
+function Detail({ go,station,stations,setStation,setBookingMode }) {
   const s=station||stations[0];
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
@@ -993,10 +993,20 @@ function Detail({ go,station,stations,setStation }) {
             <div style={{ height:"100%",width:`${s.solar}%`,background:`linear-gradient(90deg,${T.green},${T.blue})` }}/>
           </div>
         </div>
-        <button onClick={()=>go("vehicles")} className="tap"
-          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",marginBottom:14,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
-          <i className="fas fa-bolt"/> Charge Here — Select Vehicle
-        </button>
+        <div style={{ display:"flex",gap:10,marginBottom:14 }}>
+          <button onClick={()=>{ setBookingMode?.("now");go("vehicles"); }} className="tap"
+            style={{ flex:1,background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px 10px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4 }}>
+            <i className="fas fa-bolt" style={{ fontSize:18 }}/>
+            Charge Now
+            <span style={{ fontSize:10,fontWeight:500,opacity:0.75 }}>I'm at the station</span>
+          </button>
+          <button onClick={()=>{ setBookingMode?.("later");go("vehicles"); }} className="tap"
+            style={{ flex:1,background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"15px 10px",fontSize:14,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4 }}>
+            <i className="fas fa-clock" style={{ fontSize:18,color:T.green }}/>
+            Reserve for Later
+            <span style={{ fontSize:10,fontWeight:500,color:T.muted }}>I'm on my way</span>
+          </button>
+        </div>
         <div style={{ fontSize:11,color:T.muted,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",marginBottom:8 }}>All Stations</div>
         {stations.map(st=>(
           <div key={st.id} className="row" onClick={()=>setStation(st)}
@@ -1010,7 +1020,7 @@ function Detail({ go,station,stations,setStation }) {
                 <div style={{ color:T.green,fontWeight:700,fontSize:13 }}>{st.time}</div>
                 <div style={{ color:T.muted,fontSize:10 }}>{st.open} open</div>
               </div>
-              <button className="tap" onClick={e=>{ e.stopPropagation();setStation(st);go("booking"); }}
+              <button className="tap" onClick={e=>{ e.stopPropagation();setStation(st); }}
                 style={{ background:T.green,border:"none",borderRadius:9,padding:"7px 13px",fontSize:11,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>Select</button>
             </div>
           </div>
@@ -1022,12 +1032,12 @@ function Detail({ go,station,stations,setStation }) {
   );
 }
 
-function Vehicles({ go,setVehicle }) {
+function Vehicles({ go,setVehicle,bookingMode }) {
   const [sel,setSel] = useState(null);
   const vehicleImages={ Car:"/car-charging.jpg",Scooter:"/scooter-charging.jpg",Tricycle:"/tricycle-charging.jpg" };
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Select Vehicle" sub="Choose your vehicle type" onBack={()=>go("detail")}/>
+      <Header title="Select Vehicle" sub={bookingMode==="now"?"Charging now — choose your vehicle":"Reserving for later — choose your vehicle"} onBack={()=>go("detail")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 0" }}>
         {VEHICLES.map((v,i)=>(
           <div key={v.type} className={`tap fade${i}`} onClick={()=>setSel(v)}
@@ -1056,7 +1066,7 @@ function Vehicles({ go,setVehicle }) {
           <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}><i className="fas fa-bolt" style={{ color:T.green,fontSize:14 }}/><span style={{ fontSize:13,color:T.text }}>Full vehicle charge — solar powered</span></div>
           <div style={{ display:"flex",alignItems:"center",gap:10 }}><i className="fas fa-tint" style={{ color:T.blue,fontSize:14 }}/><span style={{ fontSize:13,color:T.text }}>20L clean desalinated water</span></div>
         </div>
-        <button onClick={()=>{ if(sel){ setVehicle(sel);go("booking"); } }} className="tap"
+        <button onClick={()=>{ if(sel){ setVehicle(sel);go(bookingMode==="now"?"chargenow":"booking"); } }} className="tap"
           style={{ width:"100%",background:sel?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.border,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:700,color:sel?"#000":T.muted,cursor:sel?"pointer":"not-allowed",marginBottom:16,fontFamily:"inherit",transition:"all .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
           {sel?<><i className="fas fa-arrow-right"/> Continue with {sel.type}</>:"Select a vehicle to continue"}
         </button>
@@ -1071,7 +1081,7 @@ function Booking({ go,station,vehicle,user,setBooking }) {
   const slots=(()=>{ const arr=[],t=new Date(); t.setMinutes(Math.ceil(t.getMinutes()/30)*30,0,0); const end=new Date(); end.setHours(22,0,0,0); while(t<=end){ arr.push(new Date(t));t.setMinutes(t.getMinutes()+30); } return arr; })();
   const [slotIdx,setSlotIdx]=useState(0);
   const [durIdx,setDurIdx]=useState(1);
-  const [payHow,setPayHow]=useState("now");
+  const payHow="now";
   const [name,setName]=useState(user?.name||"");
   const [phone,setPhone]=useState("");
   const [email,setEmail]=useState(user?.email||"");
@@ -1167,24 +1177,102 @@ function Booking({ go,station,vehicle,user,setBooking }) {
         <div className="fade3" style={{ background:T.card,borderRadius:16,padding:"14px 16px",marginBottom:14,border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}><i className="fas fa-credit-card" style={{ marginRight:8,color:T.green }}/> Payment</div>
           <div style={{ fontSize:12,color:T.muted,marginBottom:12,lineHeight:1.6 }}>No payment now — you'll be charged from your wallet only when your charging session starts.</div>
-          {[{ id:"now",label:"Pay from Wallet",sub:"Charged when charging starts",icon:"fa-wallet" },{ id:"arrive",label:"Pay on arrival",sub:"Charged when charging starts",icon:"fa-store" }].map(m=>(
-            <div key={m.id} className="tap row" onClick={()=>setPayHow(m.id)}
-              style={{ display:"flex",alignItems:"center",gap:14,padding:"13px 12px",borderRadius:12,marginBottom:8,cursor:"pointer",background:payHow===m.id?"#132010":"transparent",border:`1px solid ${payHow===m.id?T.greenDim:T.border}` }}>
-              <i className={`fas ${m.icon}`} style={{ fontSize:16,color:payHow===m.id?T.green:T.muted }}/>
-              <div style={{ flex:1 }}>
-                <div style={{ color:T.text,fontSize:14,fontWeight:600 }}>{m.label}</div>
-                <div style={{ color:T.muted,fontSize:11,marginTop:2 }}>{m.sub}</div>
-              </div>
-              <div style={{ width:20,height:20,borderRadius:"50%",flexShrink:0,border:`2px solid ${payHow===m.id?T.green:T.border}`,display:"flex",alignItems:"center",justifyContent:"center" }}>
-                {payHow===m.id&&<div style={{ width:10,height:10,borderRadius:"50%",background:T.green }}/>}
-              </div>
+          <div style={{ display:"flex",alignItems:"center",gap:14,padding:"13px 12px",borderRadius:12,background:"#132010",border:`1px solid ${T.greenDim}` }}>
+            <i className="fas fa-wallet" style={{ fontSize:16,color:T.green }}/>
+            <div style={{ flex:1 }}>
+              <div style={{ color:T.text,fontSize:14,fontWeight:600 }}>Pay from Wallet</div>
+              <div style={{ color:T.muted,fontSize:11,marginTop:2 }}>Charged when charging starts</div>
             </div>
-          ))}
+            <i className="fas fa-check-circle" style={{ fontSize:16,color:T.green }}/>
+          </div>
         </div>
         {error&&<div style={{ background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",borderRadius:10,padding:"11px 14px",marginBottom:12,color:T.red,fontSize:12,display:"flex",alignItems:"center",gap:8 }}><i className="fas fa-exclamation-triangle"/> {error}</div>}
         <button onClick={book} disabled={loading} className="tap"
           style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:16,fontWeight:800,color:"#000",cursor:loading?"default":"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:loading?.7:1 }}>
           {loading?<><Spinner/> Processing…</>:<><i className="fas fa-calendar-check"/> Reserve Slot — GH₵{total} Est.</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+function ChargeNow({ go,station,vehicle,user,setBooking }) {
+  const s=station||STATIONS[0];
+  const [name,setName]=useState(user?.name||"");
+  const [phone,setPhone]=useState("");
+  const [email,setEmail]=useState(user?.email||"");
+  const [loading,setLoad]=useState(false);
+  const [error,setErr]=useState("");
+  const inp=(ph,val,set,type="text",icon="fa-user")=>(
+    <div style={{ position:"relative",marginBottom:10 }}>
+      <i className={`fas ${icon}`} style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:13 }}/>
+      <input type={type} placeholder={ph} value={val} onChange={e=>{ set(e.target.value);setErr(""); }}
+        style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px 12px 40px",color:T.text,fontSize:14 }}/>
+    </div>
+  );
+  const start=async()=>{
+    if (!name.trim()) { setErr("Enter your name");return; }
+    if (!phone.trim()||phone.length<10) { setErr("Enter a valid phone number");return; }
+    if (!email.trim()||!email.includes("@")) { setErr("Enter a valid email");return; }
+    setLoad(true);setErr("");
+    const ref=genRef();
+    const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",slot_time:new Date().toISOString(),duration_min:null,amount:null,name,phone,email,user_id:user?.id||null,pay_method:"wallet",booking_mode:"now",status:"confirmed",created_at:new Date().toISOString() };
+    let saved=true;
+    if (SUPABASE_URL) saved=await sb("bookings",{ method:"POST",headers:{ Prefer:"return=minimal" },body:JSON.stringify(data) });
+    if (!saved) {
+      setErr("Could not start your session. Please check your connection and try again.");
+      setLoad(false);
+      return;
+    }
+    setBooking(data);
+    try { localStorage.setItem("eco_booking",JSON.stringify(data)); } catch(e){}
+    if (user?.id) {
+      createNotification(user.id, "booking_confirmed", "Ready to Charge",
+        `${s.name} — you're checked in. Start charging when ready.`, { reference: ref });
+    }
+    setLoad(false);go("qr");
+  };
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Charge Now" sub={`${s.name} · ${s.city}`} onBack={()=>go("vehicles")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 120px" }}>
+        <div className="fade" style={{ background:T.highlightGrad2,borderRadius:16,padding:"14px 16px",marginBottom:14,border:`1px solid ${T.greenDim}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Charging at</div>
+            <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{s.name}</div>
+            <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>{vehicle?.type||"Car"} · {s.city}</div>
+          </div>
+          <i className={`fas ${vehicle?.type==="Scooter"?"fa-motorcycle":vehicle?.type==="Tricycle"?"fa-truck":"fa-car"}`} style={{ fontSize:40,color:T.green,opacity:0.7 }}/>
+        </div>
+        <div className="fade1" style={{ background:T.card,borderRadius:16,padding:"14px 16px",marginBottom:12,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:10 }}><i className="fas fa-money-bill-alt" style={{ marginRight:8,color:T.green }}/> Cost</div>
+          <div style={{ fontSize:13,color:T.muted,lineHeight:1.7,marginBottom:10 }}>Billed by usage — your wallet is charged only for the energy you actually use, at the moment you stop.</div>
+          <div style={{ background:T.innerTint,borderRadius:10,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+            <span style={{ fontSize:12,color:T.mutedLight }}>Rate</span>
+            <span style={{ fontSize:13,fontWeight:700,color:T.green }}>GH₵0.85/kWh + GH₵5 base</span>
+          </div>
+        </div>
+        <div className="fade1" style={{ background:T.card,borderRadius:16,padding:"14px 16px",marginBottom:12,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:10 }}><i className="fas fa-receipt" style={{ marginRight:8,color:T.green }}/> Summary</div>
+          <Divider/>
+          {[{ label:"Station",value:s.name },{ label:"Vehicle",value:vehicle?.type||"Car" },{ label:"Payment",value:"Wallet (billed at stop)" },{ label:"Water",value:"20L Clean Bundle" }].map(r=>(
+            <div key={r.label} style={{ display:"flex",justifyContent:"space-between",marginBottom:8 }}>
+              <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
+              <span style={{ color:T.text,fontWeight:600,fontSize:13 }}>{r.value}</span>
+            </div>
+          ))}
+        </div>
+        <div className="fade2" style={{ background:T.card,borderRadius:16,padding:"14px 16px",marginBottom:14,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}><i className="fas fa-id-card" style={{ marginRight:8,color:T.green }}/> Your Details</div>
+          {inp("Full name",name,setName,"text","fa-user")}
+          {inp("Phone number",phone,setPhone,"tel","fa-phone")}
+          {inp("Email address",email,setEmail,"email","fa-envelope")}
+        </div>
+        {error&&<div style={{ background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",borderRadius:10,padding:"11px 14px",marginBottom:12,color:T.red,fontSize:12,display:"flex",alignItems:"center",gap:8 }}><i className="fas fa-exclamation-triangle"/> {error}</div>}
+        <button onClick={start} disabled={loading} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:16,fontWeight:800,color:"#000",cursor:loading?"default":"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:loading?.7:1 }}>
+          {loading?<><Spinner/> Starting…</>:<><i className="fas fa-bolt"/> Start Charging</>}
         </button>
       </div>
     </div>
@@ -4403,6 +4491,7 @@ function AppInner() {
   const [authMode,setAuthMode]= useState("login");
   const [station,setStation]  = useState(null);
   const [vehicle,setVehicle]  = useState(null);
+  const [bookingMode,setBookingMode]= useState(null);
   const [stations,setStations]= useState(STATIONS);
   const [booking,setBooking]  = useState(()=>{ try { const b=localStorage.getItem("eco_booking"); return b?JSON.parse(b):null; } catch(e){ return null; } });
   const [user,setUserRaw]     = useState(()=>{ try { const u=localStorage.getItem("eco_user"); return u?JSON.parse(u):null; } catch(e){ return null; } });
@@ -4466,7 +4555,7 @@ function AppInner() {
     }
   },[]);
 
-  const props={ go:goSecure,stations,station:station||stations[0],setStation,user,setUser,vehicle,setVehicle,booking,setBooking,onMenu:()=>setDrawer(true) };
+  const props={ go:goSecure,stations,station:station||stations[0],setStation,user,setUser,vehicle,setVehicle,bookingMode,setBookingMode,booking,setBooking,onMenu:()=>setDrawer(true) };
 
   if (screen==="splash") return <><style>{CSS}</style><Splash onLogin={()=>{ setAuthMode("login");go("auth"); }} onRegister={()=>{ setAuthMode("register");go("auth"); }} onGuest={()=>go("home")}/></>;
   if (screen==="auth") return <><style>{CSS}</style><Auth mode={authMode} onBack={(mode)=>{ if(mode){ setAuthMode(mode); } else { go("splash"); } }} onSuccess={(u)=>{ setUser(u);go("home"); }}/></>;
@@ -4482,6 +4571,7 @@ function AppInner() {
     map:<MapScreen {...props}/>,
     detail:<Detail {...props}/>,
     vehicles:<Vehicles {...props}/>,
+    chargenow:<ChargeNow {...props}/>,
     booking:<Booking {...props}/>,
     bookings:<Bookings {...props}/>,
     qr:<QRScreen {...props}/>,
