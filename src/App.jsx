@@ -900,66 +900,66 @@ function Home({ go,stations,setStation,user,onMenu }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,overflowY:"auto" }}>
-      <div style={{ padding:"48px 18px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0 }}>
-        <button onClick={onMenu} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,width:40,height:40,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
-          <i className="fas fa-bars" style={{ fontSize:16,color:T.mutedLight }}/>
+      <div style={{ padding:"48px 18px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0 }}>
+        <button onClick={onMenu} className="tap" style={{ background:T.surface,border:"none",borderRadius:12,width:42,height:42,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
+          <i className="fas fa-bars" style={{ fontSize:17,color:T.text }}/>
         </button>
         <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-          <Logo size={28}/>
+          <Logo size={30}/>
           <div>
-            <div style={{ fontWeight:800,fontSize:15,color:T.text,lineHeight:1.1,letterSpacing:-0.2 }}>EcoCharge</div>
-            <div style={{ fontSize:10,color:T.green,fontWeight:700,letterSpacing:1 }}>GHANA</div>
+            <div style={{ fontWeight:800,fontSize:16,color:T.text,lineHeight:1.1,letterSpacing:-0.2 }}>EcoCharge</div>
+            <div style={{ fontSize:10,color:T.green,fontWeight:800,letterSpacing:1.2 }}>GHANA</div>
           </div>
         </div>
         <div style={{ position:"relative" }}>
-          <button onClick={()=>go("notifications")} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,width:40,height:40,display:"flex",alignItems:"center",justifyContent:"center" }}>
-            <i className="fas fa-bell" style={{ fontSize:16,color:T.mutedLight }}/>
+          <button onClick={()=>go("notifications")} className="tap" style={{ background:T.surface,border:"none",borderRadius:12,width:42,height:42,display:"flex",alignItems:"center",justifyContent:"center" }}>
+            <i className="fas fa-bell" style={{ fontSize:17,color:T.text }}/>
           </button>
           {user?.id && <UnreadBadge userId={user.id}/>}
         </div>
       </div>
 
       {/* HERO */}
-      <div style={{ margin:"4px 14px 16px",borderRadius:20,overflow:"hidden",position:"relative",minHeight:200 }}>
-        <img src="/station1.jpg" alt="" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.55) saturate(1.05)" }} onError={e=>{ e.target.style.display="none"; }}/>
-        <div style={{ position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(11,15,20,0.55) 0%,rgba(11,15,20,0.88) 100%)" }}/>
-        <div style={{ position:"relative",zIndex:2,padding:"24px 20px" }}>
-          <div style={{ fontSize:13,color:"rgba(255,255,255,0.6)",fontWeight:500,marginBottom:6 }}>{greeting}</div>
-          <div style={{ fontWeight:700,fontSize:26,color:"#fff",marginBottom:10,letterSpacing:-0.4 }}>{displayName}</div>
-          <div style={{ fontSize:13,color:"rgba(255,255,255,0.65)",marginBottom:20 }}>Powering Ghana with clean energy</div>
+      <div style={{ margin:"4px 14px 16px",borderRadius:20,overflow:"hidden",position:"relative",minHeight:210 }}>
+        <img src="/station1.jpg" alt="" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.5) saturate(1.05)" }} onError={e=>{ e.target.style.display="none"; }}/>
+        <div style={{ position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(11,15,20,0.45) 0%,rgba(11,15,20,0.92) 100%)" }}/>
+        <div style={{ position:"relative",zIndex:2,padding:"26px 20px 22px" }}>
+          <div style={{ fontSize:14,color:"rgba(255,255,255,0.65)",fontWeight:500,marginBottom:6 }}>{greeting}</div>
+          <div style={{ fontWeight:800,fontSize:28,color:"#fff",marginBottom:10,letterSpacing:-0.5,lineHeight:1.1 }}>{displayName}</div>
+          <div style={{ fontSize:13,color:"rgba(255,255,255,0.7)",marginBottom:22 }}>Powering Ghana with clean energy</div>
           <div style={{ display:"flex",gap:10 }}>
-            <button onClick={()=>go("qr")} className="tap" style={{ flex:1,background:T.green,border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>Start Charging</button>
-            <button onClick={()=>go("map")} className="tap" style={{ flex:1,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.22)",borderRadius:12,padding:"13px",fontSize:14,fontWeight:600,color:"#fff",cursor:"pointer",fontFamily:"inherit" }}>Find Stations</button>
+            <button onClick={()=>go("qr")} className="tap" style={{ flex:1,background:T.green,border:"none",borderRadius:12,padding:"14px",fontSize:14.5,fontWeight:800,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>Start Charging</button>
+            <button onClick={()=>go("map")} className="tap" style={{ flex:1,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.25)",borderRadius:12,padding:"14px",fontSize:14.5,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit" }}>Find Stations</button>
           </div>
         </div>
       </div>
 
       {/* SEARCH */}
       <div style={{ margin:"0 14px 16px",position:"relative" }}>
-        <i className="fas fa-search" style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:14 }}/>
+        <i className="fas fa-search" style={{ position:"absolute",left:16,top:"50%",transform:"translateY(-50%)",color:T.mutedLight,fontSize:14 }}/>
         <input placeholder="Search station or location" value={search} onChange={e=>setSearch(e.target.value)}
-          style={{ width:"100%",background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"13px 16px 13px 42px",fontSize:14,fontFamily:"inherit",color:T.text }}/>
+          style={{ width:"100%",background:T.card,border:`1.5px solid ${T.border}`,borderRadius:14,padding:"14px 16px 14px 44px",fontSize:14,fontFamily:"inherit",color:T.text }}/>
       </div>
 
       {/* WALLET CARD */}
       {user&&(
-        <div style={{ margin:"0 14px 16px",...card,padding:"18px" }}>
+        <div style={{ margin:"0 14px 16px",...card,padding:"18px",borderColor:T.border }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
             <div>
-              <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:6 }}>
-                <span style={{ fontSize:11,color:T.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5 }}>Wallet Balance</span>
-                <button onClick={()=>setBalVisible(v=>!v)} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:0,color:T.muted }}>
-                  <i className={`fas fa-eye${balVisible?"":"-slash"}`} style={{ fontSize:12 }}/>
+              <div style={{ display:"flex",alignItems:"center",gap:7,marginBottom:8 }}>
+                <span style={{ fontSize:11,color:T.mutedLight,fontWeight:700,textTransform:"uppercase",letterSpacing:0.8 }}>Wallet Balance</span>
+                <button onClick={()=>setBalVisible(v=>!v)} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:0,color:T.mutedLight,display:"flex" }}>
+                  <i className={`fas fa-eye${balVisible?"":"-slash"}`} style={{ fontSize:13 }}/>
                 </button>
               </div>
-              <div style={{ fontWeight:700,fontSize:28,color:T.text,letterSpacing:-0.5 }}>
+              <div style={{ fontWeight:800,fontSize:30,color:T.text,letterSpacing:-0.5 }}>
                 {!balVisible?"GH₵ ••••":walletLoading?"GH₵ ––":fmtGHS(wallet?.balance_pesewas||0)}
               </div>
             </div>
-            <button onClick={()=>go("wallet")} className="tap" style={{ background:T.green,border:"none",borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:700,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>Top Up</button>
+            <button onClick={()=>go("wallet")} className="tap" style={{ background:T.green,border:"none",borderRadius:12,padding:"12px 20px",fontSize:14,fontWeight:800,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>Top Up</button>
           </div>
           {lastTxn&&(
-            <div style={{ marginTop:14,paddingTop:14,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+            <div style={{ marginTop:16,paddingTop:14,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
               <span style={{ fontSize:12,color:T.muted }}>{lastTxn.description||lastTxn.type}</span>
               <span style={{ fontSize:13,fontWeight:700,color:["TopUp","Refund","Bonus"].includes(lastTxn.type)?T.green:T.text }}>
                 {["TopUp","Refund","Bonus"].includes(lastTxn.type)?"+":"-"}{fmtGHS(lastTxn.amount_pesewas)}
@@ -971,41 +971,41 @@ function Home({ go,stations,setStation,user,onMenu }) {
 
       {/* ACTIVE CHARGING SESSION */}
       {activeSession&&(
-        <div style={{ margin:"0 14px 16px",background:T.card,borderRadius:16,border:`1px solid ${T.green}`,padding:"18px" }}>
+        <div style={{ margin:"0 14px 16px",background:T.card,borderRadius:16,border:`1.5px solid ${T.green}`,padding:"18px" }}>
           <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:14 }}>
             <div style={{ width:8,height:8,borderRadius:"50%",background:T.green }}/>
-            <span style={{ fontSize:13,fontWeight:700,color:T.green,letterSpacing:0.3 }}>CHARGING NOW</span>
+            <span style={{ fontSize:13,fontWeight:800,color:T.green,letterSpacing:0.4 }}>CHARGING NOW</span>
           </div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:16 }}>
             <div>
               <div style={{ fontSize:11,color:T.muted,marginBottom:3 }}>Duration</div>
-              <div style={{ fontWeight:700,fontSize:20,color:T.text,fontFamily:"monospace" }}>{fmtElapsed(elapsed)}</div>
+              <div style={{ fontWeight:800,fontSize:20,color:T.text,fontFamily:"monospace" }}>{fmtElapsed(elapsed)}</div>
             </div>
             <div>
               <div style={{ fontSize:11,color:T.muted,marginBottom:3 }}>Station</div>
               <div style={{ fontWeight:700,fontSize:14,color:T.text,marginTop:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{activeSession.charger_id||"EcoCharge"}</div>
             </div>
           </div>
-          <button onClick={()=>go("qr")} className="tap" style={{ width:"100%",background:T.green,border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>View Session</button>
+          <button onClick={()=>go("qr")} className="tap" style={{ width:"100%",background:T.green,border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:800,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>View Session</button>
         </div>
       )}
 
       {/* QUICK ACTIONS */}
-      <div style={{ margin:"0 14px 16px",...card,padding:"16px 8px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr" }}>
+      <div style={{ margin:"0 14px 16px",...card,padding:"18px 8px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr" }}>
         {quickActions.map((a,i)=>(
           <button key={a.label} onClick={()=>go(a.screen)} className="tap"
-            style={{ background:"none",border:"none",cursor:"pointer",padding:"4px 4px",display:"flex",flexDirection:"column",alignItems:"center",gap:8,fontFamily:"inherit",borderRight:i<3?`1px solid ${T.border}`:"none" }}>
-            <div style={{ width:42,height:42,borderRadius:"50%",background:T.surface,display:"flex",alignItems:"center",justifyContent:"center" }}>
-              <i className={`fas ${a.icon}`} style={{ fontSize:16,color:T.green }}/>
+            style={{ background:"none",border:"none",cursor:"pointer",padding:"4px 4px",display:"flex",flexDirection:"column",alignItems:"center",gap:9,fontFamily:"inherit",borderRight:i<3?`1px solid ${T.border}`:"none" }}>
+            <div style={{ width:46,height:46,borderRadius:"50%",background:`${T.green}1a`,display:"flex",alignItems:"center",justifyContent:"center" }}>
+              <i className={`fas ${a.icon}`} style={{ fontSize:17,color:T.green }}/>
             </div>
-            <div style={{ fontSize:10,fontWeight:600,color:T.text,textAlign:"center",lineHeight:1.3 }}>{a.label}</div>
+            <div style={{ fontSize:10.5,fontWeight:700,color:T.text,textAlign:"center",lineHeight:1.3 }}>{a.label}</div>
           </button>
         ))}
       </div>
 
       {/* IMPACT CARD */}
-      <div style={{ margin:"0 14px 16px",...card,padding:"18px" }}>
-        <div style={{ fontSize:13,fontWeight:700,color:T.text,marginBottom:16 }}>Your Impact</div>
+      <div style={{ margin:"0 14px 16px",...card,padding:"20px" }}>
+        <div style={{ fontSize:15,fontWeight:800,color:T.text,marginBottom:18 }}>Your Impact</div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
           {[
             { label:"Total Charges",value:impact.charges },
@@ -1013,8 +1013,8 @@ function Home({ go,stations,setStation,user,onMenu }) {
             { label:"Water Generated",value:`${impact.water}L` },
           ].map(m=>(
             <div key={m.label}>
-              <div style={{ fontWeight:700,fontSize:20,color:T.text,letterSpacing:-0.3 }}>{m.value}</div>
-              <div style={{ fontSize:10,color:T.muted,marginTop:4,lineHeight:1.4 }}>{m.label}</div>
+              <div style={{ fontWeight:800,fontSize:22,color:T.text,letterSpacing:-0.3 }}>{m.value}</div>
+              <div style={{ fontSize:10.5,color:T.muted,marginTop:5,lineHeight:1.4 }}>{m.label}</div>
             </div>
           ))}
         </div>
@@ -1023,8 +1023,8 @@ function Home({ go,stations,setStation,user,onMenu }) {
       {/* NEARBY STATIONS */}
       <div style={{ margin:"0 14px 16px" }}>
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
-          <div style={{ fontWeight:700,fontSize:15,color:T.text }}>Nearby Stations</div>
-          <button onClick={()=>go("detail")} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit" }}>View all</button>
+          <div style={{ fontWeight:800,fontSize:17,color:T.text }}>Nearby Stations</div>
+          <button onClick={()=>go("detail")} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit" }}>View all</button>
         </div>
         {(search?filtered:stations).slice(0,3).map((s,idx)=>{
           const kw=Math.round((s.solar||80)*1.5);
