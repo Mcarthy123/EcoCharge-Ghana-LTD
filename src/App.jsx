@@ -607,6 +607,14 @@ function Auth({ mode, onBack, onSuccess }) {
 
   const googleSignIn = () => {
     if (!SUPABASE_URL) { setErr("Supabase not configured"); return; }
+    const ua = navigator.userAgent||"";
+    const inAppBrowser = /FBAN|FBAV|Instagram|Line\/|MicroMessenger|TikTok|WebView|; wv\)/i.test(ua)
+      || (/iPhone|iPad|iPod/.test(ua) && !/Safari/.test(ua) && !/CriOS/.test(ua) && !/FxiOS/.test(ua));
+    if (inAppBrowser) {
+      setErr("Google sign-in can't open inside this app's preview window. Open EcoCharge in Safari or Chrome directly, then try Google sign-in again.");
+      return;
+    }
+    setErr("");
     window.location.href=`${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin)}&scopes=email%20profile`;
   };
 
@@ -1061,21 +1069,51 @@ function Detail({ go,station,stations,setStation,setBookingMode }) {
   const scrollRef=useRef(null);
   useEffect(()=>{ scrollRef.current?.scrollTo({ top:0,behavior:"smooth" }); },[s.id]);
 
-  // Per-station chargers — real data from the chargers table, filtered by station_id.
-  // Falls back gracefully if the column is named slightly differently or the table is empty.
+  // Per-station chargers — merges two real sources so a charger always shows up
+  // here regardless of whether it's only registered with the OCPP server (like
+  // your simulator) or has its own row in the Supabase chargers table:
+  //   1. Supabase `chargers` table, filtered by station_id
+  //   2. The live OCPP server's /api/chargers list (same data Charger Admin shows)
+  // A charger from the OCPP list is matched to this station by an explicit
+  // station_id on the OCPP record if present, otherwise it's shown under the
+  // first station (so a single-charger setup like yours is never invisible).
   const [chargers,setChargers]=useState([]);
   const [chargersLoading,setChargersLoading]=useState(true);
   const [chargerFilter,setChargerFilter]=useState("All");
   useEffect(()=>{
-    if (!SUPABASE_URL) { setChargersLoading(false); return; }
     setChargersLoading(true);
     (async()=>{
-      try {
-        const res=await fetch(`${SUPABASE_URL}/rest/v1/chargers?station_id=eq.${s.id}&select=*`,
-          { headers:{ apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}` }});
-        const data=await res.json();
-        setChargers(Array.isArray(data)?data:[]);
-      } catch(e) { setChargers([]); }
+      let dbChargers=[];
+      if (SUPABASE_URL) {
+        try {
+          const res=await fetch(`${SUPABASE_URL}/rest/v1/chargers?station_id=eq.${s.id}&select=*`,
+            { headers:{ apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}` }});
+          const data=await res.json();
+          if (Array.isArray(data)) dbChargers=data;
+        } catch(e) {}
+      }
+      let ocppChargers=[];
+      if (OCPP_URL) {
+        try {
+          const data=await ocppApi("/api/chargers");
+          if (Array.isArray(data?.chargers)) ocppChargers=data.chargers;
+        } catch(e) {}
+      }
+      const dbIds=new Set(dbChargers.map(c=>c.id));
+      const isFirstStation = stations[0]?.id===s.id;
+      const matchedOcpp = ocppChargers.filter(c=>{
+        if (dbIds.has(c.id)) return false; // already represented via Supabase row
+        if (c.station_id!=null) return String(c.station_id)===String(s.id);
+        return isFirstStation; // no station tag on the OCPP record — default to first station
+      }).map(c=>({
+        id:c.id,
+        status:c.connected?(c.status||"Available"):"Unavailable",
+        online:!!c.connected,
+        has_fault:c.status==="Faulted",
+        model:c.info?.chargePointModel,
+        vendor:c.info?.chargePointVendor,
+      }));
+      setChargers([...dbChargers, ...matchedOcpp]);
       setChargersLoading(false);
     })();
   },[s.id]);
@@ -1083,7 +1121,7 @@ function Detail({ go,station,stations,setStation,setBookingMode }) {
   const chargerStatus=(c)=>{
     if (c.has_fault) return "Unavailable";
     if (c.status==="Charging") return "Charging";
-    if (c.status==="Available"||c.online) return "Available";
+    if (c.status==="Available"&&c.online!==false) return "Available";
     return "Unavailable";
   };
   const filteredChargers = chargerFilter==="All" ? chargers : chargers.filter(c=>chargerStatus(c)===chargerFilter);
