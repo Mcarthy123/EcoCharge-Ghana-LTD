@@ -342,7 +342,7 @@ function NotificationsScreen({ go, user }) {
   if (!user) return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Notifications" onBack={()=>go("home")}/>
-      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",textAlign:"center",padding:24 }}>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"24px 24px 100px" }}>
         <div>
           <i className="fas fa-bell-slash" style={{ fontSize:56,color:T.muted,marginBottom:16,display:"block" }}/>
           <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>Sign in to see notifications</div>
@@ -421,44 +421,26 @@ function NotificationsScreen({ go, user }) {
   );
 }
 
-const NewNav = ({ active, go }) => (
+const Nav = ({ active, go }) => (
   <div style={{ position:"fixed",bottom:0,left:0,right:0,display:"flex",justifyContent:"space-around",alignItems:"flex-end",padding:"10px 0 26px",borderTop:`1px solid ${T.border}`,background:T.navBg,backdropFilter:"blur(16px)",zIndex:100 }}>
     {[
-      { label:"Home",     screen:"home",    icon:"fa-home"     },
-      { label:"Stations", screen:"detail",  icon:"fa-plug"     },
-      { label:"Scan",     screen:"qr",      icon:"fa-qrcode",   center:true },
-      { label:"Bookings", screen:"bookings",icon:"fa-calendar" },
-      { label:"Profile",  screen:"profile", icon:"fa-user"     },
+      { label:"Home",     screen:"home",     icon:"fa-home"     },
+      { label:"Stations", screen:"detail",   icon:"fa-plug"     },
+      { label:"Scan",     screen:"qr",       icon:"fa-qrcode",   center:true },
+      { label:"Sessions", screen:"sessions", icon:"fa-list-alt" },
+      { label:"Profile",  screen:"profile",  icon:"fa-user"     },
     ].map(({ label,screen,icon,center })=>(
       <button key={label} onClick={()=>go(screen)} className="tap"
         style={{ background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:56,fontFamily:"inherit" }}>
         {center ? (
-          <div style={{ width:54,height:54,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",marginTop:-22,marginBottom:2,boxShadow:`0 4px 24px rgba(74,222,128,.45)` }}>
-            <i className={`fas ${icon}`} style={{ fontSize:20,color:"#000" }}/>
+          <div style={{ width:54,height:54,borderRadius:"50%",background:T.green,display:"flex",alignItems:"center",justifyContent:"center",marginTop:-22,marginBottom:2,boxShadow:`0 4px 18px rgba(34,197,94,.35)` }}>
+            <i className={`fas ${icon}`} style={{ fontSize:20,color:"#04130a" }}/>
           </div>
         ) : (
           <i className={`fas ${icon}`} style={{ fontSize:20,color:active===label?T.green:T.muted }}/>
         )}
         <span style={{ fontSize:10,fontWeight:active===label?700:500,color:active===label?T.green:T.muted }}>{label}</span>
         {active===label&&!center&&<div style={{ width:4,height:4,borderRadius:"50%",background:T.green }}/>}
-      </button>
-    ))}
-  </div>
-);
-
-const Nav = ({ active, go }) => (
-  <div style={{ display:"flex",justifyContent:"space-around",padding:"10px 0 26px",borderTop:`1px solid ${T.border}`,background:T.bg,flexShrink:0,position:"sticky",bottom:0,zIndex:50 }}>
-    {[
-      { label:"Home",     screen:"home",   icon:"fa-home"       },
-      { label:"Stations", screen:"detail", icon:"fa-plug"       },
-      { label:"Profile",  screen:"profile",icon:"fa-user"       },
-      { label:"More",     screen:"about",  icon:"fa-ellipsis-h" },
-    ].map(({ label,screen,icon })=>(
-      <button key={label} onClick={()=>go(screen)} className="tap"
-        style={{ background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:56,fontFamily:"inherit" }}>
-        <i className={`fas ${icon}`} style={{ fontSize:20,color:active===label?T.green:T.muted }}/>
-        <span style={{ fontSize:10,fontWeight:active===label?700:500,color:active===label?T.green:T.muted }}>{label}</span>
-        {active===label&&<div style={{ width:4,height:4,borderRadius:"50%",background:T.green }}/>}
       </button>
     ))}
   </div>
@@ -766,7 +748,7 @@ function MapScreen({ go,stations,setStation }) {
           </div>
         </div>
       </div>
-      <NewNav active="Stations" go={go}/>
+      <Nav active="Stations" go={go}/>
     </div>
   );
 }
@@ -897,12 +879,13 @@ function Home({ go,stations,setStation,user,onMenu }) {
     return ()=>clearInterval(t);
   },[activeSession]);
   const fmtElapsed=(s)=>{ const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60; return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`; };
+  const [balVisible,setBalVisible]=useState(true);
 
   const quickActions=[
-    { icon:"fa-bolt",label:"Find Stations",screen:"map" },
+    { icon:"fa-qrcode",label:"Scan to Charge",screen:"qr" },
+    { icon:"fa-map-marker-alt",label:"Find Stations",screen:"map" },
     { icon:"fa-calendar",label:"My Bookings",screen:"bookings" },
-    { icon:"fa-qrcode",label:"Charging Pass",screen:"qr" },
-    { icon:"fa-tint",label:"Water Points",screen:"detail" },
+    { icon:"fa-list-alt",label:"Charging History",screen:"sessions" },
   ];
 
   const card = { background:T.card,borderRadius:16,border:`1px solid ${T.border}` };
@@ -955,9 +938,14 @@ function Home({ go,stations,setStation,user,onMenu }) {
         <div style={{ margin:"0 14px 16px",...card,padding:"18px" }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
             <div>
-              <div style={{ fontSize:11,color:T.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Wallet Balance</div>
+              <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:6 }}>
+                <span style={{ fontSize:11,color:T.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5 }}>Wallet Balance</span>
+                <button onClick={()=>setBalVisible(v=>!v)} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:0,color:T.muted }}>
+                  <i className={`fas fa-eye${balVisible?"":"-slash"}`} style={{ fontSize:12 }}/>
+                </button>
+              </div>
               <div style={{ fontWeight:700,fontSize:28,color:T.text,letterSpacing:-0.5 }}>
-                {walletLoading?"GH₵ ––":fmtGHS(wallet?.balance_pesewas||0)}
+                {!balVisible?"GH₵ ••••":walletLoading?"GH₵ ––":fmtGHS(wallet?.balance_pesewas||0)}
               </div>
             </div>
             <button onClick={()=>go("wallet")} className="tap" style={{ background:T.green,border:"none",borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:700,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>Top Up</button>
@@ -995,14 +983,14 @@ function Home({ go,stations,setStation,user,onMenu }) {
       )}
 
       {/* QUICK ACTIONS */}
-      <div style={{ margin:"0 14px 16px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
-        {quickActions.map(a=>(
+      <div style={{ margin:"0 14px 16px",...card,padding:"16px 8px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr" }}>
+        {quickActions.map((a,i)=>(
           <button key={a.label} onClick={()=>go(a.screen)} className="tap"
-            style={{ ...card,padding:"18px 14px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:10,cursor:"pointer",fontFamily:"inherit" }}>
-            <div style={{ width:40,height:40,borderRadius:10,background:T.surface,display:"flex",alignItems:"center",justifyContent:"center" }}>
+            style={{ background:"none",border:"none",cursor:"pointer",padding:"4px 4px",display:"flex",flexDirection:"column",alignItems:"center",gap:8,fontFamily:"inherit",borderRight:i<3?`1px solid ${T.border}`:"none" }}>
+            <div style={{ width:42,height:42,borderRadius:"50%",background:T.surface,display:"flex",alignItems:"center",justifyContent:"center" }}>
               <i className={`fas ${a.icon}`} style={{ fontSize:16,color:T.green }}/>
             </div>
-            <div style={{ fontSize:13,fontWeight:600,color:T.text,textAlign:"left" }}>{a.label}</div>
+            <div style={{ fontSize:10,fontWeight:600,color:T.text,textAlign:"center",lineHeight:1.3 }}>{a.label}</div>
           </button>
         ))}
       </div>
@@ -1062,7 +1050,7 @@ function Home({ go,stations,setStation,user,onMenu }) {
       <SolarWidget/>
 
       <div style={{ height:90 }}/>
-      <NewNav active="Home" go={go}/>
+      <Nav active="Home" go={go}/>
     </div>
   );
 }
@@ -1072,6 +1060,36 @@ function Detail({ go,station,stations,setStation,setBookingMode }) {
   const s=station||stations[0];
   const scrollRef=useRef(null);
   useEffect(()=>{ scrollRef.current?.scrollTo({ top:0,behavior:"smooth" }); },[s.id]);
+
+  // Per-station chargers — real data from the chargers table, filtered by station_id.
+  // Falls back gracefully if the column is named slightly differently or the table is empty.
+  const [chargers,setChargers]=useState([]);
+  const [chargersLoading,setChargersLoading]=useState(true);
+  const [chargerFilter,setChargerFilter]=useState("All");
+  useEffect(()=>{
+    if (!SUPABASE_URL) { setChargersLoading(false); return; }
+    setChargersLoading(true);
+    (async()=>{
+      try {
+        const res=await fetch(`${SUPABASE_URL}/rest/v1/chargers?station_id=eq.${s.id}&select=*`,
+          { headers:{ apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}` }});
+        const data=await res.json();
+        setChargers(Array.isArray(data)?data:[]);
+      } catch(e) { setChargers([]); }
+      setChargersLoading(false);
+    })();
+  },[s.id]);
+
+  const chargerStatus=(c)=>{
+    if (c.has_fault) return "Unavailable";
+    if (c.status==="Charging") return "Charging";
+    if (c.status==="Available"||c.online) return "Available";
+    return "Unavailable";
+  };
+  const filteredChargers = chargerFilter==="All" ? chargers : chargers.filter(c=>chargerStatus(c)===chargerFilter);
+  const CHARGER_FILTERS=["All","Available","Charging","Unavailable"];
+  const chargerStatusColor=(st)=>st==="Available"?T.green:st==="Charging"?T.blue:T.red;
+
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title={s.name} sub={`${s.city} · Solar & Hydrogen`} onBack={()=>go("home")}/>
@@ -1094,7 +1112,7 @@ function Detail({ go,station,stations,setStation,setBookingMode }) {
           <Badge label={`Wait: ${s.time}`} color={T.yellow}/>
         </div>
       </div>
-      <div ref={scrollRef} style={{ flex:1,overflowY:"auto",padding:"12px 12px 0" }}>
+      <div ref={scrollRef} style={{ flex:1,overflowY:"auto",padding:"12px 12px 100px" }}>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12 }}>
           {[{ label:"Bays Open",value:`${s.open}/${s.bays}`,color:T.green,icon:"fa-plug" },{ label:"Est. Wait",value:s.time,color:T.yellow,icon:"fa-clock" },{ label:"Solar",value:`${s.solar}%`,color:T.blue,icon:"fa-sun" }].map(x=>(
             <div key={x.label} style={{ background:T.card,borderRadius:12,padding:"12px 8px",border:`1px solid ${T.border}`,textAlign:"center" }}>
@@ -1127,6 +1145,73 @@ function Detail({ go,station,stations,setStation,setBookingMode }) {
             <span style={{ fontSize:10,fontWeight:500,color:T.muted }}>I'm on my way</span>
           </button>
         </div>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10 }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text }}>Chargers</div>
+          <span style={{ fontSize:11,color:T.muted }}>{chargers.length} total</span>
+        </div>
+        <div style={{ display:"flex",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:2 }}>
+          {CHARGER_FILTERS.map(f=>(
+            <button key={f} onClick={()=>setChargerFilter(f)} className="tap"
+              style={{ flexShrink:0,background:chargerFilter===f?T.green:T.card,border:`1px solid ${chargerFilter===f?T.green:T.border}`,borderRadius:20,padding:"7px 14px",fontSize:12,fontWeight:700,color:chargerFilter===f?"#04130a":T.muted,cursor:"pointer",fontFamily:"inherit" }}>
+              {f}
+            </button>
+          ))}
+        </div>
+        {chargersLoading&&(
+          <div style={{ textAlign:"center",padding:"20px 0",color:T.muted,fontSize:13 }}><Spinner/></div>
+        )}
+        {!chargersLoading&&chargers.length===0&&(
+          <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"20px",textAlign:"center",marginBottom:14 }}>
+            <i className="fas fa-charging-station" style={{ fontSize:28,color:T.muted,marginBottom:8,display:"block",opacity:0.5 }}/>
+            <div style={{ fontSize:12,color:T.muted }}>No charger details available for this station yet</div>
+          </div>
+        )}
+        {!chargersLoading&&chargers.length>0&&filteredChargers.length===0&&(
+          <div style={{ textAlign:"center",padding:"16px 0",color:T.muted,fontSize:12,marginBottom:8 }}>No chargers match this filter</div>
+        )}
+        {filteredChargers.map(c=>{
+          const st=chargerStatus(c);
+          const color=chargerStatusColor(st);
+          const power=c.power_kw||c.max_power_kw||c.kw||null;
+          const connector=c.connector_type||c.connector||c.plug_type||null;
+          const price=c.price_per_kwh||c.rate_per_kwh||null;
+          const acdc=c.current_type||(power&&power>=43?"DC":"AC");
+          return (
+            <div key={c.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px 16px",marginBottom:10 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6 }}>
+                <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{c.label||c.name||c.id}</div>
+                {power&&(
+                  <div style={{ textAlign:"right" }}>
+                    <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{power} kW</div>
+                    <div style={{ fontSize:10,color:T.muted }}>{acdc}</div>
+                  </div>
+                )}
+              </div>
+              <div style={{ fontSize:12,color,fontWeight:600,marginBottom:8,display:"flex",alignItems:"center",gap:6 }}>
+                <i className={`fas ${st==="Available"?"fa-bolt":st==="Charging"?"fa-charging-station":"fa-ban"}`} style={{ fontSize:11 }}/>
+                {st}
+              </div>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                <div style={{ display:"flex",gap:14 }}>
+                  {connector&&<span style={{ fontSize:12,color:T.muted }}><i className="fas fa-plug" style={{ marginRight:5 }}/>{connector}</span>}
+                  {price&&<span style={{ fontSize:12,color:T.muted }}>GH₵{price}/kWh</span>}
+                </div>
+                {st==="Available"&&(
+                  <button onClick={()=>{ setStation(s);setBookingMode?.("now");go("vehicles"); }} className="tap"
+                    style={{ background:T.green,border:"none",borderRadius:9,padding:"7px 16px",fontSize:12,fontWeight:700,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>Select</button>
+                )}
+                {st==="Charging"&&(
+                  <button onClick={()=>go("qr")} className="tap"
+                    style={{ background:T.blue,border:"none",borderRadius:9,padding:"7px 16px",fontSize:12,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit" }}>View</button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {!chargersLoading&&chargers.length>0&&(
+          <div style={{ textAlign:"center",fontSize:10,color:T.muted,marginBottom:14 }}>Prices are inclusive of VAT</div>
+        )}
+        <div style={{ height:8 }}/>
         <div style={{ fontSize:11,color:T.muted,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",marginBottom:8 }}>All Stations</div>
         {stations.map(st=>(
           <div key={st.id} className="row" onClick={()=>setStation(st)}
@@ -1158,7 +1243,7 @@ function Vehicles({ go,setVehicle,bookingMode }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Select Vehicle" sub={bookingMode==="now"?"Charging now — choose your vehicle":"Reserving for later — choose your vehicle"} onBack={()=>go("detail")}/>
-      <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 0" }}>
+      <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 100px" }}>
         {VEHICLES.map((v,i)=>(
           <div key={v.type} className={`tap fade${i}`} onClick={()=>setSel(v)}
             style={{ borderRadius:18,marginBottom:14,overflow:"hidden",border:`2px solid ${sel?.type===v.type?T.green:T.border}`,transition:"border-color .2s" }}>
@@ -1433,6 +1518,7 @@ function QRScreen({ go, booking, setBooking, user }) {
   const [realtimeSub,  setRealtimeSub]  = useState(null);
   const [lastUpdated,  setLastUpdated]  = useState(null);
   const [signalStr,    setSignalStr]    = useState(100);
+  const [detailsOpen,  setDetailsOpen]  = useState(false);
 
   let b = booking;
   if (!b) { try { const s=localStorage.getItem("eco_booking"); if(s) b=JSON.parse(s); } catch(e){} }
@@ -1791,7 +1877,7 @@ function QRScreen({ go, booking, setBooking, user }) {
   if (!b) return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Charging Pass" onBack={()=>go("home")}/>
-      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px" }}>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 20px 100px" }}>
         <div style={{ textAlign:"center" }}>
           <i className="fas fa-ticket-alt" style={{ fontSize:56,color:T.muted,marginBottom:16,display:"block" }}/>
           <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>No Active Booking</div>
@@ -1812,7 +1898,7 @@ function QRScreen({ go, booking, setBooking, user }) {
   if (phase === "verifying") return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Starting Charge" sub="Running pre-checks..." onBack={()=>setPhase("ready")}/>
-      <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 40px" }}>
+      <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 100px" }}>
         <div style={{ textAlign:"center",marginBottom:28 }}>
           <div style={{ width:72,height:72,borderRadius:"50%",background:"rgba(74,222,128,0.12)",border:`2px solid ${T.green}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px" }}>
             <Spinner/>
@@ -1850,7 +1936,7 @@ function QRScreen({ go, booking, setBooking, user }) {
   if (phase === "error") return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Cannot Start" onBack={()=>setPhase("ready")}/>
-      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"24px" }}>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"24px 24px 100px" }}>
         <div style={{ textAlign:"center",width:"100%" }}>
           <div style={{ width:72,height:72,borderRadius:"50%",background:"rgba(248,113,113,0.12)",border:"2px solid rgba(248,113,113,0.3)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}>
             <i className="fas fa-exclamation-triangle" style={{ fontSize:28,color:T.red }}/>
@@ -1874,150 +1960,105 @@ function QRScreen({ go, booking, setBooking, user }) {
   );
 
   if (phase === 'charging' || phase === 'stopping') return (
-    <div style={{ display:'flex',flexDirection:'column',height:'100%',background:'#060d08' }}>
-      <div style={{ padding:'14px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid rgba(74,222,128,0.15)`,background:'rgba(0,0,0,0.3)',flexShrink:0 }}>
-        <div style={{ display:'flex',alignItems:'center',gap:10 }}>
-          <div style={{ width:10,height:10,borderRadius:'50%',background:T.green,boxShadow:'0 0 8px #4ade80',animation:'spin 2s linear infinite' }}/>
-          <div>
-            <div style={{ fontWeight:800,fontSize:14,color:T.text }}>{phase==='stopping'?'Stopping Session...':'Live Charging Dashboard'}</div>
-            <div style={{ fontSize:10,color:T.muted,marginTop:1 }}>{b.station} · {b.vehicle}</div>
-          </div>
+    <div style={{ display:'flex',flexDirection:'column',height:'100%',background:T.bg }}>
+      <div style={{ padding:'16px 18px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${T.border}`,flexShrink:0 }}>
+        <button onClick={()=>go("home")} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
+          <i className="fas fa-chevron-left" style={{ fontSize:18,color:T.text }}/>
+        </button>
+        <div style={{ textAlign:'center' }}>
+          <div style={{ fontSize:11,color:T.muted }}>{phase==='stopping'?'Stopping':'Charging'}</div>
+          <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{b.charger_id||'Charger'}</div>
         </div>
-        <div style={{ display:'flex',alignItems:'center',gap:8 }}>
-          {realtimeData&&<div style={{ background:'rgba(74,222,128,0.1)',border:'1px solid rgba(74,222,128,0.2)',borderRadius:8,padding:'3px 8px',fontSize:10,color:T.green,fontWeight:700 }}>LIVE</div>}
-          {lastUpdated&&<div style={{ fontSize:9,color:T.muted }}>{lastUpdated.toLocaleTimeString('en-GH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</div>}
-        </div>
+        <button onClick={stopCharging} disabled={phase==='stopping'} className="tap"
+          style={{ background:"none",border:`1px solid ${T.red}`,borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,color:T.red,cursor:phase==='stopping'?'default':'pointer',fontFamily:'inherit',opacity:phase==='stopping'?0.6:1 }}>
+          Stop
+        </button>
       </div>
 
-      <div style={{ flex:1,overflowY:'auto',padding:'14px 14px 24px' }}>
-        <div style={{ display:'flex',alignItems:'center',justifyContent:'center',marginBottom:18,position:'relative' }}>
+      <div style={{ flex:1,overflowY:'auto',padding:'20px 16px 24px' }}>
+        <div style={{ textAlign:'center',fontSize:12,color:T.muted,marginBottom:18 }}>{b.station}</div>
+
+        <div style={{ display:'flex',alignItems:'center',justifyContent:'center',marginBottom:8,position:'relative' }}>
           <div style={{ position:'relative',width:210,height:210 }}>
-            <div style={{ position:'absolute',inset:-8,borderRadius:'50%',background:'radial-gradient(circle,rgba(74,222,128,0.08) 0%,transparent 70%)' }}/>
             <svg width='210' height='210' style={{ transform:'rotate(-90deg)' }}>
-              <circle cx='105' cy='105' r='90' fill='none' stroke={T.surface} strokeWidth='16'/>
-              <circle cx='105' cy='105' r='90' fill='none' stroke='url(#dashGrad)' strokeWidth='16'
+              <circle cx='105' cy='105' r='90' fill='none' stroke={T.surface} strokeWidth='14'/>
+              <circle cx='105' cy='105' r='90' fill='none' stroke={T.green} strokeWidth='14'
                 strokeDasharray={`${2*Math.PI*90}`}
                 strokeDashoffset={`${2*Math.PI*90*(1-pct/100)}`}
                 strokeLinecap='round' style={{ transition:'stroke-dashoffset 1s linear' }}/>
-              <defs>
-                <linearGradient id='dashGrad' x1='0%' y1='0%' x2='100%' y2='0%'>
-                  <stop offset='0%' stopColor='#4ade80'/>
-                  <stop offset='50%' stopColor='#38bdf8'/>
-                  <stop offset='100%' stopColor='#4ade80'/>
-                </linearGradient>
-              </defs>
             </svg>
             <div style={{ position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center' }}>
-              <div style={{ fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:1,marginBottom:2 }}>Duration</div>
-              <div style={{ fontWeight:900,fontSize:38,color:T.text,lineHeight:1,fontFamily:'monospace' }}>{fmtElapsed(elapsed)}</div>
-              <div style={{ fontSize:11,color:T.green,marginTop:6,fontWeight:700 }}>{pct}% complete</div>
-              {estRemaining&&<div style={{ fontSize:10,color:T.muted,marginTop:3 }}>~{estRemaining} left</div>}
+              <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Charging Power</div>
+              <div style={{ fontWeight:800,fontSize:34,color:T.text,lineHeight:1 }}>{livePower.toFixed(1)} <span style={{ fontSize:16,color:T.muted,fontWeight:600 }}>kW</span></div>
+              <i className="fas fa-car-side" style={{ fontSize:30,color:T.green,marginTop:14 }}/>
             </div>
           </div>
         </div>
-
-        <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10 }}>
-          <div style={{ background:'linear-gradient(135deg,#061520,#0a2030)',borderRadius:16,padding:'16px',border:'1px solid rgba(56,189,248,0.2)' }}>
-            <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
-              <i className='fas fa-plug' style={{ fontSize:12,color:T.blue }}/>
-              <span style={{ fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:0.8,fontWeight:700 }}>Current Power</span>
-            </div>
-            <div style={{ fontWeight:900,fontSize:32,color:T.blue,lineHeight:1 }}>{livePower.toFixed(1)}</div>
-            <div style={{ fontSize:12,color:T.muted,marginTop:3 }}>kW</div>
-            <div style={{ height:4,borderRadius:2,background:T.surface,overflow:'hidden',marginTop:8 }}>
-              <div style={{ height:'100%',width:`${Math.min(100,(livePower/22)*100)}%`,background:`linear-gradient(90deg,${T.blue},#818cf8)`,borderRadius:2,transition:'width .5s ease' }}/>
-            </div>
-            <div style={{ fontSize:9,color:T.muted,marginTop:3 }}>Max: 22 kW</div>
-          </div>
-
-          <div style={{ background:T.highlightGrad,borderRadius:16,padding:'16px',border:'1px solid rgba(74,222,128,0.2)' }}>
-            <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
-              <i className='fas fa-bolt' style={{ fontSize:12,color:T.green }}/>
-              <span style={{ fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:0.8,fontWeight:700 }}>Energy</span>
-            </div>
-            <div style={{ fontWeight:900,fontSize:32,color:T.green,lineHeight:1 }}>{liveKwh.toFixed(3)}</div>
-            <div style={{ fontSize:12,color:T.muted,marginTop:3 }}>kWh consumed</div>
-            <div style={{ height:4,borderRadius:2,background:T.surface,overflow:'hidden',marginTop:8 }}>
-              <div style={{ height:'100%',width:`${Math.min(100,(liveKwh/50)*100)}%`,background:`linear-gradient(90deg,${T.green},#86efac)`,borderRadius:2,transition:'width .5s ease' }}/>
-            </div>
-            <div style={{ fontSize:9,color:T.muted,marginTop:3 }}>CO₂ saved: {(liveKwh*0.5).toFixed(2)} kg</div>
-          </div>
+        <div style={{ textAlign:'center',color:T.green,fontWeight:600,fontSize:13,marginBottom:22 }}>
+          <span style={{ display:'inline-block',width:6,height:6,borderRadius:'50%',background:T.green,marginRight:6 }}/>
+          {phase==='stopping'?'Stopping…':'Charging…'}
         </div>
 
-        <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10 }}>
-          <div style={{ background:'linear-gradient(135deg,#1a1000,#2a1800)',borderRadius:16,padding:'16px',border:'1px solid rgba(251,191,36,0.2)' }}>
-            <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
-              <i className='fas fa-money-bill-alt' style={{ fontSize:12,color:T.yellow }}/>
-              <span style={{ fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:0.8,fontWeight:700 }}>Cost So Far</span>
-            </div>
-            <div style={{ fontWeight:900,fontSize:28,color:T.yellow,lineHeight:1 }}>GH₵{costSoFar.toFixed(2)}</div>
-            <div style={{ fontSize:11,color:T.muted,marginTop:4 }}>GH₵0.85/kWh + GH₵5 base</div>
-          </div>
-
-          <div style={{ background:T.highlightGrad,borderRadius:16,padding:'16px',border:`1px solid ${walletBal!=null&&walletBal<(costSoFar*100+500)?'rgba(248,113,113,0.3)':'rgba(74,222,128,0.2)'}` }}>
-            <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
-              <i className='fas fa-wallet' style={{ fontSize:12,color:walletBal!=null&&walletBal<(costSoFar*100+500)?T.red:T.green }}/>
-              <span style={{ fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:0.8,fontWeight:700 }}>Wallet</span>
-            </div>
-            <div style={{ fontWeight:900,fontSize:28,color:walletBal!=null&&walletBal<(costSoFar*100+500)?T.red:T.green,lineHeight:1 }}>
-              {walletBal!=null?`GH₵${(walletBal/100).toFixed(2)}`:'--'}
-            </div>
-            <div style={{ fontSize:11,color:T.muted,marginTop:4 }}>
-              {walletBal!=null&&walletBal<(costSoFar*100+500)?'⚠️ Low balance':'Available balance'}
-            </div>
-          </div>
-        </div>
-
-        {powerHistory.length > 2 && (
-          <div style={{ background:T.card,borderRadius:16,padding:'14px 16px',marginBottom:10,border:`1px solid ${T.border}` }}>
-            <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10 }}>
-              <div style={{ fontWeight:700,fontSize:12,color:T.text }}><i className='fas fa-chart-line' style={{ marginRight:6,color:T.blue }}/>Power History</div>
-              <div style={{ fontSize:10,color:T.muted }}>Last {powerHistory.length} readings</div>
-            </div>
-            <div style={{ height:48,display:'flex',alignItems:'flex-end',gap:2 }}>
-              {powerHistory.map((p,i)=>{
-                const maxP = Math.max(...powerHistory.map(x=>x.v), 0.1);
-                const h = Math.max(4, Math.round((p.v/maxP)*44));
-                return (
-                  <div key={i} style={{ flex:1,height:`${h}px`,background:i===powerHistory.length-1?T.blue:'rgba(56,189,248,0.3)',borderRadius:'2px 2px 0 0',transition:'height .3s ease' }}/>
-                );
-              })}
-            </div>
-            <div style={{ display:'flex',justifyContent:'space-between',marginTop:4 }}>
-              <span style={{ fontSize:9,color:T.muted }}>Earlier</span>
-              <span style={{ fontSize:10,color:T.blue,fontWeight:700 }}>Now: {livePower.toFixed(1)} kW</span>
-            </div>
-          </div>
-        )}
-
-        <div style={{ background:T.card,borderRadius:16,padding:'14px 16px',marginBottom:14,border:`1px solid ${T.border}` }}>
-          <div style={{ fontWeight:700,fontSize:12,color:T.text,marginBottom:10 }}><i className='fas fa-info-circle' style={{ marginRight:6,color:T.green }}/>Session Details</div>
+        <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16 }}>
           {[
-            { label:'Session ID',  value:sessionId||'--',          mono:true  },
-            { label:'Charger',     value:b.charger_id||'ECOCHARGE-001', mono:false },
-            { label:'Est. Finish', value:estRemaining?`~${estRemaining} remaining`:'--', mono:false },
-            { label:'Rate',        value:'GH₵0.85/kWh + GH₵5 base', mono:false },
-            { label:'Solar',       value:'85% Solar Powered ☀️',   mono:false },
-            { label:'Water',       value:'20L Clean Water 💧',      mono:false },
-          ].map(r=>(
-            <div key={r.label} style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,paddingBottom:8,borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
-              <span style={{ color:T.muted,fontSize:12 }}>{r.label}</span>
-              <span style={{ color:T.text,fontWeight:600,fontSize:11,fontFamily:r.mono?'monospace':'inherit',maxWidth:'55%',textAlign:'right',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{r.value}</span>
+            { label:'Energy',   value:liveKwh.toFixed(2),               unit:'kWh' },
+            { label:'Duration', value:fmtElapsed(elapsed),              unit:'hh:mm:ss' },
+            { label:'Cost',     value:`GH₵${costSoFar.toFixed(2)}`,     unit:null },
+          ].map(m=>(
+            <div key={m.label} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:'14px 8px',textAlign:'center' }}>
+              <div style={{ fontWeight:700,fontSize:17,color:T.text }}>{m.value}</div>
+              <div style={{ fontSize:10,color:T.muted,marginTop:4 }}>{m.label}</div>
+              {m.unit&&<div style={{ fontSize:9,color:T.muted,marginTop:1 }}>{m.unit}</div>}
             </div>
           ))}
-          <div style={{ fontSize:10,color:T.muted,textAlign:'center',marginTop:4 }}>
-            {realtimeData?<><i className='fas fa-satellite-dish' style={{ color:T.green,marginRight:4 }}/>Live data from charger</>:<><i className='fas fa-clock' style={{ color:T.muted,marginRight:4 }}/>Simulated data — connect OCPP charger for live readings</>}
-          </div>
         </div>
 
-        <button onClick={stopCharging} disabled={phase==='stopping'} className='tap'
-          style={{ width:'100%',background:`linear-gradient(135deg,${T.red},#dc2626)`,border:'none',borderRadius:14,padding:'17px',fontSize:16,fontWeight:700,color:'#fff',cursor:phase==='stopping'?'default':'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',gap:10,opacity:phase==='stopping'?0.7:1,boxShadow:'0 4px 16px rgba(248,113,113,0.3)' }}>
-          {phase==='stopping'?<><Spinner/> Stopping...</>:<><i className='fas fa-stop-circle'/> Stop Charging</>}
-        </button>
+        <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,overflow:'hidden',marginBottom:14 }}>
+          <div className="tap" onClick={()=>setDetailsOpen(o=>!o)} style={{ padding:'14px 16px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer' }}>
+            <span style={{ fontWeight:700,fontSize:13,color:T.text }}>Session Details</span>
+            <i className={`fas fa-chevron-${detailsOpen?'up':'down'}`} style={{ fontSize:12,color:T.muted }}/>
+          </div>
+          {detailsOpen&&(
+            <div style={{ padding:'0 16px 16px' }}>
+              {[
+                { label:'Session ID',  value:sessionId||'--' },
+                { label:'Charger',     value:b.charger_id||'ECOCHARGE-001' },
+                { label:'Connector',   value:b.vehicle||'--' },
+                { label:'Rate',        value:'GH₵0.85/kWh + GH₵5 base' },
+                { label:'Est. Finish', value:estRemaining?`~${estRemaining} remaining`:'--' },
+              ].map(r=>(
+                <div key={r.label} style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,paddingBottom:8,borderBottom:`1px solid ${T.border}` }}>
+                  <span style={{ color:T.muted,fontSize:12 }}>{r.label}</span>
+                  <span style={{ color:T.text,fontWeight:600,fontSize:12 }}>{r.value}</span>
+                </div>
+              ))}
+              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,paddingBottom:8,borderBottom:`1px solid ${T.border}` }}>
+                <span style={{ color:T.muted,fontSize:12 }}>Wallet Balance</span>
+                <span style={{ color:walletBal!=null&&walletBal<(costSoFar*100+500)?T.red:T.green,fontWeight:700,fontSize:12 }}>
+                  {walletBal!=null?`GH₵${(walletBal/100).toFixed(2)}`:'--'}
+                </span>
+              </div>
+              {powerHistory.length>2&&(
+                <div style={{ marginTop:12 }}>
+                  <div style={{ fontSize:11,color:T.muted,marginBottom:8 }}>Power history (last {powerHistory.length} readings)</div>
+                  <div style={{ height:40,display:'flex',alignItems:'flex-end',gap:2 }}>
+                    {powerHistory.map((p,i)=>{
+                      const maxP=Math.max(...powerHistory.map(x=>x.v),0.1);
+                      const h=Math.max(4,Math.round((p.v/maxP)*36));
+                      return <div key={i} style={{ flex:1,height:`${h}px`,background:i===powerHistory.length-1?T.green:T.surface,borderRadius:'2px 2px 0 0' }}/>;
+                    })}
+                  </div>
+                </div>
+              )}
+              <div style={{ fontSize:10,color:T.muted,textAlign:'center',marginTop:12 }}>
+                {realtimeData?'Live data from charger':'Simulated data — connect OCPP charger for live readings'}
+              </div>
+            </div>
+          )}
+        </div>
 
-        <div style={{ fontSize:10,color:T.muted,textAlign:'center',marginTop:10,lineHeight:1.7 }}>
-          Wallet will be debited GH₵{costSoFar.toFixed(2)} when you stop.<br/>
-          <i className='fas fa-sun' style={{ color:T.yellow,marginRight:4 }}/>Powered by 85% solar energy
+        <div style={{ fontSize:11,color:T.muted,textAlign:'center',lineHeight:1.7 }}>
+          Wallet will be debited GH₵{costSoFar.toFixed(2)} when you stop · 85% solar powered
         </div>
       </div>
     </div>
@@ -2180,7 +2221,7 @@ function Verify({ go }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Verify Booking" sub="Attendant Portal" onBack={()=>go("home")}/>
-      <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 80px" }}>
+      <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 100px" }}>
         <div style={{ background:T.card,borderRadius:16,padding:"18px",marginBottom:14,border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:6 }}><i className="fas fa-qrcode" style={{ marginRight:8,color:T.green }}/> Scan QR Code</div>
           <div style={{ fontSize:12,color:T.muted,marginBottom:14 }}>Use camera to scan booking QR</div>
@@ -2227,7 +2268,7 @@ function Verify({ go }) {
           </div>
         )}
       </div>
-      <Nav active="More" go={go}/>
+      <Nav active="Profile" go={go}/>
     </div>
   );
 }
@@ -2409,7 +2450,7 @@ function About({ go,onMenu }) {
           <i className="fas fa-bolt"/> Find a Station
         </button>
       </div>
-      <Nav active="More" go={go}/>
+      <Nav active="Profile" go={go}/>
     </div>
   );
 }
@@ -2549,7 +2590,7 @@ function Bookings({ go,booking,user }) {
           </div>
         )}
       </div>
-      <Nav active="Home" go={go}/>
+      <Nav active="Sessions" go={go}/>
     </div>
   );
 }
@@ -2619,7 +2660,7 @@ function ChargerAdmin({ go }) {
   if (!OCPP_URL) return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Charger Admin" sub="OCPP Management" onBack={()=>go("home")}/>
-      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:24 }}>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"24px 24px 100px" }}>
         <div style={{ textAlign:"center" }}>
           <i className="fas fa-server" style={{ fontSize:56,color:T.muted,marginBottom:16,display:"block" }}/>
           <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>OCPP Server Not Configured</div>
@@ -2630,7 +2671,7 @@ function ChargerAdmin({ go }) {
           </div>
         </div>
       </div>
-      <Nav active="More" go={go}/>
+      <Nav active="Profile" go={go}/>
     </div>
   );
 
@@ -2784,7 +2825,7 @@ function ChargerAdmin({ go }) {
           </>
         )}
       </div>
-      <Nav active="More" go={go}/>
+      <Nav active="Profile" go={go}/>
     </div>
   );
 }
@@ -3093,14 +3134,14 @@ function SessionManager({ go, user }) {
             <div style={{ fontSize:11,color:T.muted }}>{completedCount} of {totalSessions} sessions completed</div>
           </div>
         </div>
-        <Nav active="More" go={go}/>
+        <Nav active="Profile" go={go}/>
       </div>
     );
   }
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Sessions" sub="Charging session management" onBack={()=>go("home")}/>
+      <Header title="Charging History" sub="Your charging sessions" onBack={()=>go("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"12px 14px 100px" }}>
 
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14 }}>
@@ -3159,50 +3200,31 @@ function SessionManager({ go, user }) {
             ? Math.floor((Date.now()-new Date(s.started_at).getTime())/1000) : null;
           return (
             <div key={s.id} className="tap row" onClick={()=>openDetail(s)}
-              style={{ background:T.card,borderRadius:16,border:`1px solid ${isActive?T.green:T.border}`,marginBottom:10,overflow:"hidden",boxShadow:isActive?`0 0 12px rgba(74,222,128,0.1)`:"none" }}>
-
-              {isActive&&<div style={{ height:3,background:`linear-gradient(90deg,${T.green},${T.blue})` }}/>}
-
-              <div style={{ padding:"14px 14px" }}>
-                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
-                  <div style={{ flex:1,minWidth:0 }}>
-                    <div style={{ fontWeight:700,fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
-                      {s.session_ref||s.id.substring(0,16)}
-                    </div>
-                    <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>
-                      <i className="fas fa-charging-station" style={{ marginRight:4 }}/>{s.charger_id||"--"} · {s.vehicle_type||"Unknown"}
-                    </div>
-                  </div>
-                  <div style={{ display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0,marginLeft:8 }}>
-                    <div style={{ background:cfg.bg,borderRadius:8,padding:"3px 10px",display:"flex",alignItems:"center",gap:5 }}>
-                      <i className={`fas ${cfg.icon}`} style={{ fontSize:10,color:cfg.color }}/>
-                      <span style={{ fontSize:11,fontWeight:700,color:cfg.color }}>{s.status}</span>
-                    </div>
-                    {elapsed!=null&&(
-                      <div style={{ fontSize:11,fontWeight:700,color:T.green,fontFamily:"monospace" }}>{fmtDuration(elapsed)}</div>
-                    )}
-                  </div>
+              style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,marginBottom:10,padding:"14px 16px",display:"flex",alignItems:"center",gap:14 }}>
+              <div style={{ width:38,height:38,borderRadius:10,background:T.surface,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                <i className={`fas ${cfg.icon}`} style={{ fontSize:14,color:cfg.color }}/>
+              </div>
+              <div style={{ flex:1,minWidth:0 }}>
+                <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                  <span style={{ fontWeight:700,fontSize:13,color:T.text }}>{fmtDate(s.started_at||s.created_at)}</span>
+                  {isActive&&<span style={{ fontSize:10,fontWeight:700,color:T.green }}>· Live</span>}
                 </div>
-
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6 }}>
-                  {[
-                    { label:"Energy",  value:fmtKwh(s.energy_kwh),          color:T.green  },
-                    { label:"Cost",    value:fmtCost(s.cost_total),          color:T.yellow },
-                    { label:"Time",    value:fmtDuration(s.duration_sec),    color:T.blue   },
-                    { label:"Payment", value:s.payment_status||"Unpaid",     color:s.payment_status==="Paid"?T.green:T.muted },
-                  ].map(m=>(
-                    <div key={m.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"6px 4px",textAlign:"center" }}>
-                      <div style={{ fontWeight:700,fontSize:11,color:m.color }}>{m.value}</div>
-                      <div style={{ fontSize:9,color:T.muted,marginTop:2 }}>{m.label}</div>
-                    </div>
-                  ))}
+                <div style={{ fontSize:11,color:T.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+                  {s.session_ref||s.id.substring(0,16)} · {s.charger_id||"--"}
                 </div>
+                {elapsed!=null&&(
+                  <div style={{ fontSize:11,fontWeight:700,color:T.green,fontFamily:"monospace",marginTop:2 }}>{fmtDuration(elapsed)} elapsed</div>
+                )}
+              </div>
+              <div style={{ textAlign:"right",flexShrink:0 }}>
+                <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{fmtKwh(s.energy_kwh)}</div>
+                <div style={{ fontSize:12,color:T.green,fontWeight:600,marginTop:2 }}>{fmtCost(s.cost_total)}</div>
               </div>
             </div>
           );
         })}
       </div>
-      <Nav active="More" go={go}/>
+      <Nav active="Sessions" go={go}/>
     </div>
   );
 }
@@ -3234,6 +3256,7 @@ function WalletScreen({ go, user }) {
   const [paying,    setPaying]    = useState(false);
   const [txFilter,  setTxFilter]  = useState("All");
   const [payError,  setPayError]  = useState("");
+  const [balVisible,setBalVisible]= useState(true);
 
   const loadWallet = async () => {
     if (!SUPABASE_URL || !user?.id) { setLoading(false); return; }
@@ -3310,7 +3333,7 @@ function WalletScreen({ go, user }) {
   if (!user) return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="My Wallet" onBack={()=>go("home")}/>
-      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:24,textAlign:"center" }}>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"24px 24px 100px",textAlign:"center" }}>
         <div>
           <i className="fas fa-wallet" style={{ fontSize:56,color:T.muted,marginBottom:16,display:"block" }}/>
           <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>Sign in to access your wallet</div>
@@ -3459,7 +3482,7 @@ function WalletScreen({ go, user }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="My Wallet" sub="EcoCharge Ghana" onBack={()=>go("home")}/>
+      <Header title="Wallet" sub="EcoCharge Ghana" onBack={()=>go("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 100px" }}>
 
         {loading&&(
@@ -3468,38 +3491,40 @@ function WalletScreen({ go, user }) {
 
         {!loading&&(
           <>
-            <div className="fade" style={{ background:T.highlightGrad,borderRadius:22,padding:"28px 24px",marginBottom:16,border:`1px solid rgba(74,222,128,0.25)`,position:"relative",overflow:"hidden" }}>
-              <div style={{ position:"absolute",top:-40,right:-40,width:160,height:160,borderRadius:"50%",background:"rgba(74,222,128,0.06)" }}/>
-              <div style={{ position:"relative",zIndex:1 }}>
-                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20 }}>
-                  <div>
-                    <div style={{ fontSize:12,color:"rgba(255,255,255,0.5)",marginBottom:4 }}>Available Balance</div>
-                    <div style={{ fontWeight:900,fontSize:42,color:T.green,lineHeight:1,letterSpacing:-1 }}>
-                      {fmtGHS(wallet?.balance_pesewas||0)}
-                    </div>
+            <div className="fade" style={{ background:T.card,borderRadius:18,padding:"22px 20px",marginBottom:16,border:`1px solid ${T.border}` }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18 }}>
+                <div>
+                  <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:6 }}>
+                    <span style={{ fontSize:12,color:T.muted }}>Wallet Balance</span>
+                    <button onClick={()=>setBalVisible(v=>!v)} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:0,color:T.muted }}>
+                      <i className={`fas fa-eye${balVisible?"":"-slash"}`} style={{ fontSize:12 }}/>
+                    </button>
                   </div>
-                  <div style={{ width:48,height:48,borderRadius:14,background:"rgba(74,222,128,0.15)",border:`1px solid rgba(74,222,128,0.3)`,display:"flex",alignItems:"center",justifyContent:"center" }}>
-                    <i className="fas fa-wallet" style={{ fontSize:20,color:T.green }}/>
+                  <div style={{ fontWeight:700,fontSize:32,color:T.text,lineHeight:1,letterSpacing:-0.5 }}>
+                    {balVisible?fmtGHS(wallet?.balance_pesewas||0):"GH₵ ••••"}
                   </div>
                 </div>
-
-                {wallet?.locked_pesewas>0&&(
-                  <div style={{ background:"rgba(251,191,36,0.1)",borderRadius:10,padding:"8px 12px",marginBottom:16,display:"flex",alignItems:"center",gap:8 }}>
-                    <i className="fas fa-lock" style={{ fontSize:12,color:T.yellow }}/>
-                    <span style={{ fontSize:12,color:T.yellow }}>{fmtGHS(wallet.locked_pesewas)} reserved for active session</span>
-                  </div>
-                )}
-
-                <div style={{ display:"flex",gap:10 }}>
-                  <button onClick={()=>setTab("topup")} className="tap"
-                    style={{ flex:1,background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
-                    <i className="fas fa-plus"/> Top Up
-                  </button>
-                  <button onClick={()=>setTab("history")} className="tap"
-                    style={{ flex:1,background:T.track,border:"1px solid rgba(255,255,255,0.15)",borderRadius:12,padding:"13px",fontSize:14,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
-                    <i className="fas fa-history"/> History
-                  </button>
+                <div style={{ width:40,height:40,borderRadius:10,background:T.surface,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                  <i className="fas fa-wallet" style={{ fontSize:17,color:T.green }}/>
                 </div>
+              </div>
+
+              {wallet?.locked_pesewas>0&&(
+                <div style={{ background:T.surface,borderRadius:10,padding:"8px 12px",marginBottom:14,display:"flex",alignItems:"center",gap:8 }}>
+                  <i className="fas fa-lock" style={{ fontSize:12,color:T.yellow }}/>
+                  <span style={{ fontSize:12,color:T.yellow }}>{fmtGHS(wallet.locked_pesewas)} reserved for active session</span>
+                </div>
+              )}
+
+              <div style={{ display:"flex",gap:10 }}>
+                <button onClick={()=>setTab("topup")} className="tap"
+                  style={{ flex:1,background:T.green,border:"none",borderRadius:11,padding:"13px",fontSize:14,fontWeight:700,color:"#04130a",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+                  <i className="fas fa-plus"/> Top Up
+                </button>
+                <button onClick={()=>setTab("history")} className="tap"
+                  style={{ flex:1,background:"none",border:`1px solid ${T.border}`,borderRadius:11,padding:"13px",fontSize:14,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+                  <i className="fas fa-history"/> History
+                </button>
               </div>
             </div>
 
@@ -3885,7 +3910,7 @@ function PricingAdmin({ go, user }) {
           </div>
         )}
       </div>
-      <Nav active="More" go={go}/>
+      <Nav active="Profile" go={go}/>
     </div>
   );
 
@@ -3991,7 +4016,7 @@ function PricingAdmin({ go, user }) {
           </div>
         ))}
       </div>
-      <Nav active="More" go={go}/>
+      <Nav active="Profile" go={go}/>
     </div>
   );
 }
@@ -4629,7 +4654,7 @@ function AdminDashboard({ go, user }) {
         {tab==="faults"   && <FaultsTab/>}
       </div>
 
-      <Nav active="More" go={go}/>
+      <Nav active="Profile" go={go}/>
     </div>
   );
 }
