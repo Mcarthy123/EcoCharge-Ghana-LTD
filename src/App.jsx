@@ -913,18 +913,15 @@ function Home({ go,stations,setStation,user,onMenu }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,overflowY:"auto" }}>
       <div style={{ padding:"48px 18px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0 }}>
-        <button onClick={onMenu} className="tap" style={{ background:T.surface,border:"none",borderRadius:12,width:42,height:42,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
-          <i className="fas fa-bars" style={{ fontSize:17,color:T.text }}/>
+        <button onClick={onMenu} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4,display:"flex",alignItems:"center",justifyContent:"center" }}>
+          <i className="fas fa-bars" style={{ fontSize:20,color:T.text }}/>
         </button>
-        <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-          <div>
-            <div style={{ fontWeight:800,fontSize:16,color:T.text,lineHeight:1.1,letterSpacing:-0.2 }}>EcoCharge</div>
-            <div style={{ fontSize:10,color:T.green,fontWeight:800,letterSpacing:1.2 }}>GHANA</div>
-          </div>
+        <div style={{ fontWeight:800,fontSize:20,letterSpacing:-0.3 }}>
+          <span style={{ color:T.text }}>Eco</span><span style={{ color:T.green }}>Charge</span>
         </div>
         <div style={{ position:"relative" }}>
-          <button onClick={()=>go("notifications")} className="tap" style={{ background:T.surface,border:"none",borderRadius:12,width:42,height:42,display:"flex",alignItems:"center",justifyContent:"center" }}>
-            <i className="fas fa-bell" style={{ fontSize:17,color:T.text }}/>
+          <button onClick={()=>go("notifications")} className="tap" style={{ background:"none",border:"none",padding:4,display:"flex",alignItems:"center",justifyContent:"center" }}>
+            <i className="fas fa-bell" style={{ fontSize:19,color:T.text }}/>
           </button>
           {user?.id && <UnreadBadge userId={user.id}/>}
         </div>
@@ -2239,9 +2236,11 @@ function QRScreen({ go, booking, setBooking, user }) {
             <div style={{ position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center' }}>
               <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Charging Power</div>
               <div style={{ fontWeight:800,fontSize:34,color:T.text,lineHeight:1 }}>{livePower.toFixed(1)} <span style={{ fontSize:16,color:T.muted,fontWeight:600 }}>kW</span></div>
-              <div style={{ marginTop:12 }}><VehicleAvatar vehicleType={b.vehicle} size={42}/></div>
             </div>
           </div>
+        </div>
+        <div style={{ display:'flex',justifyContent:'center',marginBottom:8 }}>
+          <VehicleAvatar vehicleType={b.vehicle} size={120}/>
         </div>
         <div style={{ textAlign:'center',color:T.green,fontWeight:600,fontSize:13,marginBottom:22 }}>
           <span style={{ display:'inline-block',width:6,height:6,borderRadius:'50%',background:T.green,marginRight:6 }}/>
