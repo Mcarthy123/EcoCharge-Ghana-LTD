@@ -543,9 +543,8 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => {
 function Splash({ onLogin, onRegister, onGuest }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:"#050a06",position:"relative",overflow:"hidden" }}>
-      <img src="/station1.jpg" alt="bg" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.28) saturate(1.2)",zIndex:0 }} onError={e=>e.target.style.display="none"}/>
-      <div style={{ position:"absolute",top:0,right:0,width:"45%",height:"30%",background:"radial-gradient(circle at top right, #050a06 0%, rgba(5,10,6,0.85) 55%, transparent 100%)",zIndex:1 }}/>
-      <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(5,10,6,0.3) 0%,rgba(5,10,6,0.9) 60%,#050a06 100%)",zIndex:1 }}/>
+      <img src="/station2.jpg" alt="bg" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.42) saturate(1.2)",zIndex:0 }} onError={e=>e.target.style.display="none"}/>
+      <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(5,10,6,0.15) 0%,rgba(5,10,6,0.75) 60%,#050a06 100%)",zIndex:1 }}/>
       <div style={{ position:"relative",zIndex:2,display:"flex",flexDirection:"column",height:"100%",padding:"0 28px",alignItems:"center",justifyContent:"space-between" }}>
         <div style={{ textAlign:"center",marginTop:100 }}>
           <Logo size={88}/>
@@ -935,18 +934,13 @@ function Home({ go,stations,setStation,user,onMenu }) {
       </div>
 
       {/* HERO */}
-      <div style={{ margin:"4px 14px 16px",borderRadius:20,overflow:"hidden",position:"relative",minHeight:210 }}>
-        <img src="/station1.jpg" alt="" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.5) saturate(1.05)" }} onError={e=>{ e.target.style.display="none"; }}/>
-        <div style={{ position:"absolute",top:0,right:0,width:"50%",height:"45%",background:"radial-gradient(circle at top right, rgba(11,15,20,0.95) 0%, rgba(11,15,20,0.7) 55%, transparent 100%)" }}/>
-        <div style={{ position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(11,15,20,0.45) 0%,rgba(11,15,20,0.92) 100%)" }}/>
+      <div style={{ margin:"4px 14px 16px",borderRadius:20,overflow:"hidden",position:"relative",minHeight:150 }}>
+        <img src="/station2.jpg" alt="" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.55) saturate(1.1)" }} onError={e=>{ e.target.style.display="none"; }}/>
+        <div style={{ position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(11,15,20,0.3) 0%,rgba(11,15,20,0.8) 100%)" }}/>
         <div style={{ position:"relative",zIndex:2,padding:"26px 20px 22px" }}>
           <div style={{ fontSize:14,color:"rgba(255,255,255,0.65)",fontWeight:500,marginBottom:6 }}>{greeting}</div>
           <div style={{ fontWeight:800,fontSize:28,color:"#fff",marginBottom:10,letterSpacing:-0.5,lineHeight:1.1 }}>{displayName}</div>
-          <div style={{ fontSize:13,color:"rgba(255,255,255,0.7)",marginBottom:22 }}>Powering Ghana with clean energy</div>
-          <div style={{ display:"flex",gap:10 }}>
-            <button onClick={()=>go("qr")} className="tap" style={{ flex:1,background:T.green,border:"none",borderRadius:12,padding:"14px",fontSize:14.5,fontWeight:800,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>Start Charging</button>
-            <button onClick={()=>go("map")} className="tap" style={{ flex:1,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.25)",borderRadius:12,padding:"14px",fontSize:14.5,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit" }}>Find Stations</button>
-          </div>
+          <div style={{ fontSize:13,color:"rgba(255,255,255,0.7)" }}>Powering Ghana with clean energy</div>
         </div>
       </div>
 
