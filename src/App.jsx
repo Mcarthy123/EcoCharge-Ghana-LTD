@@ -379,7 +379,6 @@ function NotificationsScreen({ go, user }) {
           {unread>0&&<div style={{ fontSize:11,color:T.green,marginTop:2 }}>{unread} unread</div>}
         </div>
         {unread>0&&<button onClick={markAllRead} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit" }}>Mark all read</button>}
-        <Logo size={34}/>
       </div>
       <div style={{ flex:1,overflowY:"auto",padding:"12px 14px 100px" }}>
         {lastErr&&(
@@ -471,7 +470,6 @@ const Header = ({ title,sub,onBack,onMenu }) => (
       <div style={{ fontWeight:800,fontSize:16,color:T.text,letterSpacing:-0.3 }}>{title}</div>
       {sub&&<div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{sub}</div>}
     </div>
-    <Logo size={34}/>
   </div>
 );
 
@@ -483,7 +481,6 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => {
     <div style={{ position:"fixed",top:0,left:0,height:"100%",width:285,background:T.card,zIndex:201,borderRight:`1px solid ${T.border}`,transform:open?"translateX(0)":"translateX(-100%)",transition:"transform .3s cubic-bezier(.4,0,.2,1)",display:"flex",flexDirection:"column" }}>
       <div style={{ padding:"52px 20px 20px",background:T.highlightGrad2 }}>
         <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:16 }}>
-          <Logo size={48}/>
           <div>
             <div style={{ fontWeight:800,fontSize:18,color:T.text }}>EcoCharge</div>
             <div style={{ fontSize:11,color:T.muted }}>Ghana · Clean Energy</div>
@@ -548,8 +545,7 @@ function Splash({ onLogin, onRegister, onGuest }) {
       <div style={{ position:"absolute",left:"42%",top:"66%",width:"30%",height:"7%",background:"#0a1f12",borderRadius:4,zIndex:1 }}/>
       <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(5,10,6,0.05) 0%,rgba(5,10,6,0.55) 60%,#050a06 100%)",zIndex:1 }}/>
       <div style={{ position:"relative",zIndex:2,display:"flex",flexDirection:"column",height:"100%",padding:"0 28px",alignItems:"center",justifyContent:"space-between" }}>
-        <div style={{ textAlign:"center",marginTop:100 }}>
-          <Logo size={88}/>
+        <div style={{ textAlign:"center",marginTop:140 }}>
           <div style={{ fontWeight:900,fontSize:34,color:T.text,marginTop:16,letterSpacing:-1 }}>EcoCharge</div>
           <div style={{ fontWeight:700,fontSize:18,color:T.green,marginTop:4,letterSpacing:0.5 }}>Ghana</div>
           <div style={{ fontSize:14,color:"rgba(255,255,255,0.55)",marginTop:14,lineHeight:1.8 }}>Solar Charging. Clean Water.<br/>Zero Emissions.</div>
@@ -650,8 +646,7 @@ function Auth({ mode, onBack, onSuccess }) {
         </button>
       </div>
       <div style={{ flex:1,overflowY:"auto",padding:"0 24px 40px" }}>
-        <div style={{ textAlign:"center",marginBottom:28 }}>
-          <Logo size={56}/>
+        <div style={{ textAlign:"center",marginBottom:28,marginTop:8 }}>
           <div style={{ fontWeight:800,fontSize:24,color:T.text,marginTop:14 }}>{mode==="login"?"Welcome Back":"Create Account"}</div>
           <div style={{ fontSize:13,color:T.muted,marginTop:6 }}>{mode==="login"?"Sign in to your account":"Join EcoCharge Ghana today"}</div>
         </div>
@@ -921,7 +916,6 @@ function Home({ go,stations,setStation,user,onMenu }) {
           <i className="fas fa-bars" style={{ fontSize:17,color:T.text }}/>
         </button>
         <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-          <Logo size={30}/>
           <div>
             <div style={{ fontWeight:800,fontSize:16,color:T.text,lineHeight:1.1,letterSpacing:-0.2 }}>EcoCharge</div>
             <div style={{ fontSize:10,color:T.green,fontWeight:800,letterSpacing:1.2 }}>GHANA</div>
@@ -1076,10 +1070,23 @@ function Home({ go,stations,setStation,user,onMenu }) {
 }
 
 
-function Detail({ go,station,stations,setStation,setBookingMode }) {
+function Detail({ go,station,stations,setStation,setBookingMode,user,setSelectedCharger }) {
   const s=station||stations[0];
   const scrollRef=useRef(null);
   useEffect(()=>{ scrollRef.current?.scrollTo({ top:0,behavior:"smooth" }); },[s.id]);
+
+  const [wallet,setWallet]=useState(null);
+  useEffect(()=>{
+    if (!SUPABASE_URL||!user?.id) return;
+    (async()=>{
+      try {
+        const res=await fetch(`${SUPABASE_URL}/rest/v1/wallets?user_id=eq.${user.id}&select=balance_pesewas`,
+          { headers:{ apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}` }});
+        const data=await res.json();
+        if (data?.[0]) setWallet(data[0]);
+      } catch(e) {}
+    })();
+  },[user]);
 
   // Per-station chargers — merges two real sources so a charger always shows up
   // here regardless of whether it's only registered with the OCPP server (like
@@ -1142,24 +1149,33 @@ function Detail({ go,station,stations,setStation,setBookingMode }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title={s.name} sub={`${s.city} · Solar & Hydrogen`} onBack={()=>go("home")}/>
       <div style={{ margin:"0",overflow:"hidden",height:200,position:"relative",flexShrink:0 }}>
         <img src="/station2.jpg" alt="station" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.55) saturate(1.3)" }} onError={e=>{ e.target.style.display="none"; }}/>
-        <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.2) 0%,rgba(0,0,0,0.5) 100%)" }}/>
-        <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",gap:32 }}>
-          <div style={{ textAlign:"center" }}>
-            <i className="fas fa-sun" style={{ fontSize:36,color:T.yellow }}/>
-            <div style={{ fontSize:13,color:"#fff",fontWeight:800,marginTop:8 }}>{s.solar}% Solar</div>
-          </div>
-          <div style={{ width:1,height:60,background:"rgba(255,255,255,0.25)" }}/>
-          <div style={{ textAlign:"center" }}>
-            <i className="fas fa-atom" style={{ fontSize:36,color:T.blue }}/>
-            <div style={{ fontSize:13,color:"#fff",fontWeight:800,marginTop:8 }}>{s.hydrogen}% H₂</div>
+        <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.2) 0%,rgba(0,0,0,0.55) 100%)" }}/>
+        <div style={{ position:"absolute",top:16,left:16,right:16,display:"flex",justifyContent:"space-between" }}>
+          <button onClick={()=>go("home")} className="tap" style={{ width:38,height:38,borderRadius:"50%",background:"rgba(0,0,0,0.45)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+            <i className="fas fa-chevron-left" style={{ fontSize:16,color:"#fff" }}/>
+          </button>
+          <div style={{ display:"flex",gap:8 }}>
+            <button className="tap" style={{ width:38,height:38,borderRadius:"50%",background:"rgba(0,0,0,0.45)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+              <i className="far fa-heart" style={{ fontSize:15,color:"#fff" }}/>
+            </button>
+            <button className="tap" style={{ width:38,height:38,borderRadius:"50%",background:"rgba(0,0,0,0.45)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+              <i className="fas fa-share-alt" style={{ fontSize:14,color:"#fff" }}/>
+            </button>
           </div>
         </div>
-        <div style={{ position:"absolute",bottom:12,left:16,display:"flex",gap:8 }}>
-          <Badge label={`${s.open}/${s.bays} Open`} color={T.green}/>
-          <Badge label={`Wait: ${s.time}`} color={T.yellow}/>
+        <div style={{ position:"absolute",bottom:12,left:16,right:16 }}>
+          <div style={{ display:"flex",alignItems:"center",gap:7,marginBottom:3 }}>
+            <span style={{ fontWeight:800,fontSize:19,color:"#fff" }}>{s.name}</span>
+            <i className="fas fa-check-circle" style={{ fontSize:15,color:T.green }}/>
+          </div>
+          <div style={{ fontSize:12,color:"rgba(255,255,255,0.75)",marginBottom:8 }}>{s.city} · Solar & Hydrogen</div>
+          <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
+            <Badge label="Open 24/7" color={T.green}/>
+            <Badge label={`${s.open}/${s.bays} Open`} color={T.green}/>
+            <Badge label={`Wait: ${s.time}`} color={T.yellow}/>
+          </div>
         </div>
       </div>
       <div ref={scrollRef} style={{ flex:1,overflowY:"auto",padding:"12px 12px 100px" }}>
@@ -1181,6 +1197,20 @@ function Detail({ go,station,stations,setStation,setBookingMode }) {
             <div style={{ height:"100%",width:`${s.solar}%`,background:`linear-gradient(90deg,${T.green},${T.blue})` }}/>
           </div>
         </div>
+        {user&&(
+          <div style={{ background:T.card,borderRadius:14,padding:"13px 16px",marginBottom:14,border:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+            <div>
+              <div style={{ fontSize:10,color:T.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:0.4,marginBottom:4 }}>Wallet Balance</div>
+              <div style={{ fontWeight:800,fontSize:18,color:T.text }}>{fmtGHS(wallet?.balance_pesewas||0)}</div>
+              <div style={{ fontSize:10,color:T.green,marginTop:2 }}><i className="fas fa-check-circle" style={{ marginRight:3 }}/>Ready to charge</div>
+            </div>
+            <div style={{ textAlign:"right" }}>
+              <div style={{ fontSize:10,color:T.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:0.4,marginBottom:4 }}>Price</div>
+              <div style={{ fontWeight:800,fontSize:18,color:T.text }}>GH₵{chargers[0]?.price_per_kwh||chargers[0]?.rate_per_kwh||"3.50"}/kWh</div>
+            </div>
+            <button onClick={()=>go("wallet")} className="tap" style={{ background:T.green,border:"none",borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:800,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>Top Up</button>
+          </div>
+        )}
         <div style={{ display:"flex",gap:10,marginBottom:14 }}>
           <button onClick={()=>{ setBookingMode?.("now");go("vehicles"); }} className="tap"
             style={{ flex:1,background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px 10px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4 }}>
@@ -1226,33 +1256,50 @@ function Detail({ go,station,stations,setStation,setBookingMode }) {
           const connector=c.connector_type||c.connector||c.plug_type||null;
           const price=c.price_per_kwh||c.rate_per_kwh||null;
           const acdc=c.current_type||(power&&power>=43?"DC":"AC");
+          const uptime=c.uptime_pct||99;
           return (
-            <div key={c.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px 16px",marginBottom:10 }}>
-              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6 }}>
-                <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{c.label||c.name||c.id}</div>
+            <div key={c.id} className="tap row" onClick={()=>{ setSelectedCharger?.({...c,station:s}); go("chargerdetail"); }}
+              style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px 16px",marginBottom:10,cursor:"pointer" }}>
+              <div style={{ display:"flex",gap:12,marginBottom:10 }}>
+                <div style={{ width:46,height:58,borderRadius:8,background:`linear-gradient(160deg,${T.greenDim}40,${T.border})`,border:`1.5px solid ${T.green}55`,flexShrink:0,position:"relative",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                  <i className="fas fa-charging-station" style={{ fontSize:18,color:T.green }}/>
+                </div>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
+                    <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{c.label||c.name||c.id}</div>
+                    <i className="fas fa-chevron-down" style={{ fontSize:11,color:T.muted,marginTop:3 }}/>
+                  </div>
+                  <div style={{ fontSize:12,color,fontWeight:600,margin:"4px 0",display:"flex",alignItems:"center",gap:6 }}>
+                    <i className={`fas ${st==="Available"?"fa-bolt":st==="Charging"?"fa-charging-station":"fa-ban"}`} style={{ fontSize:11 }}/>
+                    {st}
+                  </div>
+                  {connector&&<div style={{ fontSize:11,color:T.muted }}><i className="fas fa-plug" style={{ marginRight:5 }}/>{acdc} Fast Charger · {connector}</div>}
+                </div>
+              </div>
+              <div style={{ display:"flex",gap:18,marginBottom:10 }}>
                 {power&&(
-                  <div style={{ textAlign:"right" }}>
+                  <div>
                     <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{power} kW</div>
-                    <div style={{ fontSize:10,color:T.muted }}>{acdc}</div>
+                    <div style={{ fontSize:9,color:T.muted }}>Max Power</div>
                   </div>
                 )}
-              </div>
-              <div style={{ fontSize:12,color,fontWeight:600,marginBottom:8,display:"flex",alignItems:"center",gap:6 }}>
-                <i className={`fas ${st==="Available"?"fa-bolt":st==="Charging"?"fa-charging-station":"fa-ban"}`} style={{ fontSize:11 }}/>
-                {st}
+                <div>
+                  <div style={{ fontWeight:700,fontSize:14,color:T.green }}>{uptime}%</div>
+                  <div style={{ fontSize:9,color:T.muted }}>Uptime</div>
+                </div>
               </div>
               <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-                <div style={{ display:"flex",gap:14 }}>
-                  {connector&&<span style={{ fontSize:12,color:T.muted }}><i className="fas fa-plug" style={{ marginRight:5 }}/>{connector}</span>}
-                  {price&&<span style={{ fontSize:12,color:T.muted }}>GH₵{price}/kWh</span>}
+                <div>
+                  {price&&<div style={{ fontSize:13,fontWeight:700,color:T.text }}>GH₵{price}/kWh</div>}
+                  <div style={{ fontSize:9,color:T.muted }}>Price (VAT incl.)</div>
                 </div>
                 {st==="Available"&&(
-                  <button onClick={()=>{ setStation(s);setBookingMode?.("now");go("vehicles"); }} className="tap"
-                    style={{ background:T.green,border:"none",borderRadius:9,padding:"7px 16px",fontSize:12,fontWeight:700,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>Select</button>
+                  <button onClick={e=>{ e.stopPropagation();setStation(s);setBookingMode?.("now");go("vehicles"); }} className="tap"
+                    style={{ background:T.green,border:"none",borderRadius:9,padding:"8px 18px",fontSize:12,fontWeight:700,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>Start Charging</button>
                 )}
                 {st==="Charging"&&(
-                  <button onClick={()=>go("qr")} className="tap"
-                    style={{ background:T.blue,border:"none",borderRadius:9,padding:"7px 16px",fontSize:12,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit" }}>View</button>
+                  <button onClick={e=>{ e.stopPropagation();go("qr"); }} className="tap"
+                    style={{ background:T.blue,border:"none",borderRadius:9,padding:"8px 18px",fontSize:12,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit" }}>View</button>
                 )}
               </div>
             </div>
@@ -1283,6 +1330,157 @@ function Detail({ go,station,stations,setStation,setBookingMode }) {
         <div style={{ height:18 }}/>
       </div>
       <Nav active="Stations" go={go}/>
+    </div>
+  );
+}
+
+function ChargerDetail({ go,selectedCharger,setBookingMode,setStation,user }) {
+  const c=selectedCharger||{};
+  const s=c.station||{};
+  const status = c.has_fault ? "Unavailable" : c.status==="Charging" ? "Charging" : (c.status==="Available"&&c.online!==false) ? "Available" : "Unavailable";
+  const statusColor = status==="Available"?T.green:status==="Charging"?T.blue:T.red;
+  const power=c.power_kw||c.max_power_kw||c.kw||120;
+  const connector=c.connector_type||c.connector||c.plug_type||"CCS2";
+  const price=c.price_per_kwh||c.rate_per_kwh||"3.50";
+  const acdc=c.current_type||(power>=43?"DC Fast Charger":"AC Charger");
+  const uptime=c.uptime_pct||99;
+
+  const [tariff,setTariff]=useState(null);
+  useEffect(()=>{
+    if (!SUPABASE_URL) return;
+    (async()=>{
+      try {
+        const res=await fetch(`${SUPABASE_URL}/rest/v1/tariffs?is_active=eq.true&order=priority.asc&limit=1&select=*`,
+          { headers:{ apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}` }});
+        const data=await res.json();
+        if (data?.[0]) setTariff(data[0]);
+      } catch(e) {}
+    })();
+  },[]);
+
+  const minCharge = tariff?.min_charge_fee!=null ? (tariff.min_charge_fee/100).toFixed(2) : "5.00";
+  const idleFee   = tariff?.idle_fee_per_min!=null ? (tariff.idle_fee_per_min/100).toFixed(2) : "2.00";
+
+  const AMENITIES=[
+    { icon:"fa-restroom", label:"Restroom" },
+    { icon:"fa-mug-hot",  label:"Cafe" },
+    { icon:"fa-wifi",     label:"Wi-Fi" },
+    { icon:"fa-shield-alt",label:"Security" },
+    { icon:"fa-lightbulb",label:"Lighting" },
+  ];
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title={c.label||c.name||c.id||"Charger"} sub={`${acdc} · ${connector}`} onBack={()=>go("detail")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
+
+        <div style={{ display:"flex",justifyContent:"flex-end",marginBottom:14 }}>
+          <Badge label={status} color={statusColor}/>
+        </div>
+
+        <div style={{ display:"flex",justifyContent:"center",marginBottom:18 }}>
+          <div style={{ width:110,height:150,borderRadius:16,background:`linear-gradient(160deg,${T.greenDim}50,${T.border})`,border:`2px solid ${T.green}66`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:10 }}>
+            <i className="fas fa-charging-station" style={{ fontSize:42,color:T.green }}/>
+            <i className="fas fa-bolt" style={{ fontSize:16,color:T.yellow }}/>
+          </div>
+        </div>
+
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16 }}>
+          {[
+            { label:"Max Power",value:`${power} kW` },
+            { label:"Connector",value:connector },
+            { label:"Price",value:`GH₵${price}/kWh`,sub:"VAT Inclusive" },
+            { label:"Uptime",value:`${uptime}%`,sub:uptime>=95?"Excellent":"Good",color:T.green },
+          ].map(m=>(
+            <div key={m.label} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px" }}>
+              <div style={{ fontSize:10,color:T.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:0.4,marginBottom:6 }}>{m.label}</div>
+              <div style={{ fontWeight:800,fontSize:18,color:m.color||T.text }}>{m.value}</div>
+              {m.sub&&<div style={{ fontSize:10,color:m.color||T.muted,marginTop:2 }}>{m.sub}</div>}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"16px",marginBottom:14 }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}><i className="fas fa-heartbeat" style={{ marginRight:8,color:T.green }}/>Live Status</div>
+          <div style={{ fontSize:13,fontWeight:700,color:status==="Available"?T.green:status==="Charging"?T.blue:T.red,marginBottom:2 }}>
+            {status==="Available"?"Available now":status==="Charging"?"Charging in progress":"Currently unavailable"}
+          </div>
+          <div style={{ fontSize:11,color:T.muted,marginBottom:10 }}>
+            {status==="Available"?"Ready to charge":status==="Charging"?"In use by another session":"Check back shortly"}
+          </div>
+          <div style={{ background:T.surface,borderRadius:10,padding:"10px 12px" }}>
+            {status==="Charging" ? (
+              <>
+                <div style={{ fontSize:12,fontWeight:700,color:T.text }}>Active session</div>
+                <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Another vehicle is currently charging here</div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize:12,fontWeight:700,color:T.text }}>No active session</div>
+                <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Plug in to start</div>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"16px",marginBottom:14 }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}><i className="fas fa-info-circle" style={{ marginRight:8,color:T.green }}/>Charging Info</div>
+          {[
+            { icon:"fa-tag",       label:"Min. charge",     value:`GH₵${minCharge}` },
+            { icon:"fa-hourglass-half",label:"Idle fee",    value:`GH₵${idleFee}/min`,sub:"after 5 mins" },
+            { icon:"fa-square-parking",label:"Parking fee", value:"Free",sub:"First 60 mins" },
+            { icon:"fa-clock",     label:"Operating hours", value:"24 Hours" },
+          ].map(r=>(
+            <div key={r.label} style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,paddingBottom:10,borderBottom:`1px solid ${T.border}` }}>
+              <span style={{ fontSize:12,color:T.muted }}><i className={`fas ${r.icon}`} style={{ marginRight:8,width:14 }}/>{r.label}</span>
+              <div style={{ textAlign:"right" }}>
+                <div style={{ fontSize:12,fontWeight:700,color:T.text }}>{r.value}</div>
+                {r.sub&&<div style={{ fontSize:9,color:T.muted,marginTop:1 }}>{r.sub}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"16px",marginBottom:14 }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}>Station Amenities</div>
+          <div style={{ display:"flex",justifyContent:"space-between" }}>
+            {AMENITIES.map(a=>(
+              <div key={a.label} style={{ textAlign:"center" }}>
+                <div style={{ width:38,height:38,borderRadius:"50%",background:T.surface,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 6px" }}>
+                  <i className={`fas ${a.icon}`} style={{ fontSize:14,color:T.green }}/>
+                </div>
+                <div style={{ fontSize:9,color:T.muted }}>{a.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"16px",marginBottom:18 }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}>Location</div>
+          <div style={{ fontSize:12,color:T.muted,marginBottom:4 }}>{s.name||"Station"}, {s.city||""}</div>
+          <div onClick={()=>go("map")} className="tap" style={{ height:80,borderRadius:10,background:T.surface,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",marginBottom:8 }}>
+            <i className="fas fa-map-marker-alt" style={{ fontSize:22,color:T.green }}/>
+          </div>
+          <button onClick={()=>go("map")} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:0 }}>View on map</button>
+        </div>
+
+        {status==="Available"&&(
+          <button onClick={()=>{ setStation?.(s);setBookingMode?.("now");go("vehicles"); }} className="tap"
+            style={{ width:"100%",background:T.green,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,color:"#04130a",cursor:"pointer",fontFamily:"inherit",marginBottom:10 }}>
+            Start Charging
+          </button>
+        )}
+        {status==="Charging"&&(
+          <button onClick={()=>go("qr")} className="tap"
+            style={{ width:"100%",background:T.blue,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"inherit",marginBottom:10 }}>
+            View Active Session
+          </button>
+        )}
+        <button onClick={()=>go("about")} className="tap"
+          style={{ width:"100%",background:"none",border:`1px solid ${T.red}55`,borderRadius:14,padding:"14px",fontSize:13,fontWeight:700,color:T.red,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+          <i className="fas fa-exclamation-triangle"/> Report an Issue
+        </button>
+      </div>
     </div>
   );
 }
@@ -2480,7 +2678,6 @@ function About({ go,onMenu }) {
       <Header title="About EcoCharge" sub="Our mission" onMenu={onMenu}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 14px 100px" }}>
         <div className="fade" style={{ textAlign:"center",marginBottom:24 }}>
-          <Logo size={82}/>
           <div style={{ fontWeight:900,fontSize:24,color:T.text,marginTop:14,letterSpacing:-0.5 }}>EcoCharge Ghana</div>
           <div style={{ fontSize:13,color:T.muted,marginTop:6 }}>Solar Charging · Clean Water · Zero Emissions</div>
         </div>
@@ -4680,7 +4877,6 @@ function AdminDashboard({ go, user }) {
         </div>
         <div style={{ display:"flex",alignItems:"center",gap:8 }}>
           {msg&&<div style={{ fontSize:11,color:T.green,fontWeight:700 }}>{msg}</div>}
-          <Logo size={30}/>
         </div>
       </div>
 
@@ -4715,6 +4911,7 @@ function AppInner() {
   const [station,setStation]  = useState(null);
   const [vehicle,setVehicle]  = useState(null);
   const [bookingMode,setBookingMode]= useState(null);
+  const [selectedCharger,setSelectedCharger]= useState(null);
   const [stations,setStations]= useState(STATIONS);
   const [booking,setBooking]  = useState(()=>{ try { const b=localStorage.getItem("eco_booking"); return b?JSON.parse(b):null; } catch(e){ return null; } });
   const [user,setUserRaw]     = useState(()=>{ try { const u=localStorage.getItem("eco_user"); return u?JSON.parse(u):null; } catch(e){ return null; } });
@@ -4778,7 +4975,7 @@ function AppInner() {
     }
   },[]);
 
-  const props={ go:goSecure,stations,station:station||stations[0],setStation,user,setUser,vehicle,setVehicle,bookingMode,setBookingMode,booking,setBooking,onMenu:()=>setDrawer(true) };
+  const props={ go:goSecure,stations,station:station||stations[0],setStation,user,setUser,vehicle,setVehicle,bookingMode,setBookingMode,booking,setBooking,selectedCharger,setSelectedCharger,onMenu:()=>setDrawer(true) };
 
   if (screen==="splash") return <><style>{CSS}</style><Splash onLogin={()=>{ setAuthMode("login");go("auth"); }} onRegister={()=>{ setAuthMode("register");go("auth"); }} onGuest={()=>go("home")}/></>;
   if (screen==="auth") return <><style>{CSS}</style><Auth mode={authMode} onBack={(mode)=>{ if(mode){ setAuthMode(mode); } else { go("splash"); } }} onSuccess={(u)=>{ setUser(u);go("home"); }}/></>;
@@ -4793,6 +4990,7 @@ function AppInner() {
     home:<Home {...props}/>,
     map:<MapScreen {...props}/>,
     detail:<Detail {...props}/>,
+    chargerdetail:<ChargerDetail {...props}/>,
     vehicles:<Vehicles {...props}/>,
     chargenow:<ChargeNow {...props}/>,
     booking:<Booking {...props}/>,
