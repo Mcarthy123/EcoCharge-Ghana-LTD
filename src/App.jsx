@@ -1,5 +1,6 @@
 // ============================================================
 // EcoCharge Ghana — App.jsx FINAL (Fixed)
+// BUILD MARKER: v-detail-screen-2025-restyle-04 (Bays Open / Energy Mix / Wallet / Charge Now+Reserve / Chargers list present)
 // Font Awesome Free icons + Inter font
 // Paystack, Supabase, QR, Booking, Verify, Map
 // ============================================================
