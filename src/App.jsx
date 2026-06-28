@@ -194,6 +194,20 @@ const Logo = ({ size=34 }) => {
   );
 };
 
+// Shows the real vehicle photo (same images used on the Vehicle Selection screen)
+// for a given vehicle type, falling back to a plain icon if the image fails to load.
+const VEHICLE_IMAGES = { Car:"/car-charging.jpg", Scooter:"/scooter-charging.jpg", Tricycle:"/tricycle-charging.jpg" };
+const VEHICLE_FALLBACK_ICON = { Car:"fa-car-side", Scooter:"fa-motorcycle", Tricycle:"fa-truck-pickup" };
+const VehicleAvatar = ({ vehicleType="Car", size=64 }) => {
+  const [err,setErr] = useState(false);
+  const src = VEHICLE_IMAGES[vehicleType] || VEHICLE_IMAGES.Car;
+  if (!err) return (
+    <img src={src} alt={vehicleType} onError={()=>setErr(true)}
+      style={{ width:size,height:size,borderRadius:"50%",objectFit:"cover",border:`2px solid ${T.green}`,flexShrink:0 }}/>
+  );
+  return <i className={`fas ${VEHICLE_FALLBACK_ICON[vehicleType]||"fa-car-side"}`} style={{ fontSize:size*0.47,color:T.green }}/>;
+};
+
 // ── NOTIFICATIONS ─────────────────────────────────────────────
 const NOTIF_CONFIG={
   charging_started:   { icon:"fa-bolt",              color:"#38bdf8", label:"Charging Started"   },
@@ -1371,7 +1385,7 @@ function Booking({ go,station,vehicle,user,setBooking }) {
             <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{s.name}</div>
             <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>{vehicle?.type||"Car"} · {s.city}</div>
           </div>
-          <i className={`fas ${vehicle?.type==="Scooter"?"fa-motorcycle":vehicle?.type==="Tricycle"?"fa-truck":"fa-car"}`} style={{ fontSize:40,color:T.green,opacity:0.7 }}/>
+          <VehicleAvatar vehicleType={vehicle?.type||"Car"} size={50}/>
         </div>
         <div className="fade1" style={{ background:T.card,borderRadius:16,padding:"14px 16px",marginBottom:12,border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}><i className="fas fa-clock" style={{ marginRight:8,color:T.green }}/> Select Time</div>
@@ -1486,7 +1500,7 @@ function ChargeNow({ go,station,vehicle,user,setBooking }) {
             <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{s.name}</div>
             <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>{vehicle?.type||"Car"} · {s.city}</div>
           </div>
-          <i className={`fas ${vehicle?.type==="Scooter"?"fa-motorcycle":vehicle?.type==="Tricycle"?"fa-truck":"fa-car"}`} style={{ fontSize:40,color:T.green,opacity:0.7 }}/>
+          <VehicleAvatar vehicleType={vehicle?.type||"Car"} size={50}/>
         </div>
         <div className="fade1" style={{ background:T.card,borderRadius:16,padding:"14px 16px",marginBottom:12,border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:10 }}><i className="fas fa-money-bill-alt" style={{ marginRight:8,color:T.green }}/> Cost</div>
@@ -2028,7 +2042,7 @@ function QRScreen({ go, booking, setBooking, user }) {
             <div style={{ position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center' }}>
               <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Charging Power</div>
               <div style={{ fontWeight:800,fontSize:34,color:T.text,lineHeight:1 }}>{livePower.toFixed(1)} <span style={{ fontSize:16,color:T.muted,fontWeight:600 }}>kW</span></div>
-              <i className="fas fa-car-side" style={{ fontSize:30,color:T.green,marginTop:14 }}/>
+              <div style={{ marginTop:12 }}><VehicleAvatar vehicleType={b.vehicle} size={42}/></div>
             </div>
           </div>
         </div>
