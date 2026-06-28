@@ -156,6 +156,7 @@ const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   html,body,#root{height:100%;-webkit-text-size-adjust:100%}
+  html,body{touch-action:manipulation;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;}
   body{font-family:'Inter',sans-serif;background:#0a0d10;color:#fff;-webkit-font-smoothing:antialiased;}
   @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -163,7 +164,7 @@ const CSS = `
   .fade1{animation:fadeUp .3s .06s ease both}
   .fade2{animation:fadeUp .3s .12s ease both}
   .fade3{animation:fadeUp .3s .18s ease both}
-  .tap{transition:opacity .15s,transform .15s;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+  .tap{transition:opacity .15s,transform .15s;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
   .tap:active{opacity:.7;transform:scale(.97)}
   .row{transition:background .15s;cursor:pointer}
   .row:active{background:#1e2330}
@@ -543,8 +544,8 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => {
 function Splash({ onLogin, onRegister, onGuest }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:"#050a06",position:"relative",overflow:"hidden" }}>
-      <img src="/station2.jpg" alt="bg" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.42) saturate(1.2)",zIndex:0 }} onError={e=>e.target.style.display="none"}/>
-      <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(5,10,6,0.15) 0%,rgba(5,10,6,0.75) 60%,#050a06 100%)",zIndex:1 }}/>
+      <img src="/station2.jpg" alt="bg" style={{ position:"absolute",inset:"-20px",width:"calc(100% + 40px)",height:"calc(100% + 40px)",objectFit:"cover",filter:"brightness(0.55) saturate(1.15) blur(18px)",zIndex:0 }} onError={e=>e.target.style.display="none"}/>
+      <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(5,10,6,0.1) 0%,rgba(5,10,6,0.7) 60%,#050a06 100%)",zIndex:1 }}/>
       <div style={{ position:"relative",zIndex:2,display:"flex",flexDirection:"column",height:"100%",padding:"0 28px",alignItems:"center",justifyContent:"space-between" }}>
         <div style={{ textAlign:"center",marginTop:100 }}>
           <Logo size={88}/>
@@ -935,8 +936,8 @@ function Home({ go,stations,setStation,user,onMenu }) {
 
       {/* HERO */}
       <div style={{ margin:"4px 14px 16px",borderRadius:20,overflow:"hidden",position:"relative",minHeight:150 }}>
-        <img src="/station2.jpg" alt="" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.55) saturate(1.1)" }} onError={e=>{ e.target.style.display="none"; }}/>
-        <div style={{ position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(11,15,20,0.3) 0%,rgba(11,15,20,0.8) 100%)" }}/>
+        <img src="/station2.jpg" alt="" style={{ position:"absolute",inset:"-20px",width:"calc(100% + 40px)",height:"calc(100% + 40px)",objectFit:"cover",filter:"brightness(0.6) saturate(1.1) blur(16px)" }} onError={e=>{ e.target.style.display="none"; }}/>
+        <div style={{ position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(11,15,20,0.25) 0%,rgba(11,15,20,0.75) 100%)" }}/>
         <div style={{ position:"relative",zIndex:2,padding:"26px 20px 22px" }}>
           <div style={{ fontSize:14,color:"rgba(255,255,255,0.65)",fontWeight:500,marginBottom:6 }}>{greeting}</div>
           <div style={{ fontWeight:800,fontSize:28,color:"#fff",marginBottom:10,letterSpacing:-0.5,lineHeight:1.1 }}>{displayName}</div>
