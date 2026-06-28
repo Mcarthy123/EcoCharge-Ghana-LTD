@@ -544,6 +544,7 @@ function Splash({ onLogin, onRegister, onGuest }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:"#050a06",position:"relative",overflow:"hidden" }}>
       <img src="/station1.jpg" alt="bg" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.28) saturate(1.2)",zIndex:0 }} onError={e=>e.target.style.display="none"}/>
+      <div style={{ position:"absolute",top:0,right:0,width:"45%",height:"30%",background:"radial-gradient(circle at top right, #050a06 0%, rgba(5,10,6,0.85) 55%, transparent 100%)",zIndex:1 }}/>
       <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(5,10,6,0.3) 0%,rgba(5,10,6,0.9) 60%,#050a06 100%)",zIndex:1 }}/>
       <div style={{ position:"relative",zIndex:2,display:"flex",flexDirection:"column",height:"100%",padding:"0 28px",alignItems:"center",justifyContent:"space-between" }}>
         <div style={{ textAlign:"center",marginTop:100 }}>
@@ -936,6 +937,7 @@ function Home({ go,stations,setStation,user,onMenu }) {
       {/* HERO */}
       <div style={{ margin:"4px 14px 16px",borderRadius:20,overflow:"hidden",position:"relative",minHeight:210 }}>
         <img src="/station1.jpg" alt="" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.5) saturate(1.05)" }} onError={e=>{ e.target.style.display="none"; }}/>
+        <div style={{ position:"absolute",top:0,right:0,width:"50%",height:"45%",background:"radial-gradient(circle at top right, rgba(11,15,20,0.95) 0%, rgba(11,15,20,0.7) 55%, transparent 100%)" }}/>
         <div style={{ position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(11,15,20,0.45) 0%,rgba(11,15,20,0.92) 100%)" }}/>
         <div style={{ position:"relative",zIndex:2,padding:"26px 20px 22px" }}>
           <div style={{ fontSize:14,color:"rgba(255,255,255,0.65)",fontWeight:500,marginBottom:6 }}>{greeting}</div>
