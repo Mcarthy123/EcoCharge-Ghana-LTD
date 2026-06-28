@@ -370,7 +370,7 @@ function NotificationsScreen({ go, user }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <div style={{ padding:"14px 18px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
+      <div style={{ padding:"calc(14px + env(safe-area-inset-top, 34px)) 18px 14px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
         <button onClick={()=>go("home")} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
           <i className="fas fa-arrow-left" style={{ fontSize:20,color:T.text }}/>
         </button>
@@ -461,7 +461,7 @@ const Nav = ({ active, go }) => (
 );
 
 const Header = ({ title,sub,onBack,onMenu }) => (
-  <div style={{ padding:"14px 18px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
+  <div style={{ padding:"calc(14px + env(safe-area-inset-top, 34px)) 18px 14px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
     {onBack
       ? <button onClick={onBack} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}><i className="fas fa-arrow-left" style={{ fontSize:20,color:T.text }}/></button>
       : <button onClick={onMenu} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}><i className="fas fa-bars" style={{ fontSize:20,color:T.mutedLight }}/></button>
@@ -1152,7 +1152,7 @@ function Detail({ go,station,stations,setStation,setBookingMode,user,setSelected
       <div style={{ margin:"0",overflow:"hidden",height:200,position:"relative",flexShrink:0 }}>
         <img src="/station2.jpg" alt="station" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.55) saturate(1.3)" }} onError={e=>{ e.target.style.display="none"; }}/>
         <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.2) 0%,rgba(0,0,0,0.55) 100%)" }}/>
-        <div style={{ position:"absolute",top:16,left:16,right:16,display:"flex",justifyContent:"space-between" }}>
+        <div style={{ position:"absolute",top:"calc(16px + env(safe-area-inset-top, 34px))",left:16,right:16,display:"flex",justifyContent:"space-between" }}>
           <button onClick={()=>go("home")} className="tap" style={{ width:38,height:38,borderRadius:"50%",background:"rgba(0,0,0,0.45)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
             <i className="fas fa-chevron-left" style={{ fontSize:16,color:"#fff" }}/>
           </button>
@@ -4865,7 +4865,7 @@ function AdminDashboard({ go, user }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <div style={{ padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
+      <div style={{ padding:"calc(14px + env(safe-area-inset-top, 34px)) 16px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
         <div style={{ display:"flex",alignItems:"center",gap:10 }}>
           <button onClick={()=>go("home")} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
             <i className="fas fa-arrow-left" style={{ fontSize:18,color:T.text }}/>
