@@ -109,6 +109,20 @@ const STATIONS = [
   { id:8, name:"Ho District",    city:"Ho",         bays:4, open:3, solar:82, hydrogen:18, time:"40 mins", lat:6.6011,  lng:0.4712  },
 ];
 
+const APP_VERSION = "1.0.0";
+
+const CONTACT_INFO = {
+  email: "ecochargeghanaltd@gmail.com",
+  phones: ["0504008059", "0559561568"],
+  whatsapp: "0504008059",
+};
+
+const SOCIAL_LINKS = [
+  { label:"Facebook",  icon:"fa-facebook",  color:"#1877F2", name:"Awakwa Jabiru Edward", searchUrl:"https://www.facebook.com/search/top?q=Awakwa%20Jabiru%20Edward" },
+  { label:"X",         icon:"fa-x-twitter", color:"#ffffff", name:"Awakwa Jabiru Edward", searchUrl:"https://twitter.com/search?q=Awakwa%20Jabiru%20Edward" },
+  { label:"Instagram", icon:"fa-instagram", color:"#E1306C", name:"Awakwa Jabiru Edward", searchUrl:"https://www.instagram.com/explore/search/keyword/?q=Awakwa%20Jabiru%20Edward" },
+];
+
 const VEHICLES = [
   { type:"Car",      price:"GH₵140–210", amount:175, desc:"Full EV sedan — solar powered"  },
   { type:"Scooter",  price:"GH₵8–15",   amount:12,  desc:"Electric scooter fast charge"    },
@@ -2832,6 +2846,7 @@ function Profile({ go,user,setUser,onMenu }) {
 }
 
 function About({ go,onMenu }) {
+  const [legalNote,setLegalNote]=useState("");
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="About EcoCharge" sub="Our mission" onMenu={onMenu}/>
@@ -2851,6 +2866,67 @@ function About({ go,onMenu }) {
             </div>
           </div>
         ))}
+
+        <div style={{ fontSize:11,color:T.muted,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",margin:"10px 0 10px 4px" }}>Contact Us</div>
+        <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,marginBottom:16,overflow:"hidden" }}>
+          <a href={`mailto:${CONTACT_INFO.email}`} className="tap row" style={{ display:"flex",alignItems:"center",gap:14,padding:"15px 16px",borderBottom:`1px solid ${T.border}`,textDecoration:"none",color:"inherit" }}>
+            <i className="fas fa-envelope" style={{ fontSize:15,color:T.green,width:20,textAlign:"center" }}/>
+            <div style={{ flex:1,minWidth:0 }}>
+              <div style={{ fontSize:11,color:T.muted }}>Email</div>
+              <div style={{ fontSize:13,color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{CONTACT_INFO.email}</div>
+            </div>
+            <i className="fas fa-chevron-right" style={{ fontSize:12,color:T.muted }}/>
+          </a>
+          {CONTACT_INFO.phones.map(p=>(
+            <a key={p} href={`tel:+233${p.replace(/^0/,"")}`} className="tap row" style={{ display:"flex",alignItems:"center",gap:14,padding:"15px 16px",borderBottom:`1px solid ${T.border}`,textDecoration:"none",color:"inherit" }}>
+              <i className="fas fa-phone" style={{ fontSize:14,color:T.green,width:20,textAlign:"center" }}/>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11,color:T.muted }}>Call</div>
+                <div style={{ fontSize:13,color:T.text,fontWeight:600 }}>{p}</div>
+              </div>
+              <i className="fas fa-chevron-right" style={{ fontSize:12,color:T.muted }}/>
+            </a>
+          ))}
+          <a href={`https://wa.me/233${CONTACT_INFO.whatsapp.replace(/^0/,"")}`} target="_blank" rel="noopener noreferrer" className="tap row" style={{ display:"flex",alignItems:"center",gap:14,padding:"15px 16px",textDecoration:"none",color:"inherit" }}>
+            <i className="fab fa-whatsapp" style={{ fontSize:16,color:"#25D366",width:20,textAlign:"center" }}/>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:11,color:T.muted }}>WhatsApp</div>
+              <div style={{ fontSize:13,color:T.text,fontWeight:600 }}>{CONTACT_INFO.whatsapp}</div>
+            </div>
+            <i className="fas fa-chevron-right" style={{ fontSize:12,color:T.muted }}/>
+          </a>
+        </div>
+
+        <div style={{ fontSize:11,color:T.muted,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",margin:"10px 0 10px 4px" }}>Follow Us</div>
+        <div style={{ display:"flex",gap:10,marginBottom:16 }}>
+          {SOCIAL_LINKS.map(s=>(
+            <a key={s.label} href={s.searchUrl} target="_blank" rel="noopener noreferrer" className="tap"
+              style={{ flex:1,background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"14px 8px",textAlign:"center",textDecoration:"none" }}>
+              <i className={`fab ${s.icon}`} style={{ fontSize:20,color:s.color,marginBottom:8,display:"block" }}/>
+              <div style={{ fontSize:11,color:T.text,fontWeight:600 }}>{s.label}</div>
+            </a>
+          ))}
+        </div>
+
+        <div style={{ fontSize:11,color:T.muted,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",margin:"10px 0 10px 4px" }}>Legal</div>
+        <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,marginBottom:16,overflow:"hidden" }}>
+          {[{ label:"Terms of Service" },{ label:"Privacy Policy" }].map((l,i)=>(
+            <div key={l.label} className="tap row" onClick={()=>setLegalNote(l.label)}
+              style={{ display:"flex",alignItems:"center",gap:14,padding:"15px 16px",borderBottom:i===0?`1px solid ${T.border}`:"none",cursor:"pointer" }}>
+              <i className="fas fa-file-contract" style={{ fontSize:14,color:T.mutedLight,width:20,textAlign:"center" }}/>
+              <span style={{ flex:1,fontSize:13,color:T.text,fontWeight:600 }}>{l.label}</span>
+              <i className="fas fa-chevron-right" style={{ fontSize:12,color:T.muted }}/>
+            </div>
+          ))}
+        </div>
+        {legalNote&&(
+          <div style={{ background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.25)",borderRadius:12,padding:"12px 14px",marginBottom:16,fontSize:12,color:T.yellow,lineHeight:1.6 }}>
+            <i className="fas fa-info-circle" style={{ marginRight:6 }}/>{legalNote} hasn't been published yet. Check back soon.
+          </div>
+        )}
+
+        <div style={{ textAlign:"center",fontSize:11,color:T.muted,marginBottom:16 }}>EcoCharge Ghana · Version {APP_VERSION}</div>
+
         <button onClick={()=>go("home")} className="tap"
           style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",marginBottom:20,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
           <i className="fas fa-bolt"/> Find a Station
