@@ -441,7 +441,7 @@ const Nav = ({ active, go }) => (
     {[
       { label:"Home",     screen:"home",     icon:"fa-home"     },
       { label:"Stations", screen:"detail",   icon:"fa-plug"     },
-      { label:"Scan",     screen:"qr",       icon:"fa-qrcode",   center:true },
+      { label:"Scan",     screen:"scan",     icon:"fa-qrcode",   center:true },
       { label:"Sessions", screen:"sessions", icon:"fa-list-alt" },
       { label:"Profile",  screen:"profile",  icon:"fa-user"     },
     ].map(({ label,screen,icon,center })=>(
@@ -727,6 +727,103 @@ function Auth({ mode, onBack, onSuccess }) {
 }
 
 
+// Loads jsQR from CDN once (same pattern already used for Leaflet) and
+// reuses it across any screen that needs to decode a QR code from the camera.
+let jsQRLoadPromise = null;
+const loadJsQR = () => {
+  if (window.jsQR) return Promise.resolve();
+  if (jsQRLoadPromise) return jsQRLoadPromise;
+  jsQRLoadPromise = new Promise((resolve,reject)=>{
+    const s=document.createElement("script");
+    s.src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js";
+    s.onload=()=>resolve();
+    s.onerror=()=>reject(new Error("Failed to load QR scanner library"));
+    document.head.appendChild(s);
+  });
+  return jsQRLoadPromise;
+};
+
+// Real camera-based QR scanner. Opens the device camera, continuously samples
+// frames onto a hidden canvas, and calls onResult(text) the moment a QR code
+// is decoded. Used by both the customer Scan tab and the attendant Verify screen.
+function QRScanner({ onResult, onClose, hint }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const rafRef = useRef(null);
+  const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
+
+  useEffect(()=>{
+    let cancelled = false;
+    (async()=>{
+      try {
+        await loadJsQR();
+        const stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:"environment" } });
+        if (cancelled) { stream.getTracks().forEach(t=>t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        setReady(true);
+        const tick = () => {
+          const video = videoRef.current, canvas = canvasRef.current;
+          if (video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            try {
+              const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              const code = window.jsQR && window.jsQR(imageData.data, imageData.width, imageData.height);
+              if (code?.data) { onResult(code.data); return; }
+            } catch(e) {}
+          }
+          rafRef.current = requestAnimationFrame(tick);
+        };
+        rafRef.current = requestAnimationFrame(tick);
+      } catch(e) {
+        setError(e?.name==="NotAllowedError" ? "Camera permission was denied. Enable camera access in your browser/device settings to scan." : "Couldn't access the camera on this device.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop());
+    };
+  },[]);
+
+  return (
+    <div style={{ position:"fixed",inset:0,background:"#000",zIndex:500,display:"flex",flexDirection:"column" }}>
+      <div style={{ position:"relative",flex:1,overflow:"hidden" }}>
+        <video ref={videoRef} muted playsInline style={{ width:"100%",height:"100%",objectFit:"cover" }}/>
+        <canvas ref={canvasRef} style={{ display:"none" }}/>
+        {ready && !error && (
+          <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center" }}>
+            <div style={{ width:230,height:230,border:`3px solid ${T.green}`,borderRadius:18,boxShadow:"0 0 0 2000px rgba(0,0,0,0.4)" }}/>
+          </div>
+        )}
+        {error && (
+          <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"#0a0d10" }}>
+            <div style={{ textAlign:"center" }}>
+              <i className="fas fa-video-slash" style={{ fontSize:40,color:T.red,marginBottom:14,display:"block" }}/>
+              <div style={{ color:"#fff",fontSize:14,lineHeight:1.6 }}>{error}</div>
+            </div>
+          </div>
+        )}
+        {!ready && !error && (
+          <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center" }}><Spinner/></div>
+        )}
+      </div>
+      <div style={{ padding:"20px 20px calc(20px + env(safe-area-inset-bottom, 0px))",background:"#0a0d10" }}>
+        {hint && <div style={{ textAlign:"center",color:"rgba(255,255,255,0.6)",fontSize:13,marginBottom:14 }}>{hint}</div>}
+        <button onClick={onClose} className="tap" style={{ width:"100%",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"15px",fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 function MapScreen({ go,stations,setStation }) {
   const mapRef  = useRef(null);
   const mapInst = useRef(null);
@@ -902,7 +999,7 @@ function Home({ go,stations,setStation,user,onMenu }) {
   const [balVisible,setBalVisible]=useState(true);
 
   const quickActions=[
-    { icon:"fa-qrcode",label:"Scan to Charge",screen:"qr" },
+    { icon:"fa-qrcode",label:"Scan to Charge",screen:"scan" },
     { icon:"fa-map-marker-alt",label:"Find Stations",screen:"map" },
     { icon:"fa-calendar",label:"My Bookings",screen:"bookings" },
     { icon:"fa-list-alt",label:"Charging History",screen:"sessions" },
@@ -1647,6 +1744,58 @@ function Booking({ go,station,vehicle,user,setBooking }) {
   );
 }
 
+
+// Customer-facing scan flow: opens the camera, decodes a charger QR code
+// (format "ECOCHARGER:<charger_id>" — what's physically posted at the charger),
+// looks up which station that charger belongs to, and routes straight into
+// the Charge Now flow for that station/charger. Falls back to showing the
+// user's own pass if they'd rather not scan right now.
+function ScanToCharge({ go,stations,setStation,setBookingMode,setSelectedCharger }) {
+  const [error,setError]=useState("");
+  const [looking,setLooking]=useState(false);
+
+  const onScanResult=async(text)=>{
+    setLooking(true);setError("");
+    try {
+      const chargerId = text.startsWith("ECOCHARGER:") ? text.slice("ECOCHARGER:".length).trim() : text.trim();
+      let stationId=null, chargerRow=null;
+      if (SUPABASE_URL) {
+        const res=await fetch(`${SUPABASE_URL}/rest/v1/chargers?id=eq.${chargerId}&select=*`,
+          { headers:{ apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}` }});
+        const data=await res.json();
+        if (data?.[0]) { chargerRow=data[0]; stationId=data[0].station_id; }
+      }
+      const matchedStation = stationId!=null ? stations.find(s=>String(s.id)===String(stationId)) : null;
+      if (!matchedStation) {
+        setError(`Charger "${chargerId}" isn't linked to a known station yet. Try entering it manually on the station's Detail screen instead.`);
+        setLooking(false);
+        return;
+      }
+      setStation(matchedStation);
+      setSelectedCharger?.({ ...(chargerRow||{ id:chargerId }), station:matchedStation });
+      setBookingMode?.("now");
+      go("vehicles");
+    } catch(e) {
+      setError("Couldn't read that code. Try again or use your charging pass instead.");
+      setLooking(false);
+    }
+  };
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:"#000" }}>
+      <QRScanner onResult={onScanResult} onClose={()=>go("home")} hint={looking?"Looking up charger…":"Scan the QR code at the charger to start"}/>
+      {error&&(
+        <div style={{ position:"fixed",left:16,right:16,bottom:"calc(96px + env(safe-area-inset-bottom, 0px))",zIndex:600,background:"rgba(20,10,10,0.95)",border:`1px solid ${T.red}55`,borderRadius:14,padding:"14px 16px" }}>
+          <div style={{ color:"#fff",fontSize:13,lineHeight:1.6,marginBottom:10 }}>{error}</div>
+          <div style={{ display:"flex",gap:8 }}>
+            <button onClick={()=>setError("")} className="tap" style={{ flex:1,background:"rgba(255,255,255,0.12)",border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit" }}>Try Again</button>
+            <button onClick={()=>go("qr")} className="tap" style={{ flex:1,background:T.green,border:"none",borderRadius:10,padding:"10px",fontSize:13,fontWeight:700,color:"#04130a",cursor:"pointer",fontFamily:"inherit" }}>Show My Pass</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ChargeNow({ go,station,vehicle,user,setBooking }) {
   const s=station||STATIONS[0];
@@ -2410,9 +2559,11 @@ function QRScreen({ go, booking, setBooking, user }) {
           {[
             { label:"Station",  value:b.station,     icon:"fa-map-marker-alt" },
             { label:"Vehicle",  value:b.vehicle,      icon:"fa-car"            },
-            { label:"Duration", value:`${b.duration_min} min`, icon:"fa-hourglass-half" },
-            { label:"Amount",   value:`GH₵${b.amount}`, icon:"fa-money-bill-alt" },
-            { label:"Payment",  value:b.pay_method==="now"?"Charged on charge start":"Pay on Arrival", icon:"fa-credit-card" },
+            ...(b.booking_mode==="now"
+              ? [{ label:"Billing", value:"Metered — pay per kWh used", icon:"fa-bolt" }]
+              : [{ label:"Duration", value:`${b.duration_min} min`, icon:"fa-hourglass-half" },
+                 { label:"Amount",   value:`GH₵${b.amount}`, icon:"fa-money-bill-alt" }]),
+            { label:"Payment",  value:b.pay_method==="wallet"||b.pay_method==="now"?"Charged from wallet":"Pay on Arrival", icon:"fa-credit-card" },
           ].map(r=>(
             <div key={r.label} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,paddingBottom:10,borderBottom:`1px solid rgba(255,255,255,0.05)` }}>
               <div style={{ display:"flex",alignItems:"center",gap:8 }}>
@@ -2450,11 +2601,13 @@ function Verify({ go }) {
   const [result,setResult]=useState(null);
   const [loading,setLoad]=useState(false);
   const [error,setErr]=useState("");
-  const verify=async()=>{
-    if (!code.trim()) { setErr("Enter a booking reference");return; }
+  const [scanning,setScanning]=useState(false);
+  const verify=async(overrideCode)=>{
+    const raw0=(overrideCode??code).trim();
+    if (!raw0) { setErr("Enter a booking reference");return; }
     setLoad(true);setErr("");setResult(null);
     try {
-      const raw=code.trim().toUpperCase();
+      const raw=raw0.toUpperCase();
       const ref=raw.includes("|")?raw.split("|")[0].trim():raw;
       const data=await sb(`bookings?reference=eq.${ref}&select=*`);
       if (!data||data.length===0) { setErr(`Booking "${ref}" not found.`); }
@@ -2466,14 +2619,20 @@ function Verify({ go }) {
     } catch(e) { setErr("Verification failed. Check internet connection."); }
     setLoad(false);
   };
+  const onScanResult=(text)=>{
+    setScanning(false);
+    setCode(text);
+    verify(text);
+  };
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      {scanning && <QRScanner onResult={onScanResult} onClose={()=>setScanning(false)} hint="Point the camera at the customer's QR code"/>}
       <Header title="Verify Booking" sub="Attendant Portal" onBack={()=>go("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 100px" }}>
         <div style={{ background:T.card,borderRadius:16,padding:"18px",marginBottom:14,border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:6 }}><i className="fas fa-qrcode" style={{ marginRight:8,color:T.green }}/> Scan QR Code</div>
           <div style={{ fontSize:12,color:T.muted,marginBottom:14 }}>Use camera to scan booking QR</div>
-          <button className="tap" style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10 }}>
+          <button onClick={()=>setScanning(true)} className="tap" style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10 }}>
             <i className="fas fa-camera"/> Open Camera
           </button>
         </div>
@@ -2799,7 +2958,7 @@ function Bookings({ go,booking,user }) {
                       {cd.active&&<div style={{ textAlign:"center",marginTop:12 }}><div style={{ fontWeight:900,fontSize:36,color:T.green,fontFamily:"monospace",letterSpacing:2 }}>{cd.label}</div><div style={{ fontSize:11,color:T.muted,marginTop:4 }}>charging in progress</div></div>}
                     </div>
                   )}
-                  {[{ label:"Reference",value:b.reference },{ label:"Amount",value:`GH₵${b.amount}` },{ label:"Payment",value:b.pay_method==="now"?"Charged on charge start":"Pay on Arrival" },{ label:"Water",value:"20L included 💧" }].map(r=>(
+                  {[{ label:"Reference",value:b.reference },{ label:"Amount",value:b.booking_mode==="now"?"Metered — billed per kWh":`GH₵${b.amount}` },{ label:"Payment",value:b.pay_method==="wallet"||b.pay_method==="now"?"Charged from wallet":"Pay on Arrival" },{ label:"Water",value:"20L included 💧" }].map(r=>(
                     <div key={r.label} style={{ display:"flex",justifyContent:"space-between",marginBottom:8,paddingBottom:8,borderBottom:`1px solid rgba(255,255,255,0.06)` }}>
                       <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
                       <span style={{ color:T.text,fontWeight:600,fontSize:13 }}>{r.value}</span>
@@ -4996,6 +5155,7 @@ function AppInner() {
     booking:<Booking {...props}/>,
     bookings:<Bookings {...props}/>,
     qr:<QRScreen {...props}/>,
+    scan:<ScanToCharge {...props}/>,
     verify:<Verify {...props}/>,
     profile:<Profile {...props}/>,
     about:<About {...props}/>
