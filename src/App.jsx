@@ -5197,11 +5197,1148 @@ function AdminDashboard({ go, user }) {
 }
 
 // ── MY VEHICLES SCREEN ───────────────────────────────────────
-const DEMO_VEHICLES = [
-  { id:1, make:"Tesla",   model:"Model 3",        type:"Electric Sedan", plate:"GR · 1234 · 21", battery:82, range:123, maxRange:560, capacity:75,  vehicleType:"BEV", primary:true,  color:"#1a1a1a" },
-  { id:2, make:"Hyundai", model:"Kona Electric",  type:"Electric SUV",   plate:"GV · 5678 · 23", battery:64, range:98,  maxRange:484, capacity:64,  vehicleType:"BEV", primary:false, color:"#e8e8e8" },
-  { id:3, make:"Nissan",  model:"Leaf",           type:"Electric Hatch", plate:"GW · 9101 · 22", battery:47, range:71,  maxRange:385, capacity:40,  vehicleType:"BEV", primary:false, color:"#2c3e50" },
+// ── VEHICLE DATABASE SERVICE ──────────────────────────────────
+// Clean service abstraction — swap mock data for a real API later.
+const VEHICLE_TYPES = [
+  { value:"Electric Car",        icon:"fa-car",          label:"Electric Car"        },
+  { value:"Electric Motorcycle", icon:"fa-motorcycle",   label:"Electric Motorcycle" },
+  { value:"Electric Tricycle",   icon:"fa-truck-pickup", label:"Electric Tricycle"   },
+  { value:"Electric Bus",        icon:"fa-bus",          label:"Electric Bus"        },
+  { value:"Electric Van",        icon:"fa-shuttle-van",  label:"Electric Van"        },
+  { value:"Other",               icon:"fa-bolt",         label:"Other EV"            },
 ];
+
+const CONNECTOR_TYPES = ["CCS2","CHAdeMO","Type 2 (AC)","Type 1 (J1772)","GB/T DC","GB/T AC","Tesla","CEE 3-pin","Schuko","Other"];
+
+// ── CARSXE API KEY ────────────────────────────────────────────
+// Set VITE_CARSXE_API_KEY in your Vercel environment variables.
+const CARSXE_KEY = import.meta.env.VITE_CARSXE_API_KEY || "";
+
+// ── ECOCHARGE VEHICLE REGISTRY ────────────────────────────────
+// Tier 1: CarsXE API (live lookup)
+// Tier 2: EcoCharge local registry (our growing African EV database)
+// Tier 3: Fallback EV_DATABASE (always-available seed data)
+//
+// This registry grows over time. When a user registers a vehicle
+// not found in any source, it goes to admin review and gets added
+// here — building EcoCharge's proprietary African EV database.
+
+const ECOCHARGE_REGISTRY = {
+  // ── African & Asian market EVs (not in global APIs) ──────────
+  "Spiro": {
+    "Ace": { years:[2022,2023,2024], battery:1.8,  connector:"Proprietary", range:80,  maxPower:1.5,  type:"Electric Motorcycle", region:"Africa" },
+    "Kabo": { years:[2023,2024],     battery:2.5,  connector:"Proprietary", range:100, maxPower:2.0,  type:"Electric Motorcycle", region:"Africa" },
+  },
+  "Wahu": {
+    "E-Bike Pro":  { years:[2023,2024], battery:0.9, connector:"Proprietary", range:60, maxPower:0.5, type:"Electric Motorcycle", region:"Ghana"  },
+    "Cargo Bike":  { years:[2023,2024], battery:1.5, connector:"Proprietary", range:80, maxPower:0.8, type:"Electric Van",         region:"Ghana"  },
+  },
+  "BYD": {
+    "Dolphin":   { years:[2021,2022,2023,2024], battery:44,  connector:"CCS2",    range:340, maxPower:60,  type:"Electric Car", region:"Global" },
+    "Atto 3":    { years:[2022,2023,2024],       battery:60,  connector:"CCS2",    range:420, maxPower:88,  type:"Electric Car", region:"Global" },
+    "Han EV":    { years:[2021,2022,2023,2024], battery:85,  connector:"CCS2",    range:605, maxPower:120, type:"Electric Car", region:"Global" },
+    "Seal":      { years:[2022,2023,2024],       battery:82,  connector:"CCS2",    range:570, maxPower:150, type:"Electric Car", region:"Global" },
+    "Tang EV":   { years:[2021,2022,2023],       battery:108, connector:"CCS2",    range:505, maxPower:110, type:"Electric Car", region:"Global" },
+    "King (Bus)":{ years:[2022,2023,2024],       battery:374, connector:"CCS2",    range:250, maxPower:180, type:"Electric Bus", region:"Global" },
+  },
+  "Mahindra": {
+    "Treo":      { years:[2019,2020,2021,2022,2023,2024], battery:7.37, connector:"Proprietary", range:170, maxPower:8,   type:"Electric Tricycle", region:"Africa/Asia" },
+    "Treo Zor":  { years:[2020,2021,2022,2023,2024],      battery:10.24,connector:"Proprietary", range:195, maxPower:12,  type:"Electric Tricycle", region:"Africa/Asia" },
+    "XUV400":    { years:[2023,2024],                      battery:39.4, connector:"CCS2",        range:456, maxPower:50,  type:"Electric Car",      region:"Global"      },
+  },
+  "BAIC": {
+    "EC Series": { years:[2019,2020,2021,2022,2023], battery:32,  connector:"GB/T DC", range:310, maxPower:40,  type:"Electric Car", region:"Africa/Asia" },
+    "EU5":       { years:[2020,2021,2022,2023],       battery:53,  connector:"GB/T DC", range:416, maxPower:60,  type:"Electric Car", region:"Africa/Asia" },
+    "X55":       { years:[2022,2023,2024],             battery:63,  connector:"GB/T DC", range:500, maxPower:80,  type:"Electric Car", region:"Africa/Asia" },
+  },
+  "Changan": {
+    "Lumin":     { years:[2022,2023,2024], battery:20,  connector:"GB/T DC", range:301, maxPower:30, type:"Electric Car", region:"Africa/Asia" },
+    "Deepal L07":{ years:[2023,2024],      battery:82,  connector:"CCS2",    range:520, maxPower:120,type:"Electric Car", region:"Global"      },
+  },
+  "DFSK": {
+    "EC31 (Van)":{ years:[2020,2021,2022,2023], battery:42, connector:"GB/T DC", range:300, maxPower:40, type:"Electric Van", region:"Africa" },
+  },
+  "Foton": {
+    "AUV Bus":   { years:[2021,2022,2023,2024], battery:180, connector:"GB/T DC", range:300, maxPower:120, type:"Electric Bus", region:"Africa" },
+  },
+  "Sinotruk": {
+    "Electric Truck": { years:[2022,2023,2024], battery:200, connector:"GB/T DC", range:250, maxPower:150, type:"Electric Van", region:"Africa" },
+  },
+  "Volta": {
+    "Zero (Truck)": { years:[2022,2023,2024], battery:160, connector:"CCS2", range:200, maxPower:150, type:"Electric Van", region:"Global" },
+  },
+  "Ampersand": {
+    "Moto":      { years:[2021,2022,2023,2024], battery:2.4, connector:"Proprietary", range:100, maxPower:2.0, type:"Electric Motorcycle", region:"Africa" },
+  },
+  "BasiGo": {
+    "E7 Bus":    { years:[2022,2023,2024], battery:100, connector:"CCS2", range:200, maxPower:60, type:"Electric Bus", region:"Africa" },
+  },
+  "Roam": {
+    "Air":       { years:[2022,2023,2024], battery:3.5, connector:"Proprietary", range:130, maxPower:3.0, type:"Electric Motorcycle", region:"Africa" },
+  },
+  "Mogo": {
+    "Classic":   { years:[2023,2024], battery:1.6, connector:"Proprietary", range:70, maxPower:1.2, type:"Electric Motorcycle", region:"Ghana" },
+  },
+  "Local Tricycle": {
+    "Standard Model":  { years:[2020,2021,2022,2023,2024], battery:5,  connector:"Type 2 (AC)", range:80,  maxPower:3.3, type:"Electric Tricycle", region:"Ghana" },
+    "Heavy Cargo":     { years:[2021,2022,2023,2024],       battery:8,  connector:"Type 2 (AC)", range:100, maxPower:5.0, type:"Electric Tricycle", region:"Ghana" },
+    "Passenger Model": { years:[2022,2023,2024],             battery:6,  connector:"Type 2 (AC)", range:90,  maxPower:4.0, type:"Electric Tricycle", region:"Ghana" },
+  },
+  // ── International EVs (supplement to EV_DATABASE) ────────────
+  "Zeekr": {
+    "001":       { years:[2022,2023,2024], battery:100, connector:"CCS2", range:632, maxPower:200, type:"Electric Car", region:"Global" },
+    "X":         { years:[2023,2024],      battery:66,  connector:"CCS2", range:538, maxPower:150, type:"Electric Car", region:"Global" },
+  },
+  "NIO": {
+    "ET5":       { years:[2022,2023,2024], battery:75,  connector:"CCS2", range:590, maxPower:135, type:"Electric Car", region:"Global" },
+    "ES6":       { years:[2019,2020,2021,2022,2023], battery:100, connector:"CCS2", range:580, maxPower:127, type:"Electric Car", region:"Global" },
+  },
+  "Polestar": {
+    "2":         { years:[2021,2022,2023,2024], battery:82, connector:"CCS2", range:540, maxPower:205, type:"Electric Car", region:"Global" },
+  },
+  "Rivian": {
+    "R1T":       { years:[2021,2022,2023,2024], battery:135, connector:"CCS2", range:499, maxPower:200, type:"Electric Van", region:"Global" },
+  },
+  "Lucid": {
+    "Air":       { years:[2021,2022,2023,2024], battery:118, connector:"CCS2", range:837, maxPower:300, type:"Electric Car", region:"Global" },
+  },
+};
+
+// ── FALLBACK EV DATABASE (always available, no network needed) ──
+const EV_DATABASE = {
+  Tesla:   {
+    models:{
+      "Model 3":    { years:[2019,2020,2021,2022,2023,2024], battery:75,  connector:"CCS2",    range:560, maxPower:250, type:"Electric Car"        },
+      "Model Y":    { years:[2021,2022,2023,2024],           battery:82,  connector:"CCS2",    range:533, maxPower:250, type:"Electric Car"        },
+      "Model S":    { years:[2018,2019,2020,2021,2022,2023], battery:100, connector:"CCS2",    range:652, maxPower:250, type:"Electric Car"        },
+      "Model X":    { years:[2019,2020,2021,2022,2023],      battery:100, connector:"CCS2",    range:560, maxPower:250, type:"Electric Car"        },
+    }
+  },
+  Hyundai: {
+    models:{
+      "Kona Electric": { years:[2019,2020,2021,2022,2023], battery:64,  connector:"CCS2",    range:484, maxPower:77,  type:"Electric Car"        },
+      "IONIQ 5":       { years:[2021,2022,2023,2024],       battery:77,  connector:"CCS2",    range:507, maxPower:220, type:"Electric Car"        },
+      "IONIQ 6":       { years:[2023,2024],                 battery:77,  connector:"CCS2",    range:614, maxPower:230, type:"Electric Car"        },
+    }
+  },
+  Nissan:  {
+    models:{
+      "Leaf":          { years:[2018,2019,2020,2021,2022,2023], battery:40,  connector:"CHAdeMO", range:385, maxPower:50,  type:"Electric Car"        },
+      "Ariya":         { years:[2022,2023,2024],                battery:87,  connector:"CCS2",    range:533, maxPower:130, type:"Electric Car"        },
+    }
+  },
+  BMW:     {
+    models:{
+      "iX3":           { years:[2021,2022,2023,2024], battery:80,  connector:"CCS2", range:461, maxPower:150, type:"Electric Car" },
+      "i4":            { years:[2022,2023,2024],       battery:84,  connector:"CCS2", range:590, maxPower:205, type:"Electric Car" },
+      "iX":            { years:[2022,2023,2024],       battery:111, connector:"CCS2", range:630, maxPower:200, type:"Electric Car" },
+    }
+  },
+  Mercedes:{ models:{ "EQA":{ years:[2021,2022,2023,2024], battery:66,  connector:"CCS2", range:426, maxPower:100, type:"Electric Car" }, "EQC":{ years:[2019,2020,2021,2022], battery:80, connector:"CCS2", range:417, maxPower:110, type:"Electric Car" } } },
+  Volkswagen:{ models:{ "ID.4":{ years:[2021,2022,2023,2024], battery:77, connector:"CCS2", range:520, maxPower:135, type:"Electric Car" }, "ID.3":{ years:[2020,2021,2022,2023], battery:58, connector:"CCS2", range:426, maxPower:100, type:"Electric Car" } } },
+  Kia:     { models:{ "EV6":{ years:[2022,2023,2024], battery:77, connector:"CCS2", range:528, maxPower:240, type:"Electric Car" }, "Niro EV":{ years:[2019,2020,2021,2022,2023], battery:64, connector:"CCS2", range:460, maxPower:80, type:"Electric Car" } } },
+  Audi:    { models:{ "e-tron":{ years:[2019,2020,2021,2022,2023], battery:95, connector:"CCS2", range:441, maxPower:150, type:"Electric Car" }, "Q4 e-tron":{ years:[2021,2022,2023,2024], battery:77, connector:"CCS2", range:520, maxPower:135, type:"Electric Car" } } },
+  Other:   { models:{ "Custom EV":{ years:[2020,2021,2022,2023,2024], battery:40, connector:"Type 2 (AC)", range:300, maxPower:50, type:"Other" } } },
+};
+
+const VEHICLE_TYPE_ICON = {
+  "Electric Car":        "fa-car",
+  "Electric Motorcycle": "fa-motorcycle",
+  "Electric Tricycle":   "fa-truck-pickup",
+  "Electric Bus":        "fa-bus",
+  "Electric Van":        "fa-shuttle-van",
+  "Other":               "fa-bolt",
+};
+
+// ── 3-TIER VEHICLE LOOKUP ─────────────────────────────────────
+// Returns { source, make, model, year, battery, connector, range,
+//           maxPower, type, imageUrl, region, rawApiData }
+
+// Tier 1: CarsXE API live lookup
+const lookupCarsXE = async (make, model, year) => {
+  if (!CARSXE_KEY) return null;
+  try {
+    // CarsXE make/model search
+    const makeSlug = encodeURIComponent(make.toLowerCase());
+    const modelSlug = encodeURIComponent(model.toLowerCase());
+    const res = await fetch(
+      `https://api.carsxe.com/specs?key=${CARSXE_KEY}&make=${makeSlug}&model=${modelSlug}&year=${year}`,
+      { headers: { "Accept": "application/json" } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || data.error) return null;
+
+    // CarsXE image lookup (separate endpoint)
+    let imageUrl = null;
+    try {
+      const imgRes = await fetch(
+        `https://api.carsxe.com/images?key=${CARSXE_KEY}&make=${makeSlug}&model=${modelSlug}&year=${year}`,
+        { headers: { "Accept": "application/json" } }
+      );
+      if (imgRes.ok) {
+        const imgData = await imgRes.json();
+        imageUrl = imgData?.images?.[0]?.url || null;
+      }
+    } catch(e) {}
+
+    // Normalise CarsXE response fields
+    const specs = data.specs || data;
+    return {
+      source:     "carsxe",
+      make,
+      model,
+      year,
+      battery:    parseFloat(specs.battery_capacity_kwh || specs.battery || 0) || null,
+      connector:  specs.charging_connector || specs.connector_type || null,
+      range:      parseFloat(specs.range_km || specs.range || 0) || null,
+      maxPower:   parseFloat(specs.max_charging_power_kw || specs.max_power || 0) || null,
+      type:       specs.body_type || specs.vehicle_type || "Electric Car",
+      imageUrl,
+      rawApiData: data,
+    };
+  } catch(e) { return null; }
+};
+
+// Tier 2: EcoCharge Registry (local African EV database)
+const lookupRegistry = (make, model, year) => {
+  const mfr = ECOCHARGE_REGISTRY[make];
+  if (!mfr) return null;
+  const m = mfr[model];
+  if (!m) return null;
+  if (year && !m.years.includes(parseInt(year))) return null;
+  return { source:"ecocharge_registry", make, model, year, ...m, imageUrl:null };
+};
+
+// Tier 3: Local fallback EV_DATABASE
+const lookupLocal = (make, model, year) => {
+  const mfr = EV_DATABASE[make];
+  if (!mfr) return null;
+  const m = mfr.models?.[model];
+  if (!m) return null;
+  return { source:"local", make, model, year, battery:m.battery, connector:m.connector,
+    range:m.range, maxPower:m.maxPower, type:m.type, imageUrl:null };
+};
+
+// Master lookup — tries all 3 tiers in order, returns first match
+const getVehicleInfo = async (make, model, year) => {
+  if (!make || !model) return null;
+  // 1. CarsXE API
+  const api = await lookupCarsXE(make, model, year);
+  if (api && (api.battery || api.range)) return api;
+  // 2. EcoCharge Registry
+  const reg = lookupRegistry(make, model, year);
+  if (reg) return reg;
+  // 3. Local DB
+  const local = lookupLocal(make, model, year);
+  if (local) return local;
+  return null;
+};
+
+// Submit unknown vehicle to admin review queue (builds the registry over time)
+const submitVehicleToRegistry = async (vehicle) => {
+  if (!SUPABASE_URL) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/vehicle_registry_submissions`, {
+      method: "POST",
+      headers: { apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json", Prefer:"return=minimal" },
+      body: JSON.stringify({
+        make: vehicle.manufacturer,
+        model: vehicle.model,
+        year: vehicle.year,
+        vehicle_type: vehicle.vehicle_type,
+        battery_capacity: vehicle.battery_capacity,
+        connector_type: vehicle.connector_type,
+        estimated_range: vehicle.estimated_range,
+        max_charging_power: vehicle.max_charging_power,
+        submitted_at: new Date().toISOString(),
+        status: "pending_review",
+      }),
+    });
+  } catch(e) {}
+};
+
+// ── COMBINED MANUFACTURER LIST ────────────────────────────────
+const getManufacturers = () => {
+  const fromLocal    = Object.keys(EV_DATABASE);
+  const fromRegistry = Object.keys(ECOCHARGE_REGISTRY);
+  return [...new Set([...fromLocal, ...fromRegistry])].sort();
+};
+
+const getModels = (make) => {
+  const local    = EV_DATABASE[make]    ? Object.keys(EV_DATABASE[make].models)    : [];
+  const registry = ECOCHARGE_REGISTRY[make] ? Object.keys(ECOCHARGE_REGISTRY[make]) : [];
+  return [...new Set([...local, ...registry])].sort();
+};
+
+const getYears = (make, model) => {
+  const localInfo    = EV_DATABASE[make]?.models?.[model];
+  const registryInfo = ECOCHARGE_REGISTRY[make]?.[model];
+  const years = [
+    ...(localInfo    ? localInfo.years    : []),
+    ...(registryInfo ? registryInfo.years : []),
+  ];
+  return years.length ? [...new Set(years)].sort((a,b)=>b-a)
+    : Array.from({length:10},(_,i)=>2024-i);
+};
+
+// Supabase vehicles table helpers
+const saveVehicle = async (vehicle) => {
+  if (!SUPABASE_URL) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/user_vehicles`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type":"application/json", Prefer:"return=representation" },
+      body: JSON.stringify(vehicle),
+    });
+    const data = await res.json();
+    return Array.isArray(data) ? data[0] : null;
+  } catch(e) { return null; }
+};
+
+const updateVehicle = async (id, updates) => {
+  if (!SUPABASE_URL) return false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/user_vehicles?id=eq.${id}`, {
+      method: "PATCH",
+      headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type":"application/json", Prefer:"return=minimal" },
+      body: JSON.stringify(updates),
+    });
+    return res.ok;
+  } catch(e) { return false; }
+};
+
+const deleteVehicle = async (id) => {
+  if (!SUPABASE_URL) return false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/user_vehicles?id=eq.${id}`, {
+      method: "DELETE",
+      headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` },
+    });
+    return res.ok;
+  } catch(e) { return false; }
+};
+
+const loadUserVehicles = async (userId) => {
+  if (!SUPABASE_URL || !userId) return [];
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/user_vehicles?user_id=eq.${userId}&order=created_at.asc`, {
+      headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` },
+    });
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch(e) { return []; }
+};
+
+const loadVehicleStats = async (userId, vehicleId) => {
+  if (!SUPABASE_URL) return { sessions:0, kwh:0, cost:0 };
+  try {
+    let url = `${SUPABASE_URL}/rest/v1/charging_sessions?user_id=eq.${userId}&status=eq.Completed&select=energy_kwh,cost_total`;
+    if (vehicleId) url += `&vehicle_id=eq.${vehicleId}`;
+    const res = await fetch(url, { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` } });
+    const data = await res.json();
+    if (!Array.isArray(data)) return { sessions:0, kwh:0, cost:0 };
+    const kwh  = data.reduce((a,s)=>a+(s.energy_kwh||0),0);
+    const cost = data.reduce((a,s)=>a+(s.cost_total||0),0);
+    return { sessions:data.length, kwh, cost };
+  } catch(e) { return { sessions:0, kwh:0, cost:0 }; }
+};
+
+// ── ADD / EDIT VEHICLE FORM ───────────────────────────────────
+function VehicleForm({ go, user, editVehicle=null, onSaved }) {
+  const isEdit = !!editVehicle;
+  const [step, setStep] = useState(1); // 1=type, 2=details, 3=specs
+
+  const [nickname,     setNickname]     = useState(editVehicle?.nickname     || "");
+  const [vehicleType,  setVehicleType]  = useState(editVehicle?.vehicle_type || "");
+  const [manufacturer, setManufacturer] = useState(editVehicle?.manufacturer || "");
+  const [model,        setModel]        = useState(editVehicle?.model        || "");
+  const [year,         setYear]         = useState(editVehicle?.year         || "");
+  const [battery,      setBattery]      = useState(editVehicle?.battery_capacity || "");
+  const [connector,    setConnector]    = useState(editVehicle?.connector_type   || "");
+  const [range,        setRange]        = useState(editVehicle?.estimated_range  || "");
+  const [maxPower,     setMaxPower]     = useState(editVehicle?.max_charging_power || "");
+  const [regNum,       setRegNum]       = useState(editVehicle?.registration_number || "");
+  const [color,        setColor]        = useState(editVehicle?.color        || "#22C55E");
+  const [isDefault,    setIsDefault]    = useState(editVehicle?.is_default   || false);
+  const [imageUrl,     setImageUrl]     = useState(editVehicle?.image_url    || "");
+
+  const [saving,  setSaving]  = useState(false);
+  const [error,   setError]   = useState("");
+  const [autoFilled, setAutoFilled] = useState(false);
+
+  const models = getModels(manufacturer);
+  const years  = getYears(manufacturer, model);
+
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupSource,  setLookupSource]  = useState(null); // "carsxe"|"ecocharge_registry"|"local"|null
+  const [lookupFailed,  setLookupFailed]  = useState(false);
+
+  const SOURCE_LABELS = {
+    carsxe:             { label:"CarsXE API",           color:T.blue,   icon:"fa-cloud"   },
+    ecocharge_registry: { label:"EcoCharge Registry",   color:T.green,  icon:"fa-leaf"    },
+    local:              { label:"EcoCharge Local DB",   color:T.muted,  icon:"fa-database"},
+  };
+
+  // Auto-fill when manufacturer+model+year selected
+  useEffect(()=>{
+    if (!manufacturer || !model || !year) return;
+    if (isEdit) return;
+    setLookupLoading(true);
+    setLookupSource(null);
+    setLookupFailed(false);
+    getVehicleInfo(manufacturer, model, year).then(info=>{
+      setLookupLoading(false);
+      if (info) {
+        if (info.battery)   setBattery(String(info.battery));
+        if (info.connector) setConnector(info.connector);
+        if (info.range)     setRange(String(info.range));
+        if (info.maxPower)  setMaxPower(String(info.maxPower));
+        if (info.type)      setVehicleType(info.type);
+        if (info.imageUrl)  setImageUrl(info.imageUrl);
+        setLookupSource(info.source);
+        setAutoFilled(true);
+        setTimeout(()=>setAutoFilled(false), 4000);
+        // Submit to registry if from API so we grow our database
+        if (info.source === "carsxe") {
+          submitVehicleToRegistry({ manufacturer, model, year, vehicle_type:info.type,
+            battery_capacity:info.battery, connector_type:info.connector,
+            estimated_range:info.range, max_charging_power:info.maxPower });
+        }
+      } else {
+        setLookupFailed(true);
+        // Submit unknown vehicle to admin review queue
+        submitVehicleToRegistry({ manufacturer, model, year, vehicle_type:vehicleType });
+      }
+    });
+  }, [manufacturer, model, year]);
+
+  // Reset model/year when manufacturer changes
+  useEffect(()=>{ if (!isEdit) { setModel(""); setYear(""); setBattery(""); setConnector(""); setRange(""); setMaxPower(""); } },[manufacturer]);
+  useEffect(()=>{ if (!isEdit) { setYear(""); } },[model]);
+
+  const handleSave = async () => {
+    if (!nickname.trim())    { setError("Please enter a vehicle nickname"); return; }
+    if (!vehicleType)        { setError("Please select a vehicle type"); return; }
+    if (!manufacturer.trim()){ setError("Please enter the manufacturer"); return; }
+    if (!model.trim())       { setError("Please enter the model"); return; }
+    if (!year)               { setError("Please select the year"); return; }
+
+    setSaving(true); setError("");
+    const payload = {
+      user_id: user?.id || "demo",
+      nickname: nickname.trim(),
+      vehicle_type: vehicleType,
+      manufacturer: manufacturer.trim(),
+      model: model.trim(),
+      year: parseInt(year),
+      battery_capacity: parseFloat(battery) || null,
+      connector_type: connector || null,
+      estimated_range: parseFloat(range) || null,
+      max_charging_power: parseFloat(maxPower) || null,
+      registration_number: regNum.trim() || null,
+      color: color || "#22C55E",
+      image_url: imageUrl || null,
+      is_default: isDefault,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    let saved;
+    if (isEdit) {
+      payload.updated_at = new Date().toISOString();
+      saved = await updateVehicle(editVehicle.id, payload);
+      if (saved) onSaved?.({ ...editVehicle, ...payload });
+    } else {
+      const result = await saveVehicle(payload);
+      if (result) {
+        onSaved?.(result);
+      } else {
+        // Offline fallback — generate a local id
+        onSaved?.({ ...payload, id: `local-${Date.now()}` });
+      }
+    }
+    setSaving(false);
+    go("myvehicles");
+  };
+
+  const inp = (label, val, set, type="text", placeholder="", note="") => (
+    <div style={{ marginBottom:14 }}>
+      <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>{label}</div>
+      <input type={type} placeholder={placeholder} value={val} onChange={e=>{ set(e.target.value); setError(""); }}
+        style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px 14px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+      {note&&<div style={{ fontSize:10,color:T.muted,marginTop:4 }}>{note}</div>}
+    </div>
+  );
+
+  const sel = (label, val, set, options, placeholder="Select…") => (
+    <div style={{ marginBottom:14 }}>
+      <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>{label}</div>
+      <div style={{ position:"relative" }}>
+        <select value={val} onChange={e=>{ set(e.target.value); setError(""); }}
+          style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px 36px 13px 14px",color:val?T.text:T.muted,fontSize:14,fontFamily:"inherit",appearance:"none",WebkitAppearance:"none" }}>
+          <option value="" style={{ color:T.muted }}>{placeholder}</option>
+          {options.map(o=>( <option key={o.value||o} value={o.value||o} style={{ color:"#000" }}>{o.label||o}</option> ))}
+        </select>
+        <i className="fas fa-chevron-down" style={{ position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:12,pointerEvents:"none" }}/>
+      </div>
+    </div>
+  );
+
+  const colorSwatches = ["#22C55E","#38bdf8","#f87171","#fbbf24","#a78bfa","#f97316","#ffffff","#1a1a1a","#2c3e50","#e8e8e8"];
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title={isEdit?"Edit Vehicle":"Add Vehicle"} sub={isEdit?`Editing ${editVehicle.nickname}`:"Register your electric vehicle"} onBack={()=>go("myvehicles")}/>
+
+      {/* Step indicator */}
+      <div style={{ display:"flex",gap:0,padding:"12px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0 }}>
+        {["Vehicle","Details","Specs"].map((s,i)=>(
+          <div key={s} style={{ flex:1,display:"flex",alignItems:"center" }}>
+            <div style={{ display:"flex",flexDirection:"column",alignItems:"center",flex:1 }}>
+              <div style={{ width:28,height:28,borderRadius:"50%",background:step>i+1?T.green:step===i+1?T.green:"rgba(255,255,255,0.1)",border:`2px solid ${step>=i+1?T.green:T.border}`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:4 }}>
+                {step>i+1
+                  ? <i className="fas fa-check" style={{ fontSize:11,color:"#000" }}/>
+                  : <span style={{ fontSize:11,fontWeight:700,color:step===i+1?"#000":T.muted }}>{i+1}</span>
+                }
+              </div>
+              <span style={{ fontSize:9,fontWeight:600,color:step>=i+1?T.green:T.muted,textTransform:"uppercase",letterSpacing:0.4 }}>{s}</span>
+            </div>
+            {i<2&&<div style={{ width:24,height:1,background:step>i+1?T.green:T.border,flexShrink:0,marginBottom:16 }}/>}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 100px" }}>
+
+        {/* Step 1: Vehicle type & identity */}
+        {step===1&&(
+          <>
+            <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:14 }}>What type of vehicle?</div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:20 }}>
+              {VEHICLE_TYPES.map(vt=>(
+                <button key={vt.value} onClick={()=>setVehicleType(vt.value)} className="tap"
+                  style={{ background:vehicleType===vt.value?`${T.green}18`:T.card,border:`2px solid ${vehicleType===vt.value?T.green:T.border}`,borderRadius:14,padding:"14px 8px",display:"flex",flexDirection:"column",alignItems:"center",gap:8,cursor:"pointer",fontFamily:"inherit",transition:"all .15s" }}>
+                  <i className={`fas ${vt.icon}`} style={{ fontSize:22,color:vehicleType===vt.value?T.green:T.muted }}/>
+                  <span style={{ fontSize:10,fontWeight:700,color:vehicleType===vt.value?T.green:T.muted,textAlign:"center",lineHeight:1.3 }}>{vt.label}</span>
+                  {vehicleType===vt.value&&<div style={{ width:8,height:8,borderRadius:"50%",background:T.green }}/>}
+                </button>
+              ))}
+            </div>
+
+            {inp("Vehicle Nickname *", nickname, setNickname, "text", "e.g. My Green Tesla", "A friendly name to identify this vehicle")}
+
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Vehicle Color (optional)</div>
+              <div style={{ display:"flex",gap:10,flexWrap:"wrap" }}>
+                {colorSwatches.map(c=>(
+                  <button key={c} onClick={()=>setColor(c)} className="tap"
+                    style={{ width:32,height:32,borderRadius:"50%",background:c,border:`3px solid ${color===c?T.green:"transparent"}`,cursor:"pointer",boxShadow:color===c?`0 0 0 2px ${T.bg},0 0 0 4px ${T.green}`:"none",transition:"all .15s" }}/>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display:"flex",alignItems:"center",gap:12,padding:"14px 16px",background:T.card,borderRadius:14,border:`1px solid ${T.border}`,marginBottom:6 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:600,fontSize:13,color:T.text }}>Set as Default Vehicle</div>
+                <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Used automatically when starting a charge</div>
+              </div>
+              <div onClick={()=>setIsDefault(v=>!v)} className="tap"
+                style={{ width:44,height:24,borderRadius:12,background:isDefault?T.green:T.border,position:"relative",transition:"background .2s",cursor:"pointer",flexShrink:0 }}>
+                <div style={{ width:18,height:18,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:isDefault?23:3,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,0.3)" }}/>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Step 2: Manufacturer, Model, Year */}
+        {step===2&&(
+          <>
+            {autoFilled&&(
+              <div className="fade" style={{ background:"rgba(34,197,94,0.1)",border:`1px solid rgba(34,197,94,0.3)`,borderRadius:12,padding:"10px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:8 }}>
+                <i className="fas fa-check-circle" style={{ color:T.green,fontSize:14 }}/>
+                <span style={{ fontSize:13,color:T.green,fontWeight:600 }}>Specs found — continue to review them →</span>
+              </div>
+            )}
+            {lookupLoading&&(
+              <div style={{ background:"rgba(56,189,248,0.08)",border:`1px solid rgba(56,189,248,0.2)`,borderRadius:12,padding:"10px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:8 }}>
+                <Spinner/>
+                <span style={{ fontSize:13,color:T.blue }}>Looking up {manufacturer} {model} {year}…</span>
+              </div>
+            )}
+
+            {sel("Manufacturer *", manufacturer, setManufacturer,
+              [...getManufacturers(), "Other"].map(m=>({ value:m, label:m })),
+              "Select or type manufacturer")}
+
+            {manufacturer==="Other" ? (
+              inp("Manufacturer Name *", manufacturer==="Other"?"":manufacturer, setManufacturer, "text", "e.g. BYD, BAIC, Zeekr")
+            ) : (
+              models.length > 0 && sel("Model *", model, setModel,
+                models.map(m=>({ value:m, label:m })), "Select model")
+            )}
+
+            {!EV_DATABASE[manufacturer] && manufacturer && (
+              inp("Model *", model, setModel, "text", "e.g. Atto 3, Han EV")
+            )}
+
+            {(years.length > 0 || (manufacturer && model)) && (
+              years.length > 0
+                ? sel("Year *", year, y=>setYear(y), years.map(y=>({ value:String(y), label:String(y) })), "Select year")
+                : sel("Year *", year, y=>setYear(y),
+                    Array.from({length:10},(_,i)=>({ value:String(2024-i), label:String(2024-i) })),
+                    "Select year")
+            )}
+
+            {inp("Registration Number (optional)", regNum, setRegNum, "text", "e.g. GR-1234-21", "Ghana vehicle registration plate")}
+          </>
+        )}
+
+        {/* Step 3: Battery, Connector, Range, Power */}
+        {step===3&&(
+          <>
+            {/* Lookup status banner */}
+            {lookupLoading&&(
+              <div style={{ background:"rgba(56,189,248,0.08)",border:`1px solid rgba(56,189,248,0.25)`,borderRadius:14,padding:"14px",marginBottom:14,display:"flex",alignItems:"center",gap:10 }}>
+                <Spinner/>
+                <div>
+                  <div style={{ fontWeight:700,fontSize:13,color:T.blue }}>Looking up your vehicle…</div>
+                  <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Checking CarsXE API → EcoCharge Registry → Local DB</div>
+                </div>
+              </div>
+            )}
+
+            {!lookupLoading && lookupSource && (()=>{
+              const src = SOURCE_LABELS[lookupSource] || SOURCE_LABELS.local;
+              return (
+                <div className="fade" style={{ background:T.highlightGrad2,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${T.greenDim}` }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:4 }}>
+                    <i className={`fas ${src.icon}`} style={{ color:src.color,fontSize:13 }}/>
+                    <span style={{ fontWeight:700,fontSize:12,color:src.color,textTransform:"uppercase",letterSpacing:0.4 }}>{src.label}</span>
+                    <span style={{ fontSize:11,color:T.muted }}>· Auto-detected</span>
+                  </div>
+                  <div style={{ fontSize:12,color:T.muted,lineHeight:1.6 }}>
+                    Specs found for your {manufacturer} {model} {year}. Review and adjust if needed.
+                  </div>
+                </div>
+              );
+            })()}
+
+            {!lookupLoading && lookupFailed&&(
+              <div className="fade" style={{ background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.25)",borderRadius:14,padding:"14px",marginBottom:14 }}>
+                <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:6 }}>
+                  <i className="fas fa-search" style={{ color:T.yellow,fontSize:13 }}/>
+                  <span style={{ fontWeight:700,fontSize:13,color:T.yellow }}>Vehicle not found in any database</span>
+                </div>
+                <div style={{ fontSize:12,color:T.muted,lineHeight:1.6,marginBottom:8 }}>
+                  No specs found for <strong style={{ color:T.text }}>{manufacturer} {model} {year}</strong> in CarsXE, our registry, or local database.
+                  Please enter the details manually below. Your entry will be submitted for review to grow the EcoCharge Registry! 🌱
+                </div>
+                <div style={{ display:"flex",alignItems:"center",gap:6,background:"rgba(34,197,94,0.08)",borderRadius:8,padding:"7px 10px" }}>
+                  <i className="fas fa-leaf" style={{ color:T.green,fontSize:11 }}/>
+                  <span style={{ fontSize:11,color:T.green,fontWeight:600 }}>Submitted to EcoCharge Registry for admin review</span>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:4 }}>
+              <div>
+                {inp("Battery Capacity (kWh)", battery, setBattery, "number", "e.g. 75")}
+              </div>
+              <div>
+                {inp("Est. Range (km)", range, setRange, "number", "e.g. 560")}
+              </div>
+            </div>
+
+            {sel("Connector Type", connector, setConnector, CONNECTOR_TYPES.map(c=>({ value:c, label:c })), "Select connector")}
+            {inp("Max Charging Power (kW)", maxPower, setMaxPower, "number", "e.g. 250")}
+
+            {/* Vehicle image section */}
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8 }}>Vehicle Image</div>
+              {imageUrl ? (
+                <div style={{ borderRadius:14,overflow:"hidden",border:`1px solid ${T.border}`,marginBottom:8,position:"relative",height:140 }}>
+                  <img src={imageUrl} alt="vehicle" style={{ width:"100%",height:"100%",objectFit:"cover" }} onError={e=>{ e.target.style.display="none"; }}/>
+                  <button onClick={()=>setImageUrl("")} className="tap"
+                    style={{ position:"absolute",top:8,right:8,background:"rgba(0,0,0,0.6)",border:"none",borderRadius:"50%",width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#fff" }}>
+                    <i className="fas fa-times" style={{ fontSize:12 }}/>
+                  </button>
+                </div>
+              ) : (
+                <div style={{ background:T.card,borderRadius:14,border:`2px dashed ${T.border}`,padding:"24px",textAlign:"center",marginBottom:8 }}>
+                  <i className="fas fa-car" style={{ fontSize:36,color:T.muted,marginBottom:10,display:"block",opacity:0.4 }}/>
+                  <div style={{ fontSize:13,color:T.muted,marginBottom:12 }}>No vehicle image available</div>
+                  <input type="text" placeholder="Paste image URL…" value={imageUrl} onChange={e=>setImageUrl(e.target.value)}
+                    style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 14px",color:T.text,fontSize:13,fontFamily:"inherit",marginBottom:8 }}/>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {error&&(
+          <div style={{ background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.2)",borderRadius:10,padding:"11px 14px",marginBottom:12,color:T.red,fontSize:12,display:"flex",alignItems:"center",gap:8 }}>
+            <i className="fas fa-exclamation-triangle"/> {error}
+          </div>
+        )}
+
+        <div style={{ display:"flex",gap:10 }}>
+          {step>1&&(
+            <button onClick={()=>setStep(s=>s-1)} className="tap"
+              style={{ flex:1,background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"15px",fontSize:15,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+              <i className="fas fa-arrow-left"/> Back
+            </button>
+          )}
+          {step<3 ? (
+            <button onClick={()=>{
+              if (step===1&&!vehicleType){ setError("Please select a vehicle type"); return; }
+              if (step===1&&!nickname.trim()){ setError("Please enter a vehicle nickname"); return; }
+              if (step===2&&!manufacturer){ setError("Please select a manufacturer"); return; }
+              if (step===2&&!model.trim()){ setError("Please enter the model"); return; }
+              if (step===2&&!year){ setError("Please select the year"); return; }
+              setError(""); setStep(s=>s+1);
+            }} className="tap"
+              style={{ flex:2,background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+              Continue <i className="fas fa-arrow-right"/>
+            </button>
+          ) : (
+            <button onClick={handleSave} disabled={saving} className="tap"
+              style={{ flex:2,background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:saving?0.7:1 }}>
+              {saving?<><Spinner/> Saving…</>:<><i className="fas fa-check"/> {isEdit?"Save Changes":"Add Vehicle"}</>}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── VEHICLE DETAIL SCREEN ─────────────────────────────────────
+function VehicleDetail({ go, vehicle, user, onEdit, onDelete, onSetDefault, onStartCharging }) {
+  const [stats,  setStats]  = useState({ sessions:0, kwh:0, cost:0 });
+  const [delConfirm, setDelConfirm] = useState(false);
+  const [sessions, setSessions] = useState([]);
+
+  const v = vehicle || {};
+  const typeIcon = VEHICLE_TYPE_ICON[v.vehicle_type] || "fa-bolt";
+
+  useEffect(()=>{
+    if (!user?.id) return;
+    loadVehicleStats(user.id, v.id).then(setStats);
+    if (SUPABASE_URL) {
+      fetch(`${SUPABASE_URL}/rest/v1/charging_sessions?user_id=eq.${user.id}&status=eq.Completed&order=created_at.desc&limit=5`,
+        { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` }})
+        .then(r=>r.json()).then(d=>{ if(Array.isArray(d)) setSessions(d); }).catch(()=>{});
+    }
+  },[user, v.id]);
+
+  const co2Saved   = (stats.kwh * 0.5).toFixed(1);
+  const waterEarned= (stats.sessions * 20);
+  const costGHS    = ((stats.cost||0)/100).toFixed(2);
+
+  if (!vehicle) return null;
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      {/* Hero */}
+      <div style={{ position:"relative",flexShrink:0,overflow:"hidden" }}>
+        {v.image_url ? (
+          <img src={v.image_url} alt={v.model} style={{ width:"100%",height:220,objectFit:"cover",filter:"brightness(0.6)" }} onError={e=>e.target.style.display="none"}/>
+        ) : (
+          <div style={{ height:220,background:`linear-gradient(135deg,#051a0a,#0a2d12,#061a0a)`,display:"flex",alignItems:"center",justifyContent:"center" }}>
+            <i className={`fas ${typeIcon}`} style={{ fontSize:80,color:T.green,opacity:0.25 }}/>
+          </div>
+        )}
+        <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.3) 0%,rgba(0,0,0,0.7) 100%)" }}/>
+        <div style={{ position:"absolute",top:"calc(16px + env(safe-area-inset-top,34px))",left:14,right:14,display:"flex",justifyContent:"space-between" }}>
+          <button onClick={()=>go("myvehicles")} className="tap" style={{ width:38,height:38,borderRadius:"50%",background:"rgba(0,0,0,0.5)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+            <i className="fas fa-chevron-left" style={{ fontSize:16,color:"#fff" }}/>
+          </button>
+          <div style={{ display:"flex",gap:8 }}>
+            <button onClick={()=>onEdit?.(v)} className="tap" style={{ width:38,height:38,borderRadius:"50%",background:"rgba(0,0,0,0.5)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+              <i className="fas fa-pencil-alt" style={{ fontSize:14,color:"#fff" }}/>
+            </button>
+            <button onClick={()=>setDelConfirm(true)} className="tap" style={{ width:38,height:38,borderRadius:"50%",background:"rgba(248,113,113,0.3)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+              <i className="fas fa-trash" style={{ fontSize:14,color:"#fff" }}/>
+            </button>
+          </div>
+        </div>
+        <div style={{ position:"absolute",bottom:16,left:16,right:16 }}>
+          <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:4 }}>
+            {v.is_default&&<Badge label="Default Vehicle" color={T.green}/>}
+            <Badge label={v.vehicle_type||"EV"} color={T.blue}/>
+          </div>
+          <div style={{ fontWeight:900,fontSize:24,color:"#fff",letterSpacing:-0.5 }}>{v.nickname}</div>
+          <div style={{ fontSize:14,color:"rgba(255,255,255,0.75)",marginTop:2 }}>{v.year} {v.manufacturer} {v.model}</div>
+        </div>
+      </div>
+
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
+
+        {/* Action buttons */}
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16 }}>
+          <button onClick={()=>onStartCharging?.(v)} className="tap"
+            style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+            <i className="fas fa-bolt"/> Start Charging
+          </button>
+          <button onClick={()=>go("booking")} className="tap"
+            style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+            <i className="fas fa-calendar" style={{ color:T.green }}/> Reserve
+          </button>
+        </div>
+
+        {/* Specs grid */}
+        <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}><i className="fas fa-info-circle" style={{ marginRight:8,color:T.green }}/>Vehicle Specs</div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+            {[
+              { label:"Battery",     value:v.battery_capacity?`${v.battery_capacity} kWh`:"—",    icon:"fa-battery-full",   color:T.green  },
+              { label:"Max Range",   value:v.estimated_range?`${v.estimated_range} km`:"—",        icon:"fa-road",           color:T.blue   },
+              { label:"Connector",   value:v.connector_type||"—",                                   icon:"fa-plug",           color:T.yellow },
+              { label:"Max Charge",  value:v.max_charging_power?`${v.max_charging_power} kW`:"—",  icon:"fa-bolt",           color:T.green  },
+              { label:"Color",       value:v.color?"Custom":"—",                                    icon:"fa-palette",        color:T.mutedLight, isColor:true, colorVal:v.color },
+              { label:"Reg. Number", value:v.registration_number||"Not set",                        icon:"fa-id-card",        color:T.mutedLight },
+            ].map(s=>(
+              <div key={s.label} style={{ background:T.surfaceFaint,borderRadius:12,padding:"12px" }}>
+                <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:4 }}>
+                  {s.isColor && s.colorVal
+                    ? <div style={{ width:14,height:14,borderRadius:"50%",background:s.colorVal,border:`1px solid ${T.border}` }}/>
+                    : <i className={`fas ${s.icon}`} style={{ fontSize:11,color:s.color }}/>
+                  }
+                  <span style={{ fontSize:10,color:T.muted,textTransform:"uppercase",letterSpacing:0.4 }}>{s.label}</span>
+                </div>
+                <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Charging statistics */}
+        <div style={{ background:T.highlightGrad2,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.greenDim}` }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:14 }}><i className="fas fa-chart-bar" style={{ marginRight:8,color:T.green }}/>Charging Statistics</div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12 }}>
+            {[
+              { label:"Sessions",      value:stats.sessions,          color:T.green  },
+              { label:"Energy (kWh)",  value:stats.kwh.toFixed(1),    color:T.blue   },
+              { label:"Spent (GH₵)",   value:costGHS,                 color:T.yellow },
+            ].map(s=>(
+              <div key={s.label} style={{ textAlign:"center",background:"rgba(0,0,0,0.2)",borderRadius:10,padding:"12px 6px" }}>
+                <div style={{ fontWeight:900,fontSize:20,color:s.color }}>{s.value}</div>
+                <div style={{ fontSize:9,color:T.muted,marginTop:3,textTransform:"uppercase",letterSpacing:0.4 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+            {[
+              { label:"CO₂ Saved",        value:`${co2Saved} kg`,   icon:"fa-leaf",  color:T.green },
+              { label:"Clean Water",       value:`${waterEarned} L`, icon:"fa-tint",  color:T.blue  },
+            ].map(s=>(
+              <div key={s.label} style={{ display:"flex",alignItems:"center",gap:10,background:"rgba(0,0,0,0.2)",borderRadius:10,padding:"10px 12px" }}>
+                <i className={`fas ${s.icon}`} style={{ fontSize:16,color:s.color }}/>
+                <div>
+                  <div style={{ fontWeight:700,fontSize:15,color:s.color }}>{s.value}</div>
+                  <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.4 }}>{s.label}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Recent sessions */}
+        {sessions.length>0&&(
+          <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
+            <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}><i className="fas fa-history" style={{ marginRight:8,color:T.green }}/>Recent Sessions</div>
+            {sessions.map((s,i)=>(
+              <div key={s.id||i} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:10,marginBottom:10,borderBottom:i<sessions.length-1?`1px solid ${T.border}20`:"none" }}>
+                <div>
+                  <div style={{ fontWeight:600,fontSize:12,color:T.text }}>{s.charger_id||"EcoCharge Station"}</div>
+                  <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{s.started_at?new Date(s.started_at).toLocaleDateString("en-GH",{day:"numeric",month:"short",year:"numeric"}):"--"}</div>
+                </div>
+                <div style={{ textAlign:"right" }}>
+                  <div style={{ fontSize:12,fontWeight:700,color:T.green }}>{s.energy_kwh?.toFixed(2)||"--"} kWh</div>
+                  <div style={{ fontSize:11,color:T.muted,marginTop:1 }}>GH₵{((s.cost_total||0)/100).toFixed(2)}</div>
+                </div>
+              </div>
+            ))}
+            <button onClick={()=>go("sessions")} className="tap"
+              style={{ width:"100%",background:"none",border:`1px solid ${T.border}`,borderRadius:10,padding:"10px",fontSize:12,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginTop:4 }}>
+              View All Sessions <i className="fas fa-arrow-right" style={{ fontSize:11 }}/>
+            </button>
+          </div>
+        )}
+
+        {/* Set as default */}
+        {!v.is_default&&(
+          <button onClick={()=>onSetDefault?.(v)} className="tap"
+            style={{ width:"100%",background:"none",border:`1px solid ${T.green}44`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:600,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:10 }}>
+            <i className="far fa-star"/> Set as Default Vehicle
+          </button>
+        )}
+
+        <button onClick={()=>go("sessions")} className="tap"
+          style={{ width:"100%",background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+          <i className="fas fa-chart-line"/> Charging History
+        </button>
+      </div>
+
+      {/* Delete confirm overlay */}
+      {delConfirm&&(
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center" }}>
+          <div style={{ background:T.card,borderRadius:"20px 20px 0 0",padding:"24px 20px 40px",width:"100%",maxWidth:480,border:`1px solid ${T.border}` }}>
+            <div style={{ textAlign:"center",marginBottom:20 }}>
+              <div style={{ width:56,height:56,borderRadius:"50%",background:"rgba(248,113,113,0.12)",border:"2px solid rgba(248,113,113,0.3)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px" }}>
+                <i className="fas fa-trash" style={{ fontSize:22,color:T.red }}/>
+              </div>
+              <div style={{ fontWeight:800,fontSize:18,color:T.text }}>Delete Vehicle?</div>
+              <div style={{ fontSize:13,color:T.muted,marginTop:6,lineHeight:1.6 }}>This will remove <strong style={{ color:T.text }}>{v.nickname}</strong> from your account. This action cannot be undone.</div>
+            </div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+              <button onClick={()=>setDelConfirm(false)} className="tap"
+                style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px",fontSize:14,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>
+                Cancel
+              </button>
+              <button onClick={()=>{ setDelConfirm(false); onDelete?.(v.id); go("myvehicles"); }} className="tap"
+                style={{ background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:12,padding:"14px",fontSize:14,fontWeight:700,color:T.red,cursor:"pointer",fontFamily:"inherit" }}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── MY VEHICLES LIST SCREEN ───────────────────────────────────
+function MyVehicles({ go, user }) {
+  const [vehicles,     setVehicles]     = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [selectedVeh,  setSelectedVeh]  = useState(null); // for detail view
+  const [editingVeh,   setEditingVeh]   = useState(null); // for edit form
+  const [showForm,     setShowForm]     = useState(false);
+  const [statsMap,     setStatsMap]     = useState({});   // vehicleId -> stats
+  const [totalStats,   setTotalStats]   = useState({ sessions:0, kwh:0, cost:0 });
+
+  const loadVehicles = async () => {
+    setLoading(true);
+    const data = await loadUserVehicles(user?.id);
+    setVehicles(data);
+    // Load aggregate stats
+    if (user?.id) {
+      const allStats = await loadVehicleStats(user.id, null);
+      setTotalStats(allStats);
+    }
+    setLoading(false);
+  };
+
+  useEffect(()=>{ loadVehicles(); },[user?.id]);
+
+  const handleDelete = async (id) => {
+    await deleteVehicle(id);
+    setVehicles(prev=>prev.filter(v=>v.id!==id));
+  };
+
+  const handleSetDefault = async (vehicle) => {
+    // Clear all defaults then set new one
+    for (const v of vehicles) {
+      if (v.is_default && v.id!==vehicle.id) await updateVehicle(v.id, { is_default:false });
+    }
+    await updateVehicle(vehicle.id, { is_default:true });
+    setVehicles(prev=>prev.map(v=>({ ...v, is_default: v.id===vehicle.id })));
+  };
+
+  const handleSaved = (savedVeh) => {
+    setVehicles(prev=>{
+      const exists = prev.find(v=>v.id===savedVeh.id);
+      if (exists) return prev.map(v=>v.id===savedVeh.id?savedVeh:v);
+      return [...prev, savedVeh];
+    });
+    setShowForm(false);
+    setEditingVeh(null);
+  };
+
+  const typeIcon = (type) => VEHICLE_TYPE_ICON[type] || "fa-bolt";
+
+  const batteryColor = (pct) => (pct||0) > 60 ? T.green : (pct||0) > 30 ? T.yellow : T.red;
+
+  // Route to form screens
+  if (showForm || editingVeh) {
+    return <VehicleForm go={(s)=>{ setShowForm(false); setEditingVeh(null); if(s!=="myvehicles") go(s); }} user={user} editVehicle={editingVeh} onSaved={handleSaved}/>;
+  }
+
+  // Route to detail screen
+  if (selectedVeh) {
+    return <VehicleDetail
+      go={(s)=>{ if(s==="myvehicles") setSelectedVeh(null); else go(s); }}
+      vehicle={selectedVeh}
+      user={user}
+      onEdit={(v)=>{ setEditingVeh(v); setSelectedVeh(null); }}
+      onDelete={(id)=>{ handleDelete(id); setSelectedVeh(null); }}
+      onSetDefault={handleSetDefault}
+      onStartCharging={(v)=>{ go("detail"); }}
+    />;
+  }
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <div style={{ padding:"calc(14px + env(safe-area-inset-top,34px)) 18px 14px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
+        <button onClick={()=>go("profile")} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
+          <i className="fas fa-arrow-left" style={{ fontSize:20,color:T.text }}/>
+        </button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:800,fontSize:16,color:T.text }}>My Vehicles</div>
+          <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{vehicles.length} vehicle{vehicles.length!==1?"s":""} registered</div>
+        </div>
+        <button onClick={()=>setShowForm(true)} className="tap"
+          style={{ background:`${T.green}18`,border:`1px solid ${T.green}44`,borderRadius:20,padding:"8px 16px",fontSize:13,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}>
+          <i className="fas fa-plus"/> Add
+        </button>
+      </div>
+
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
+
+        {loading&&(
+          <div style={{ textAlign:"center",padding:"60px 0" }}><Spinner/></div>
+        )}
+
+        {/* Empty state */}
+        {!loading&&vehicles.length===0&&(
+          <div className="fade" style={{ textAlign:"center",padding:"60px 20px" }}>
+            <div style={{ width:120,height:120,borderRadius:"50%",background:T.highlightGrad2,border:`2px solid ${T.greenDim}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px" }}>
+              <i className="fas fa-car" style={{ fontSize:48,color:T.green,opacity:0.6 }}/>
+            </div>
+            <div style={{ fontWeight:800,fontSize:22,color:T.text,marginBottom:10 }}>No Vehicles Yet</div>
+            <div style={{ fontSize:14,color:T.muted,lineHeight:1.8,marginBottom:28 }}>Add your first electric vehicle to unlock smart charging, track energy usage, and earn clean water rewards.</div>
+            <button onClick={()=>setShowForm(true)} className="tap"
+              style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px 32px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:10,boxShadow:`0 4px 24px rgba(34,197,94,0.35)` }}>
+              <i className="fas fa-plus"/> Add Your First Vehicle
+            </button>
+            <div style={{ marginTop:28,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12 }}>
+              {[{ icon:"fa-bolt",text:"Smart charging sessions" },{ icon:"fa-tint",text:"20L clean water per charge" },{ icon:"fa-leaf",text:"Track CO₂ savings" }].map(f=>(
+                <div key={f.text} style={{ background:T.card,borderRadius:14,padding:"14px 8px",border:`1px solid ${T.border}`,textAlign:"center" }}>
+                  <i className={`fas ${f.icon}`} style={{ fontSize:20,color:T.green,marginBottom:8,display:"block" }}/>
+                  <div style={{ fontSize:10,color:T.muted,lineHeight:1.4 }}>{f.text}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Stats banner (when vehicles exist) */}
+        {!loading&&vehicles.length>0&&(
+          <>
+            <div className="fade" style={{ background:T.highlightGrad2,borderRadius:18,padding:"16px",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
+              <div style={{ fontWeight:700,fontSize:12,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12 }}>Fleet Overview</div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",gap:8 }}>
+                {[
+                  { label:"Sessions",     value:totalStats.sessions,                          color:T.green  },
+                  { label:"kWh",          value:totalStats.kwh.toFixed(0),                    color:T.blue   },
+                  { label:"GH₵ Spent",    value:((totalStats.cost||0)/100).toFixed(0),        color:T.yellow },
+                  { label:"kg CO₂",       value:(totalStats.kwh*0.5).toFixed(1),              color:T.green  },
+                  { label:"Water (L)",    value:(totalStats.sessions*20),                      color:T.blue   },
+                ].map(s=>(
+                  <div key={s.label} style={{ textAlign:"center" }}>
+                    <div style={{ fontWeight:900,fontSize:18,color:s.color,lineHeight:1 }}>{s.value}</div>
+                    <div style={{ fontSize:9,color:T.muted,marginTop:4,textTransform:"uppercase",letterSpacing:0.3 }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Vehicle cards */}
+            {vehicles.map((v,i)=>(
+              <div key={v.id} className="fade tap"
+                style={{ background:T.card,borderRadius:20,border:`1px solid ${v.is_default?T.green:T.border}`,marginBottom:14,overflow:"hidden",position:"relative",transition:"all .15s" }}
+                onClick={()=>setSelectedVeh(v)}>
+
+                {/* Card hero */}
+                <div style={{ height:130,position:"relative",overflow:"hidden",background:`linear-gradient(135deg,#051a0a,#0a2d12)` }}>
+                  {v.image_url ? (
+                    <img src={v.image_url} alt={v.model} style={{ width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.7)" }} onError={e=>e.target.style.display="none"}/>
+                  ) : (
+                    <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"flex-end",padding:"0 24px" }}>
+                      <i className={`fas ${typeIcon(v.vehicle_type)}`} style={{ fontSize:64,color:T.green,opacity:0.18 }}/>
+                    </div>
+                  )}
+                  <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,transparent 40%,rgba(0,0,0,0.6) 100%)" }}/>
+
+                  {/* Color dot */}
+                  {v.color&&<div style={{ position:"absolute",top:12,right:12,width:16,height:16,borderRadius:"50%",background:v.color,border:`2px solid rgba(255,255,255,0.3)` }}/>}
+
+                  {/* Default badge */}
+                  {v.is_default&&(
+                    <div style={{ position:"absolute",top:12,left:12,background:`${T.green}cc`,borderRadius:8,padding:"3px 10px",display:"flex",alignItems:"center",gap:5 }}>
+                      <i className="fas fa-star" style={{ fontSize:9,color:"#000" }}/>
+                      <span style={{ fontSize:10,fontWeight:700,color:"#000" }}>Default</span>
+                    </div>
+                  )}
+
+                  <div style={{ position:"absolute",bottom:10,left:14 }}>
+                    <div style={{ fontWeight:800,fontSize:17,color:"#fff" }}>{v.nickname}</div>
+                    <div style={{ fontSize:11,color:"rgba(255,255,255,0.7)",marginTop:2 }}>{v.year} {v.manufacturer} {v.model}</div>
+                  </div>
+                </div>
+
+                {/* Card body */}
+                <div style={{ padding:"14px 16px" }}>
+                  <div style={{ display:"flex",gap:8,marginBottom:14,flexWrap:"wrap" }}>
+                    <Badge label={v.vehicle_type||"EV"} color={T.blue}/>
+                    {v.connector_type&&<Badge label={v.connector_type} color={T.muted}/>}
+                    {v.battery_capacity&&<Badge label={`${v.battery_capacity} kWh`} color={T.green}/>}
+                    {v.registration_number&&<Badge label={v.registration_number} color={T.mutedLight}/>}
+                  </div>
+
+                  {v.estimated_range&&(
+                    <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:14 }}>
+                      <div style={{ flex:1,height:4,background:T.track,borderRadius:2,overflow:"hidden" }}>
+                        <div style={{ height:"100%",width:`${Math.min(100,(v.estimated_range/700)*100)}%`,background:`linear-gradient(90deg,${T.green},${T.blue})`,borderRadius:2 }}/>
+                      </div>
+                      <span style={{ fontSize:11,color:T.muted,flexShrink:0 }}>~{v.estimated_range} km range</span>
+                    </div>
+                  )}
+
+                  {/* Quick action buttons */}
+                  <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
+                    <button onClick={e=>{ e.stopPropagation(); go("detail"); }} className="tap"
+                      style={{ background:`${T.green}18`,border:`1px solid ${T.green}33`,borderRadius:10,padding:"10px 6px",fontSize:11,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
+                      <i className="fas fa-bolt" style={{ fontSize:11 }}/> Charge
+                    </button>
+                    <button onClick={e=>{ e.stopPropagation(); setEditingVeh(v); }} className="tap"
+                      style={{ background:T.surfaceFaint,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 6px",fontSize:11,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
+                      <i className="fas fa-pencil-alt" style={{ fontSize:11 }}/> Edit
+                    </button>
+                    <button onClick={e=>{ e.stopPropagation(); handleDelete(v.id); }} className="tap"
+                      style={{ background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.2)",borderRadius:10,padding:"10px 6px",fontSize:11,fontWeight:600,color:T.red,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
+                      <i className="fas fa-trash" style={{ fontSize:11 }}/> Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* Add more */}
+            <button onClick={()=>setShowForm(true)} className="tap"
+              style={{ width:"100%",background:"none",border:`2px dashed ${T.border}`,borderRadius:20,padding:"20px",fontSize:14,fontWeight:600,color:T.muted,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:16 }}>
+              <i className="fas fa-plus" style={{ color:T.green }}/> Add Another Vehicle
+            </button>
+
+            {/* Security notice */}
+            <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px 16px",display:"flex",alignItems:"center",gap:14 }}>
+              <div style={{ width:40,height:40,borderRadius:10,background:`${T.green}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                <i className="fas fa-shield-alt" style={{ fontSize:16,color:T.green }}/>
+              </div>
+              <div>
+                <div style={{ fontWeight:700,fontSize:13,color:T.text }}>Vehicle data is secure</div>
+                <div style={{ fontSize:11,color:T.muted,marginTop:3,lineHeight:1.5 }}>Your vehicle information is encrypted and used only to improve your charging experience.</div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+      <Nav active="Profile" go={go}/>
+    </div>
+  );
+}
 
 function MyVehicles({ go }) {
   const [vehicles, setVehicles] = useState(DEMO_VEHICLES);
@@ -5668,7 +6805,7 @@ function AppInner() {
     privacypolicy:  <PrivacyPolicy go={goSecure}/>,
     terms:          <TermsAndConditions go={goSecure}/>,
     refund:         <RefundPolicy go={goSecure}/>,
-    myvehicles:     <MyVehicles go={goSecure}/>,
+    myvehicles:     <MyVehicles go={goSecure} user={user}/>,
     settings:       <SettingsScreen go={goSecure} user={user} setUser={setUser}/>,
     zeroemissions:  <ZeroEmissions go={goSecure}/>,
     home:           <Home {...props}/>,
