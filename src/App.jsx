@@ -949,7 +949,6 @@ function Home({ go,stations,setStation,user,onMenu }) {
   const displayName=user?.name||user?.email?.split("@")[0]||"Welcome";
   const filtered=search?stations.filter(s=>s.name.toLowerCase().includes(search.toLowerCase())||s.city.toLowerCase().includes(search.toLowerCase())):stations;
 
-  // Wallet summary — reuses the same wallets/wallet_transactions tables as WalletScreen
   const [wallet,setWallet]=useState(null);
   const [lastTxn,setLastTxn]=useState(null);
   const [walletLoading,setWalletLoading]=useState(true);
@@ -970,7 +969,6 @@ function Home({ go,stations,setStation,user,onMenu }) {
     })();
   },[user]);
 
-  // Impact summary — derived from real completed charging_sessions, not hardcoded
   const [impact,setImpact]=useState({ charges:0,kwh:0,water:0 });
   useEffect(()=>{
     if (!SUPABASE_URL||!user?.id) return;
@@ -987,8 +985,6 @@ function Home({ go,stations,setStation,user,onMenu }) {
     })();
   },[user]);
 
-  // Active session — checks the persisted signal QRScreen writes, so this card
-  // reflects reality even if the user isn't on the QR screen right now.
   const [activeSession,setActiveSession]=useState(null);
   useEffect(()=>{
     if (!SUPABASE_URL||!user?.id) return;
@@ -1038,7 +1034,6 @@ function Home({ go,stations,setStation,user,onMenu }) {
         </div>
       </div>
 
-      {/* HERO */}
       <div style={{ margin:"4px 14px 16px",borderRadius:20,overflow:"hidden",position:"relative",minHeight:150 }}>
         <img src="/station2.jpg" alt="" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.95) saturate(1.15)" }} onError={e=>{ e.target.style.display="none"; }}/>
         <div style={{ position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(11,15,20,0.05) 0%,rgba(11,15,20,0.55) 100%)" }}/>
@@ -1049,14 +1044,12 @@ function Home({ go,stations,setStation,user,onMenu }) {
         </div>
       </div>
 
-      {/* SEARCH */}
       <div style={{ margin:"0 14px 16px",position:"relative" }}>
         <i className="fas fa-search" style={{ position:"absolute",left:16,top:"50%",transform:"translateY(-50%)",color:T.mutedLight,fontSize:14 }}/>
         <input placeholder="Search station or location" value={search} onChange={e=>setSearch(e.target.value)}
           style={{ width:"100%",background:T.card,border:`1.5px solid ${T.border}`,borderRadius:14,padding:"14px 16px 14px 44px",fontSize:14,fontFamily:"inherit",color:T.text }}/>
       </div>
 
-      {/* WALLET CARD */}
       {user&&(
         <div style={{ margin:"0 14px 16px",...card,padding:"18px",borderColor:T.border }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
@@ -1084,7 +1077,6 @@ function Home({ go,stations,setStation,user,onMenu }) {
         </div>
       )}
 
-      {/* ACTIVE CHARGING SESSION */}
       {activeSession&&(
         <div style={{ margin:"0 14px 16px",background:T.card,borderRadius:16,border:`1.5px solid ${T.green}`,padding:"18px" }}>
           <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:14 }}>
@@ -1105,7 +1097,6 @@ function Home({ go,stations,setStation,user,onMenu }) {
         </div>
       )}
 
-      {/* QUICK ACTIONS */}
       <div style={{ margin:"0 14px 16px",...card,padding:"18px 8px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr" }}>
         {quickActions.map((a,i)=>(
           <button key={a.label} onClick={()=>go(a.screen)} className="tap"
@@ -1118,7 +1109,6 @@ function Home({ go,stations,setStation,user,onMenu }) {
         ))}
       </div>
 
-      {/* IMPACT CARD */}
       <div style={{ margin:"0 14px 16px",...card,padding:"20px" }}>
         <div style={{ fontSize:15,fontWeight:800,color:T.text,marginBottom:18 }}>Your Impact</div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
@@ -1135,7 +1125,6 @@ function Home({ go,stations,setStation,user,onMenu }) {
         </div>
       </div>
 
-      {/* NEARBY STATIONS */}
       <div style={{ margin:"0 14px 16px" }}>
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
           <div style={{ fontWeight:800,fontSize:17,color:T.text }}>Nearby Stations</div>
@@ -1169,7 +1158,6 @@ function Home({ go,stations,setStation,user,onMenu }) {
         )}
       </div>
 
-      {/* SOLAR RADIATION — secondary info, moved below Nearby Stations */}
       <SolarWidget/>
 
       <div style={{ height:90 }}/>
@@ -1177,7 +1165,6 @@ function Home({ go,stations,setStation,user,onMenu }) {
     </div>
   );
 }
-
 
 function Detail({ go,station,stations,setStation,setBookingMode,user,setSelectedCharger }) {
   const s=station||stations[0];
@@ -1197,14 +1184,6 @@ function Detail({ go,station,stations,setStation,setBookingMode,user,setSelected
     })();
   },[user]);
 
-  // Per-station chargers — merges two real sources so a charger always shows up
-  // here regardless of whether it's only registered with the OCPP server (like
-  // your simulator) or has its own row in the Supabase chargers table:
-  //   1. Supabase `chargers` table, filtered by station_id
-  //   2. The live OCPP server's /api/chargers list (same data Charger Admin shows)
-  // A charger from the OCPP list is matched to this station by an explicit
-  // station_id on the OCPP record if present, otherwise it's shown under the
-  // first station (so a single-charger setup like yours is never invisible).
   const [chargers,setChargers]=useState([]);
   const [chargersLoading,setChargersLoading]=useState(true);
   const [chargerFilter,setChargerFilter]=useState("All");
@@ -1230,9 +1209,9 @@ function Detail({ go,station,stations,setStation,setBookingMode,user,setSelected
       const dbIds=new Set(dbChargers.map(c=>c.id));
       const isFirstStation = stations[0]?.id===s.id;
       const matchedOcpp = ocppChargers.filter(c=>{
-        if (dbIds.has(c.id)) return false; // already represented via Supabase row
+        if (dbIds.has(c.id)) return false;
         if (c.station_id!=null) return String(c.station_id)===String(s.id);
-        return isFirstStation; // no station tag on the OCPP record — default to first station
+        return isFirstStation;
       }).map(c=>({
         id:c.id,
         status:c.connected?(c.status||"Available"):"Unavailable",
@@ -1482,18 +1461,15 @@ function ChargerDetail({ go,selectedCharger,setBookingMode,setStation,user }) {
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title={c.label||c.name||c.id||"Charger"} sub={`${acdc} · ${connector}`} onBack={()=>go("detail")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
-
         <div style={{ display:"flex",justifyContent:"flex-end",marginBottom:14 }}>
           <Badge label={status} color={statusColor}/>
         </div>
-
         <div style={{ display:"flex",justifyContent:"center",marginBottom:18 }}>
           <div style={{ width:110,height:150,borderRadius:16,background:`linear-gradient(160deg,${T.greenDim}50,${T.border})`,border:`2px solid ${T.green}66`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:10 }}>
             <i className="fas fa-charging-station" style={{ fontSize:42,color:T.green }}/>
             <i className="fas fa-bolt" style={{ fontSize:16,color:T.yellow }}/>
           </div>
         </div>
-
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16 }}>
           {[
             { label:"Max Power",value:`${power} kW` },
@@ -1508,7 +1484,6 @@ function ChargerDetail({ go,selectedCharger,setBookingMode,setStation,user }) {
             </div>
           ))}
         </div>
-
         <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"16px",marginBottom:14 }}>
           <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}><i className="fas fa-heartbeat" style={{ marginRight:8,color:T.green }}/>Live Status</div>
           <div style={{ fontSize:13,fontWeight:700,color:status==="Available"?T.green:status==="Charging"?T.blue:T.red,marginBottom:2 }}>
@@ -1519,19 +1494,12 @@ function ChargerDetail({ go,selectedCharger,setBookingMode,setStation,user }) {
           </div>
           <div style={{ background:T.surface,borderRadius:10,padding:"10px 12px" }}>
             {status==="Charging" ? (
-              <>
-                <div style={{ fontSize:12,fontWeight:700,color:T.text }}>Active session</div>
-                <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Another vehicle is currently charging here</div>
-              </>
+              <><div style={{ fontSize:12,fontWeight:700,color:T.text }}>Active session</div><div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Another vehicle is currently charging here</div></>
             ) : (
-              <>
-                <div style={{ fontSize:12,fontWeight:700,color:T.text }}>No active session</div>
-                <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Plug in to start</div>
-              </>
+              <><div style={{ fontSize:12,fontWeight:700,color:T.text }}>No active session</div><div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Plug in to start</div></>
             )}
           </div>
         </div>
-
         <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"16px",marginBottom:14 }}>
           <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}><i className="fas fa-info-circle" style={{ marginRight:8,color:T.green }}/>Charging Info</div>
           {[
@@ -1549,7 +1517,6 @@ function ChargerDetail({ go,selectedCharger,setBookingMode,setStation,user }) {
             </div>
           ))}
         </div>
-
         <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"16px",marginBottom:14 }}>
           <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}>Station Amenities</div>
           <div style={{ display:"flex",justifyContent:"space-between" }}>
@@ -1563,7 +1530,6 @@ function ChargerDetail({ go,selectedCharger,setBookingMode,setStation,user }) {
             ))}
           </div>
         </div>
-
         <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"16px",marginBottom:18 }}>
           <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}>Location</div>
           <div style={{ fontSize:12,color:T.muted,marginBottom:4 }}>{s.name||"Station"}, {s.city||""}</div>
@@ -1572,7 +1538,6 @@ function ChargerDetail({ go,selectedCharger,setBookingMode,setStation,user }) {
           </div>
           <button onClick={()=>go("map")} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:0 }}>View on map</button>
         </div>
-
         {status==="Available"&&(
           <button onClick={()=>{ setStation?.(s);setBookingMode?.("now");go("vehicles"); }} className="tap"
             style={{ width:"100%",background:T.green,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,color:"#04130a",cursor:"pointer",fontFamily:"inherit",marginBottom:10 }}>
@@ -1660,17 +1625,10 @@ function Booking({ go,station,vehicle,user,setBooking }) {
     const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",slot_time:slots[slotIdx].toISOString(),duration_min:dur.value,amount:total,name,phone,email,user_id:user?.id||null,pay_method:payHow,status:"confirmed",created_at:new Date().toISOString() };
     let saved=true;
     if (SUPABASE_URL) saved=await sb("bookings",{ method:"POST",headers:{ Prefer:"return=minimal" },body:JSON.stringify(data) });
-    if (!saved) {
-      setErr("Could not save booking. Please check your connection and try again.");
-      setLoad(false);
-      return;
-    }
+    if (!saved) { setErr("Could not save booking. Please check your connection and try again."); setLoad(false); return; }
     setBooking(data);
     try { localStorage.setItem("eco_booking",JSON.stringify(data)); } catch(e){}
-    if (user?.id) {
-      createNotification(user.id, "booking_confirmed", "Booking Confirmed",
-        `${s.name} reserved for ${fmtTime(slots[slotIdx])}. You'll be charged from your wallet when charging starts.`, { reference: ref });
-    }
+    if (user?.id) { createNotification(user.id, "booking_confirmed", "Booking Confirmed", `${s.name} reserved for ${fmtTime(slots[slotIdx])}. You'll be charged from your wallet when charging starts.`, { reference: ref }); }
     setLoad(false);go("qr");
   };
   const inp=(ph,val,set,type="text",icon="fa-user")=>(
@@ -1759,11 +1717,6 @@ function Booking({ go,station,vehicle,user,setBooking }) {
 }
 
 
-// Customer-facing scan flow: opens the camera, decodes a charger QR code
-// (format "ECOCHARGER:<charger_id>" — what's physically posted at the charger),
-// looks up which station that charger belongs to, and routes straight into
-// the Charge Now flow for that station/charger. Falls back to showing the
-// user's own pass if they'd rather not scan right now.
 function ScanToCharge({ go,stations,setStation,setBookingMode,setSelectedCharger }) {
   const [error,setError]=useState("");
   const [looking,setLooking]=useState(false);
@@ -1834,17 +1787,10 @@ function ChargeNow({ go,station,vehicle,user,setBooking }) {
     const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",slot_time:new Date().toISOString(),duration_min:null,amount:null,name,phone,email,user_id:user?.id||null,pay_method:"wallet",booking_mode:"now",status:"confirmed",created_at:new Date().toISOString() };
     let saved=true;
     if (SUPABASE_URL) saved=await sb("bookings",{ method:"POST",headers:{ Prefer:"return=minimal" },body:JSON.stringify(data) });
-    if (!saved) {
-      setErr("Could not start your session. Please check your connection and try again.");
-      setLoad(false);
-      return;
-    }
+    if (!saved) { setErr("Could not start your session. Please check your connection and try again."); setLoad(false); return; }
     setBooking(data);
     try { localStorage.setItem("eco_booking",JSON.stringify(data)); } catch(e){}
-    if (user?.id) {
-      createNotification(user.id, "booking_confirmed", "Ready to Charge",
-        `${s.name} — you're checked in. Start charging when ready.`, { reference: ref });
-    }
+    if (user?.id) { createNotification(user.id, "booking_confirmed", "Ready to Charge", `${s.name} — you're checked in. Start charging when ready.`, { reference: ref }); }
     setLoad(false);go("qr");
   };
   return (
@@ -1934,7 +1880,6 @@ function QRScreen({ go, booking, setBooking, user }) {
 
   useEffect(()=>{
     if (phase !== 'charging') return;
-
     const tick = setInterval(()=>{
       setElapsed(e => e + 1);
       setRealtimeData(prev => {
@@ -2033,30 +1978,16 @@ function QRScreen({ go, booking, setBooking, user }) {
 
   const startCharging = async () => {
     setPhase("verifying"); setError(""); setChecks({});
-
     const step = (key, ok, msg) => setChecks(prev => ({...prev, [key]: { ok, msg }}));
-
     try {
       step("auth", null, "Checking authentication...");
-      if (!user?.id) {
-        step("auth", false, "Not authenticated");
-        setError("Please sign in to start charging.");
-        setPhase("error"); return;
-      }
+      if (!user?.id) { step("auth", false, "Not authenticated"); setError("Please sign in to start charging."); setPhase("error"); return; }
       step("auth", true, "Authenticated ✓");
       await new Promise(r => setTimeout(r, 300));
 
       step("booking", null, "Validating booking...");
-      if (!b?.reference) {
-        step("booking", false, "No valid booking");
-        setError("No active booking found. Please book a slot first.");
-        setPhase("error"); return;
-      }
-      if (b.status === "cancelled") {
-        step("booking", false, "Booking cancelled");
-        setError("This booking has been cancelled.");
-        setPhase("error"); return;
-      }
+      if (!b?.reference) { step("booking", false, "No valid booking"); setError("No active booking found. Please book a slot first."); setPhase("error"); return; }
+      if (b.status === "cancelled") { step("booking", false, "Booking cancelled"); setError("This booking has been cancelled."); setPhase("error"); return; }
       step("booking", true, `Booking ${b.reference} valid ✓`);
       await new Promise(r => setTimeout(r, 300));
 
@@ -2076,35 +2007,15 @@ function QRScreen({ go, booking, setBooking, user }) {
       let chargerOk = false;
       if (OCPP_URL) {
         try {
-          const cRes = await fetch(`${OCPP_URL}/api/chargers/${chargerId}`, {
-            headers: { "x-api-key": OCPP_KEY }
-          });
+          const cRes = await fetch(`${OCPP_URL}/api/chargers/${chargerId}`, { headers: { "x-api-key": OCPP_KEY } });
           if (cRes.ok) {
             const cData = await cRes.json();
-            if (cData.connected && cData.status === "Available") {
-              chargerOk = true;
-              step("charger", true, `Charger ${chargerId} available ✓`);
-            } else if (!cData.connected) {
-              step("charger", false, "Charger offline");
-              setError("Charger is currently offline. Please contact station staff.");
-              setPhase("error"); return;
-            } else {
-              step("charger", false, `Charger status: ${cData.status}`);
-              setError(`Charger is ${cData.status}. Please wait or choose another bay.`);
-              setPhase("error"); return;
-            }
-          } else {
-            chargerOk = true;
-            step("charger", true, "Station confirmed ✓");
-          }
-        } catch(e) {
-          chargerOk = true;
-          step("charger", true, "Station confirmed ✓");
-        }
-      } else {
-        chargerOk = true;
-        step("charger", true, "Station confirmed ✓");
-      }
+            if (cData.connected && cData.status === "Available") { chargerOk = true; step("charger", true, `Charger ${chargerId} available ✓`); }
+            else if (!cData.connected) { step("charger", false, "Charger offline"); setError("Charger is currently offline. Please contact station staff."); setPhase("error"); return; }
+            else { step("charger", false, `Charger status: ${cData.status}`); setError(`Charger is ${cData.status}. Please wait or choose another bay.`); setPhase("error"); return; }
+          } else { chargerOk = true; step("charger", true, "Station confirmed ✓"); }
+        } catch(e) { chargerOk = true; step("charger", true, "Station confirmed ✓"); }
+      } else { chargerOk = true; step("charger", true, "Station confirmed ✓"); }
       await new Promise(r => setTimeout(r, 300));
 
       step("lock", null, "Reserving funds...");
@@ -2130,21 +2041,11 @@ function QRScreen({ go, booking, setBooking, user }) {
             body: JSON.stringify({ idTag: user.id || b.reference, connectorId: 1 })
           });
           const ocppData = await ocppRes.json();
-          if (ocppData.success && ocppData.result?.transactionId) {
-            newTxId = ocppData.result.transactionId;
-            step("ocpp", true, "Charger activated ✓");
-          } else if (ocppData.success) {
-            step("ocpp", true, "Start command accepted ✓");
-          } else {
-            step("ocpp", false, "Charger did not respond");
-            step("ocpp", true, "Manual activation mode ✓");
-          }
-        } catch(e) {
-          step("ocpp", true, "Manual activation mode ✓");
-        }
-      } else {
-        step("ocpp", true, "Session started ✓");
-      }
+          if (ocppData.success && ocppData.result?.transactionId) { newTxId = ocppData.result.transactionId; step("ocpp", true, "Charger activated ✓"); }
+          else if (ocppData.success) { step("ocpp", true, "Start command accepted ✓"); }
+          else { step("ocpp", false, "Charger did not respond"); step("ocpp", true, "Manual activation mode ✓"); }
+        } catch(e) { step("ocpp", true, "Manual activation mode ✓"); }
+      } else { step("ocpp", true, "Session started ✓"); }
 
       const newSessionId = `SES-${Date.now().toString(36).toUpperCase()}`;
       if (SUPABASE_URL) {
@@ -2153,21 +2054,11 @@ function QRScreen({ go, booking, setBooking, user }) {
             method: "POST",
             headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", Prefer: "return=minimal" },
             body: JSON.stringify({
-              id:             newSessionId,
-              session_ref:    b.reference,
-              transaction_id: newTxId,
-              charger_id:     chargerId,
-              connector_id:   1,
-              user_id:        user?.id || null,
-              booking_ref:    b.reference,
-              id_tag:         user?.id || b.reference,
-              status:         "Charging",
-              vehicle_type:   b.vehicle,
-              meter_start:    0,
-              rate_per_kwh:   85,
-              base_fee:       500,
-              started_at:     new Date().toISOString(),
-              authorized_at:  new Date().toISOString(),
+              id: newSessionId, session_ref: b.reference, transaction_id: newTxId,
+              charger_id: chargerId, connector_id: 1, user_id: user?.id || null,
+              booking_ref: b.reference, id_tag: user?.id || b.reference,
+              status: "Charging", vehicle_type: b.vehicle, meter_start: 0,
+              rate_per_kwh: 85, base_fee: 500, started_at: new Date().toISOString(), authorized_at: new Date().toISOString(),
             })
           });
         } catch(e) { console.error("Session create error:", e); }
@@ -2188,10 +2079,7 @@ function QRScreen({ go, booking, setBooking, user }) {
       setElapsed(0); setLiveKwh(0); setCostSoFar(0);
       setPhase("charging");
 
-      if (user?.id) {
-        createNotification(user.id, "charging_started", "Charging Started",
-          `Your session at ${b.station || "EcoCharge"} has begun.`, { session_id: newSessionId });
-      }
+      if (user?.id) { createNotification(user.id, "charging_started", "Charging Started", `Your session at ${b.station || "EcoCharge"} has begun.`, { session_id: newSessionId }); }
 
     } catch(e) {
       setError("An unexpected error occurred: " + e.message);
@@ -2202,7 +2090,6 @@ function QRScreen({ go, booking, setBooking, user }) {
   const stopCharging = async () => {
     setPhase("stopping");
     const chargerId = b?.charger_id || "ECOCHARGE-001";
-
     try {
       if (OCPP_URL && txId) {
         try {
@@ -2224,16 +2111,7 @@ function QRScreen({ go, booking, setBooking, user }) {
           await fetch(`${SUPABASE_URL}/rest/v1/charging_sessions?id=eq.${sessionId}`, {
             method: "PATCH",
             headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", Prefer: "return=minimal" },
-            body: JSON.stringify({
-              status:       "Completed",
-              meter_stop:   Math.round(finalKwh * 1000),
-              meter_current: Math.round(finalKwh * 1000),
-              completed_at: now,
-              stop_reason:  "Remote",
-              cost_total:   finalCostPs,
-              payment_status: "Paid",
-              energy_kwh:   finalKwh,
-            })
+            body: JSON.stringify({ status: "Completed", meter_stop: Math.round(finalKwh * 1000), meter_current: Math.round(finalKwh * 1000), completed_at: now, stop_reason: "Remote", cost_total: finalCostPs, payment_status: "Paid", energy_kwh: finalKwh })
           });
         } catch(e) { console.error("Session update error:", e); }
       }
@@ -2243,14 +2121,7 @@ function QRScreen({ go, booking, setBooking, user }) {
           await fetch(`${SUPABASE_URL}/rest/v1/rpc/wallet_debit`, {
             method: "POST",
             headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              p_user_id:        user.id,
-              p_amount_pesewas: finalCostPs,
-              p_type:           "debit",
-              p_description:    `Charging session at ${b?.station || "EcoCharge"} — ${finalKwh.toFixed(3)} kWh`,
-              p_session_id:     sessionId,
-              p_booking_ref:    b?.reference,
-            })
+            body: JSON.stringify({ p_user_id: user.id, p_amount_pesewas: finalCostPs, p_type: "debit", p_description: `Charging session at ${b?.station || "EcoCharge"} — ${finalKwh.toFixed(3)} kWh`, p_session_id: sessionId, p_booking_ref: b?.reference })
           });
           await fetch(`${SUPABASE_URL}/rest/v1/wallets?user_id=eq.${user.id}`, {
             method: "PATCH",
@@ -2270,11 +2141,7 @@ function QRScreen({ go, booking, setBooking, user }) {
         } catch(e) {}
       }
 
-      if (user?.id) {
-        createNotification(user.id, "charging_completed", "Session Complete",
-          `You used ${finalKwh.toFixed(2)} kWh for GH₵${finalCost.toFixed(2)}.`, { session_id: sessionId });
-      }
-
+      if (user?.id) { createNotification(user.id, "charging_completed", "Session Complete", `You used ${finalKwh.toFixed(2)} kWh for GH₵${finalCost.toFixed(2)}.`, { session_id: sessionId }); }
       setPhase("completed");
 
     } catch(e) {
@@ -2309,9 +2176,7 @@ function QRScreen({ go, booking, setBooking, user }) {
       <Header title="Starting Charge" sub="Running pre-checks..." onBack={()=>setPhase("ready")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 100px" }}>
         <div style={{ textAlign:"center",marginBottom:28 }}>
-          <div style={{ width:72,height:72,borderRadius:"50%",background:"rgba(74,222,128,0.12)",border:`2px solid ${T.green}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px" }}>
-            <Spinner/>
-          </div>
+          <div style={{ width:72,height:72,borderRadius:"50%",background:"rgba(74,222,128,0.12)",border:`2px solid ${T.green}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px" }}><Spinner/></div>
           <div style={{ fontWeight:700,fontSize:16,color:T.text }}>Verifying your session</div>
           <div style={{ fontSize:12,color:T.muted,marginTop:4 }}>Please wait while we check everything</div>
         </div>
@@ -2386,7 +2251,6 @@ function QRScreen({ go, booking, setBooking, user }) {
 
       <div style={{ flex:1,overflowY:'auto',padding:'20px 16px 24px' }}>
         <div style={{ textAlign:'center',fontSize:12,color:T.muted,marginBottom:18 }}>{b.station}</div>
-
         <div style={{ display:'flex',alignItems:'center',justifyContent:'center',marginBottom:8,position:'relative' }}>
           <div style={{ position:'relative',width:210,height:210 }}>
             <svg width='210' height='210' style={{ transform:'rotate(-90deg)' }}>
@@ -2412,9 +2276,9 @@ function QRScreen({ go, booking, setBooking, user }) {
 
         <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16 }}>
           {[
-            { label:'Energy',   value:liveKwh.toFixed(2),               unit:'kWh' },
-            { label:'Duration', value:fmtElapsed(elapsed),              unit:'hh:mm:ss' },
-            { label:'Cost',     value:`GH₵${costSoFar.toFixed(2)}`,     unit:null },
+            { label:'Energy',   value:liveKwh.toFixed(2),           unit:'kWh' },
+            { label:'Duration', value:fmtElapsed(elapsed),          unit:'hh:mm:ss' },
+            { label:'Cost',     value:`GH₵${costSoFar.toFixed(2)}`, unit:null },
           ].map(m=>(
             <div key={m.label} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:'14px 8px',textAlign:'center' }}>
               <div style={{ fontWeight:700,fontSize:17,color:T.text }}>{m.value}</div>
@@ -2434,7 +2298,6 @@ function QRScreen({ go, booking, setBooking, user }) {
               {[
                 { label:'Session ID',  value:sessionId||'--' },
                 { label:'Charger',     value:b.charger_id||'ECOCHARGE-001' },
-                { label:'Connector',   value:b.vehicle||'--' },
                 { label:'Rate',        value:'GH₵0.85/kWh + GH₵5 base' },
                 { label:'Est. Finish', value:estRemaining?`~${estRemaining} remaining`:'--' },
               ].map(r=>(
@@ -2451,7 +2314,7 @@ function QRScreen({ go, booking, setBooking, user }) {
               </div>
               {powerHistory.length>2&&(
                 <div style={{ marginTop:12 }}>
-                  <div style={{ fontSize:11,color:T.muted,marginBottom:8 }}>Power history (last {powerHistory.length} readings)</div>
+                  <div style={{ fontSize:11,color:T.muted,marginBottom:8 }}>Power history</div>
                   <div style={{ height:40,display:'flex',alignItems:'flex-end',gap:2 }}>
                     {powerHistory.map((p,i)=>{
                       const maxP=Math.max(...powerHistory.map(x=>x.v),0.1);
@@ -2486,7 +2349,6 @@ function QRScreen({ go, booking, setBooking, user }) {
           <div style={{ fontWeight:900,fontSize:24,color:T.green,marginBottom:6 }}>Charging Complete!</div>
           <div style={{ fontSize:13,color:T.muted }}>Session ended · {b.station}</div>
         </div>
-
         <div style={{ background:T.highlightGrad,borderRadius:18,padding:"20px",marginBottom:16,border:`1px solid rgba(74,222,128,0.2)` }}>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16 }}>
             {[
@@ -2509,7 +2371,6 @@ function QRScreen({ go, booking, setBooking, user }) {
             </div>
           </div>
         </div>
-
         {walletBal!=null&&(
           <div style={{ background:T.card,borderRadius:14,padding:"14px 16px",marginBottom:16,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:12 }}>
             <div style={{ width:40,height:40,borderRadius:10,background:"rgba(74,222,128,0.12)",display:"flex",alignItems:"center",justifyContent:"center" }}>
@@ -2521,7 +2382,6 @@ function QRScreen({ go, booking, setBooking, user }) {
             </div>
           </div>
         )}
-
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
           <button onClick={()=>go("home")} className="tap"
             style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px",fontSize:14,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
@@ -2540,7 +2400,6 @@ function QRScreen({ go, booking, setBooking, user }) {
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Charging Pass" sub="Ready to charge" onBack={()=>go("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 100px" }}>
-
         {walletBal!=null&&(
           <div style={{ background:"rgba(74,222,128,0.08)",border:`1px solid rgba(74,222,128,0.2)`,borderRadius:12,padding:"10px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
             <div style={{ display:"flex",alignItems:"center",gap:8 }}>
@@ -2550,13 +2409,11 @@ function QRScreen({ go, booking, setBooking, user }) {
             <span style={{ fontWeight:800,fontSize:16,color:T.green }}>GH₵{(walletBal/100).toFixed(2)}</span>
           </div>
         )}
-
         <div style={{ textAlign:"center",marginBottom:16 }}>
           <div style={{ display:"inline-block",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,borderRadius:20,padding:"7px 24px" }}>
             <span style={{ fontSize:12,fontWeight:800,color:"#000",letterSpacing:1 }}>READY TO CHARGE</span>
           </div>
         </div>
-
         <div className="fade" style={{ background:T.highlightGrad2,borderRadius:20,padding:"20px",textAlign:"center",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
           <div style={{ background:"#0f1117",borderRadius:16,padding:14,display:"inline-block",border:`2px solid ${T.greenDim}`,marginBottom:12,position:"relative" }}>
             <img src={qrUrl} alt="QR" width={190} height={190} style={{ borderRadius:8,display:"block" }}/>
@@ -2568,7 +2425,6 @@ function QRScreen({ go, booking, setBooking, user }) {
           <div style={{ fontWeight:800,fontSize:18,color:T.green,letterSpacing:2,marginBottom:4 }}>{b.reference}</div>
           <div style={{ fontSize:11,color:T.muted }}>Show to attendant or tap Start below</div>
         </div>
-
         <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
           {[
             { label:"Station",  value:b.station,     icon:"fa-map-marker-alt" },
@@ -2588,17 +2444,14 @@ function QRScreen({ go, booking, setBooking, user }) {
             </div>
           ))}
         </div>
-
         <button onClick={startCharging} className="tap"
           style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"18px",fontSize:17,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:10,boxShadow:`0 4px 24px rgba(74,222,128,0.45)` }}>
           <i className="fas fa-bolt"/> Start Charging
         </button>
-
         <div style={{ fontSize:11,color:T.muted,textAlign:"center",marginBottom:10 }}>
           <i className="fas fa-shield-alt" style={{ marginRight:5,color:T.green }}/>
           Wallet · Booking · Charger verified before starting
         </div>
-
         <button onClick={()=>go("map")} className="tap"
           style={{ width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
           <i className="fas fa-map-marker-alt"/> View Station on Map
@@ -2608,7 +2461,6 @@ function QRScreen({ go, booking, setBooking, user }) {
     </div>
   );
 }
-
 
 function Verify({ go }) {
   const [code,setCode]=useState("");
@@ -2633,11 +2485,7 @@ function Verify({ go }) {
     } catch(e) { setErr("Verification failed. Check internet connection."); }
     setLoad(false);
   };
-  const onScanResult=(text)=>{
-    setScanning(false);
-    setCode(text);
-    verify(text);
-  };
+  const onScanResult=(text)=>{ setScanning(false); setCode(text); verify(text); };
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       {scanning && <QRScanner onResult={onScanResult} onClose={()=>setScanning(false)} hint="Point the camera at the customer's QR code"/>}
@@ -2651,9 +2499,7 @@ function Verify({ go }) {
           </button>
         </div>
         <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:14 }}>
-          <div style={{ flex:1,height:1,background:T.border }}/>
-          <span style={{ fontSize:12,color:T.muted }}>or enter reference manually</span>
-          <div style={{ flex:1,height:1,background:T.border }}/>
+          <div style={{ flex:1,height:1,background:T.border }}/><span style={{ fontSize:12,color:T.muted }}>or enter reference manually</span><div style={{ flex:1,height:1,background:T.border }}/>
         </div>
         <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:12,border:`1px solid ${T.border}` }}>
           <div style={{ fontSize:13,color:T.muted,marginBottom:10 }}>Enter booking reference</div>
@@ -2715,27 +2561,15 @@ function Profile({ go,user,setUser,onMenu }) {
       if(!res.ok){
         const errText=await res.text().catch(()=>"");
         setAvatarErr(`Upload failed (${res.status}): ${errText.slice(0,160)}`);
-        setAvatarSaving(false);
-        return;
+        setAvatarSaving(false); return;
       }
       const url=`${SUPABASE_URL}/storage/v1/object/public/avatars/${path}?t=${Date.now()}`;
       setAvatar(url);
       const patchRes=await fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}`,{method:'PATCH',headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}`,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({avatar_url:url})});
-      if(!patchRes.ok){
-        const errText=await patchRes.text().catch(()=>"");
-        setAvatarErr(`Save failed (${patchRes.status}): ${errText.slice(0,160)}`);
-        setAvatarSaving(false);
-        return;
-      }
+      if(!patchRes.ok){ const errText=await patchRes.text().catch(()=>""); setAvatarErr(`Save failed (${patchRes.status}): ${errText.slice(0,160)}`); setAvatarSaving(false); return; }
       const patchData=await patchRes.json().catch(()=>[]);
-      if(!Array.isArray(patchData)||patchData.length===0){
-        setAvatarErr("Save did not match any user record — your account row may be missing or auth_id doesn't match.");
-        setAvatarSaving(false);
-        return;
-      }
-    }catch(e){
-      setAvatarErr("Network error while saving photo: "+String(e));
-    }
+      if(!Array.isArray(patchData)||patchData.length===0){ setAvatarErr("Save did not match any user record — your account row may be missing or auth_id doesn't match."); setAvatarSaving(false); return; }
+    }catch(e){ setAvatarErr("Network error while saving photo: "+String(e)); }
     setAvatarSaving(false);
   };
   const booking=(()=>{ try { const b=localStorage.getItem("eco_booking"); return b?JSON.parse(b):null; } catch(e){ return null; } })();
@@ -2752,14 +2586,19 @@ function Profile({ go,user,setUser,onMenu }) {
   const tierColor={"Bronze":"#cd7f32","Silver":"#9ca3af","Gold":"#fbbf24","Platinum":"#38bdf8"}[loyaltyData.tier]||"#cd7f32";
   const tierNext={"Bronze":500,"Silver":2000,"Gold":5000,"Platinum":5000}[loyaltyData.tier]||500;
   const tierPct=Math.min(100,Math.round((loyaltyData.points/tierNext)*100));
+
   const menuItems=[
-    { icon:"fa-car",label:"My Vehicles",screen:"detail" },
-    { icon:"fa-bell",label:"Notifications",screen:"notifications" },
-    { icon:"fa-credit-card",label:"Payment Methods",screen:"home" },
-    { icon:"fa-cog",label:"Settings",screen:"about" },
-    { icon:"fa-question-circle",label:"Help & Support",screen:"about" },
-    { icon:"fa-info-circle",label:"About EcoCharge",screen:"about" },
+    { icon:"fa-car",            label:"My Vehicles",         screen:"detail"        },
+    { icon:"fa-bell",           label:"Notifications",       screen:"notifications" },
+    { icon:"fa-credit-card",    label:"Payment Methods",     screen:"home"          },
+    { icon:"fa-cog",            label:"Settings",            screen:"about"         },
+    { icon:"fa-question-circle",label:"Help & Support",      screen:"about"         },
+    { icon:"fa-info-circle",    label:"About EcoCharge",     screen:"about"         },
+    { icon:"fa-shield-alt",     label:"Privacy Policy",      screen:"privacypolicy" },
+    { icon:"fa-file-contract",  label:"Terms & Conditions",  screen:"terms"         },
+    { icon:"fa-undo",           label:"Refund Policy",       screen:"refund"        },
   ];
+
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="My Profile" sub="Account & activity" onMenu={onMenu}/>
@@ -2845,27 +2684,89 @@ function Profile({ go,user,setUser,onMenu }) {
   );
 }
 
-function About({ go,onMenu }) {
-  const [legalNote,setLegalNote]=useState("");
+// ── ABOUT SCREEN — Updated with hero image, impact stats, opportunities ──────
+function About({ go, onMenu }) {
+  const impactStats = [
+    { icon:"fa-users",          value:"150+", label:"Local Jobs\nCreated"            },
+    { icon:"fa-graduation-cap", value:"80+",  label:"Youth Trained\n(EV & Solar Tech)" },
+    { icon:"fa-map-marker-alt", value:"25+",  label:"Stations with\nLocal Teams"      },
+    { icon:"fa-handshake",      value:"100%", label:"Committed to\nLocal Growth"      },
+  ];
+
+  const opportunities = [
+    { icon:"fa-briefcase",      label:"Job Openings",           sub:"View current job vacancies",             href:`mailto:${CONTACT_INFO.email}?subject=Job+Application` },
+    { icon:"fa-graduation-cap", label:"Apprenticeship Program",  sub:"Hands-on training for young talents",    href:`mailto:${CONTACT_INFO.email}?subject=Apprenticeship+Enquiry` },
+    { icon:"fa-users",          label:"Partner With Us",         sub:"Refer talent or partner with EcoCharge", href:`mailto:${CONTACT_INFO.email}?subject=Partnership+Enquiry` },
+    { icon:"fa-file-alt",       label:"Submit Your CV",          sub:"Send us your CV for future roles",       href:`mailto:${CONTACT_INFO.email}?subject=CV+Submission` },
+  ];
+
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="About EcoCharge" sub="Our mission" onMenu={onMenu}/>
-      <div style={{ flex:1,overflowY:"auto",padding:"20px 14px 100px" }}>
-        <div className="fade" style={{ textAlign:"center",marginBottom:24 }}>
-          <div style={{ fontWeight:900,fontSize:24,color:T.text,marginTop:14,letterSpacing:-0.5 }}>EcoCharge Ghana</div>
-          <div style={{ fontSize:13,color:T.muted,marginTop:6 }}>Solar Charging · Clean Water · Zero Emissions</div>
+      <div style={{ position:"relative",height:180,flexShrink:0,overflow:"hidden" }}>
+        <img src="/station2.jpg" alt="EcoCharge" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.55) saturate(1.3)" }} onError={e=>e.target.style.display="none"}/>
+        <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.25) 0%,rgba(0,0,0,0.65) 100%)" }}/>
+        <div style={{ position:"absolute",top:"calc(16px + env(safe-area-inset-top, 34px))",left:14 }}>
+          <button onClick={()=>go("home")} className="tap" style={{ width:36,height:36,borderRadius:"50%",background:"rgba(0,0,0,0.45)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+            <i className="fas fa-arrow-left" style={{ fontSize:16,color:"#fff" }}/>
+          </button>
         </div>
-        {[{ icon:"fa-sun",color:T.yellow,title:"Solar EV Charging",text:"100% solar-powered stations across Ghana providing clean, affordable EV charging." },{ icon:"fa-tint",color:T.blue,title:"Clean Water Access",text:"Every charging session includes 20L of clean desalinated water for you and your family." },{ icon:"fa-leaf",color:T.green,title:"Zero Emissions",text:"Our stations run on solar and hydrogen energy — zero carbon footprint." },{ icon:"fa-users",color:T.mutedLight,title:"Local Employment",text:"We train and employ local Ghanaians at every station across the country." }].map((item,i)=>(
-          <div key={i} style={{ background:T.card,borderRadius:14,padding:"16px",marginBottom:12,border:`1px solid ${T.border}`,display:"flex",gap:14,alignItems:"flex-start" }}>
+        <div style={{ position:"absolute",bottom:16,left:16,right:80 }}>
+          <div style={{ fontWeight:900,fontSize:22,color:"#fff",letterSpacing:-0.5 }}>About EcoCharge</div>
+          <div style={{ fontSize:12,color:"rgba(255,255,255,0.7)",marginTop:4 }}>Our mission for a cleaner future</div>
+        </div>
+      </div>
+
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
+
+        {[
+          { icon:"fa-sun",color:T.yellow,title:"Solar EV Charging",text:"100% solar-powered stations across Ghana providing clean, affordable EV charging." },
+          { icon:"fa-tint",color:T.blue,title:"Clean Water Access",text:"Every charging session includes 20L of clean desalinated water for you and your family." },
+          { icon:"fa-leaf",color:T.green,title:"Zero Emissions",text:"Our stations run on solar and hydrogen energy — zero carbon footprint." },
+          { icon:"fa-users",color:T.mutedLight,title:"Local Employment",text:"We train and employ local Ghanaians at every station across the country." },
+        ].map((item,i)=>(
+          <div key={i} style={{ background:T.card,borderRadius:14,padding:"14px 16px",marginBottom:10,border:`1px solid ${T.border}`,display:"flex",gap:14,alignItems:"flex-start" }}>
             <div style={{ width:44,height:44,borderRadius:12,flexShrink:0,background:`${item.color}18`,display:"flex",alignItems:"center",justifyContent:"center" }}>
               <i className={`fas ${item.icon}`} style={{ fontSize:18,color:item.color }}/>
             </div>
-            <div>
+            <div style={{ flex:1 }}>
               <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:5 }}>{item.title}</div>
               <div style={{ fontSize:12,color:T.muted,lineHeight:1.7 }}>{item.text}</div>
             </div>
           </div>
         ))}
+
+        <div style={{ background:T.highlightGrad2,borderRadius:18,padding:"18px 16px",marginBottom:14,border:`1px solid ${T.greenDim}` }}>
+          <div style={{ fontWeight:800,fontSize:16,color:T.green,marginBottom:14 }}>Our Impact</div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8 }}>
+            {impactStats.map((s,i)=>(
+              <div key={i} style={{ textAlign:"center" }}>
+                <div style={{ width:36,height:36,borderRadius:10,background:"rgba(34,197,94,0.15)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 8px" }}>
+                  <i className={`fas ${s.icon}`} style={{ fontSize:14,color:T.green }}/>
+                </div>
+                <div style={{ fontWeight:900,fontSize:18,color:T.text,lineHeight:1 }}>{s.value}</div>
+                <div style={{ fontSize:9,color:T.muted,marginTop:5,lineHeight:1.4,whiteSpace:"pre-line" }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ background:T.card,borderRadius:18,padding:"18px 16px",marginBottom:14,border:`1px solid ${T.border}` }}>
+          <div style={{ fontWeight:800,fontSize:16,color:T.green,marginBottom:4 }}>Opportunities</div>
+          <div style={{ fontSize:12,color:T.muted,marginBottom:14 }}>Join our mission and build the future of clean energy in Ghana.</div>
+          {opportunities.map((o,i)=>(
+            <a key={i} href={o.href} className="tap row"
+              style={{ display:"flex",alignItems:"center",gap:14,padding:"13px 0",borderBottom:i<opportunities.length-1?`1px solid ${T.border}20`:"none",textDecoration:"none",color:"inherit" }}>
+              <div style={{ width:40,height:40,borderRadius:10,background:`${T.green}18`,border:`1px solid ${T.green}30`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                <i className={`fas ${o.icon}`} style={{ fontSize:15,color:T.green }}/>
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{o.label}</div>
+                <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{o.sub}</div>
+              </div>
+              <i className="fas fa-chevron-right" style={{ fontSize:12,color:T.muted }}/>
+            </a>
+          ))}
+        </div>
 
         <div style={{ fontSize:11,color:T.muted,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",margin:"10px 0 10px 4px" }}>Contact Us</div>
         <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,marginBottom:16,overflow:"hidden" }}>
@@ -2900,7 +2801,7 @@ function About({ go,onMenu }) {
         <div style={{ fontSize:11,color:T.muted,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",margin:"10px 0 10px 4px" }}>Follow Us</div>
         <div style={{ display:"flex",gap:10,marginBottom:16 }}>
           {SOCIAL_LINKS.map(s=>(
-            <a key={s.label} href={s.searchUrl} target="_blank" rel="noopener noreferrer" className="tap"
+            <a key={s.label} href={s.url} target="_blank" rel="noopener noreferrer" className="tap"
               style={{ flex:1,background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"14px 8px",textAlign:"center",textDecoration:"none" }}>
               <i className={`fab ${s.icon}`} style={{ fontSize:20,color:s.color,marginBottom:8,display:"block" }}/>
               <div style={{ fontSize:11,color:T.text,fontWeight:600 }}>{s.label}</div>
@@ -2910,20 +2811,19 @@ function About({ go,onMenu }) {
 
         <div style={{ fontSize:11,color:T.muted,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",margin:"10px 0 10px 4px" }}>Legal</div>
         <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,marginBottom:16,overflow:"hidden" }}>
-          {[{ label:"Terms of Service" },{ label:"Privacy Policy" }].map((l,i)=>(
-            <div key={l.label} className="tap row" onClick={()=>setLegalNote(l.label)}
-              style={{ display:"flex",alignItems:"center",gap:14,padding:"15px 16px",borderBottom:i===0?`1px solid ${T.border}`:"none",cursor:"pointer" }}>
-              <i className="fas fa-file-contract" style={{ fontSize:14,color:T.mutedLight,width:20,textAlign:"center" }}/>
+          {[
+            { label:"Privacy Policy",     screen:"privacypolicy", icon:"fa-shield-alt"    },
+            { label:"Terms & Conditions", screen:"terms",          icon:"fa-file-contract" },
+            { label:"Refund Policy",      screen:"refund",         icon:"fa-undo"          },
+          ].map((l,i)=>(
+            <div key={l.label} className="tap row" onClick={()=>go(l.screen)}
+              style={{ display:"flex",alignItems:"center",gap:14,padding:"15px 16px",borderBottom:i<2?`1px solid ${T.border}`:"none",cursor:"pointer" }}>
+              <i className={`fas ${l.icon}`} style={{ fontSize:14,color:T.mutedLight,width:20,textAlign:"center" }}/>
               <span style={{ flex:1,fontSize:13,color:T.text,fontWeight:600 }}>{l.label}</span>
               <i className="fas fa-chevron-right" style={{ fontSize:12,color:T.muted }}/>
             </div>
           ))}
         </div>
-        {legalNote&&(
-          <div style={{ background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.25)",borderRadius:12,padding:"12px 14px",marginBottom:16,fontSize:12,color:T.yellow,lineHeight:1.6 }}>
-            <i className="fas fa-info-circle" style={{ marginRight:6 }}/>{legalNote} hasn't been published yet. Check back soon.
-          </div>
-        )}
 
         <div style={{ textAlign:"center",fontSize:11,color:T.muted,marginBottom:16 }}>EcoCharge Ghana · Version {APP_VERSION}</div>
 
@@ -2933,6 +2833,277 @@ function About({ go,onMenu }) {
         </button>
       </div>
       <Nav active="Profile" go={go}/>
+    </div>
+  );
+}
+
+// ── LEGAL SHARED COMPONENT ────────────────────────────────────
+function LegalSection({ title, children }) {
+  return (
+    <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"16px",marginBottom:12 }}>
+      <div style={{ fontWeight:700,fontSize:14,color:T.green,marginBottom:10 }}>{title}</div>
+      <div style={{ fontSize:13,color:T.mutedLight,lineHeight:1.8,whiteSpace:"pre-line" }}>{children}</div>
+    </div>
+  );
+}
+
+// ── PRIVACY POLICY ────────────────────────────────────────────
+function PrivacyPolicy({ go }) {
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Privacy Policy" sub="Last updated: June 2025" onBack={()=>go("about")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
+
+        <div style={{ background:T.highlightGrad2,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
+          <div style={{ fontWeight:800,fontSize:15,color:T.green,marginBottom:6 }}>Your Privacy Matters</div>
+          <div style={{ fontSize:13,color:T.mutedLight,lineHeight:1.8 }}>
+            EcoCharge Ghana ("we", "our", or "us") is committed to protecting your personal information. This Privacy Policy explains how we collect, use, and safeguard your data when you use the EcoCharge Ghana mobile application.
+          </div>
+        </div>
+
+        <LegalSection title="1. Information We Collect">
+{`We collect the following categories of information:
+
+Account Information: your name, email address, phone number, and password when you create an account.
+
+Charging & Booking Data: session history, station usage, vehicle type, booking references, and charging durations.
+
+Payment Information: wallet top-up history, transaction references, and payment amounts. We do not store full card numbers — payments are processed securely via Paystack.
+
+Device Information: device type, operating system, app version, and unique device identifiers for analytics and security.
+
+Location Data: approximate GPS location to help you find nearby charging stations. We only access your location when the app is in use, and only with your permission.`}
+        </LegalSection>
+
+        <LegalSection title="2. How We Use Your Information">
+{`We use your information to:
+• Provide and improve the EcoCharge Ghana charging service
+• Process bookings and charging sessions
+• Manage your wallet and transaction history
+• Send notifications about your sessions, wallet balance, and bookings
+• Respond to customer support requests
+• Comply with legal and regulatory obligations in the Republic of Ghana
+• Analyse usage patterns to improve app performance and user experience`}
+        </LegalSection>
+
+        <LegalSection title="3. Payments & Wallet">
+All financial transactions are processed through Paystack, a PCI-DSS compliant payment provider. We store transaction references and amounts for accounting and refund purposes. Your full payment card details are never stored on EcoCharge systems. Wallet balances are held in your EcoCharge account and are subject to our Refund Policy.
+        </LegalSection>
+
+        <LegalSection title="4. Location Services">
+Location access is used exclusively to show nearby charging stations and to provide navigation assistance. We do not track your location in the background. Location data is not sold or shared with third parties for marketing purposes.
+        </LegalSection>
+
+        <LegalSection title="5. Data Security">
+We implement industry-standard security measures including encrypted data transmission (HTTPS/TLS), secure database storage via Supabase, and access controls to protect your personal data. No method of transmission over the internet is 100% secure; however, we take all reasonable precautions to protect your information.
+        </LegalSection>
+
+        <LegalSection title="6. Sharing Your Information">
+{`We do not sell your personal data. We may share your information with:
+• Paystack — for payment processing
+• Supabase — for secure data storage
+• Law enforcement — when legally required by Ghanaian law
+• Station operators — limited data required to facilitate your charging session`}
+        </LegalSection>
+
+        <LegalSection title="7. Your Rights">
+{`You have the right to:
+• Access the personal data we hold about you
+• Request correction of inaccurate data
+• Request deletion of your account and associated data
+• Withdraw consent for location access at any time via device settings
+• Opt out of marketing communications
+
+To exercise these rights, contact us at ecochargeghanaltd@gmail.com.`}
+        </LegalSection>
+
+        <LegalSection title="8. Data Retention">
+We retain your account data for as long as your account is active. Transaction records are retained for a minimum of 5 years to comply with Ghanaian financial regulations. You may request deletion of your account at any time; some data may be retained where required by law.
+        </LegalSection>
+
+        <LegalSection title="9. Children's Privacy">
+EcoCharge Ghana is not intended for use by persons under the age of 18. We do not knowingly collect personal data from minors. If you believe a minor has provided us with personal information, please contact us immediately.
+        </LegalSection>
+
+        <LegalSection title="10. Changes to This Policy">
+We may update this Privacy Policy from time to time. We will notify you of significant changes via the app or email. Continued use of the app after changes constitutes acceptance of the updated policy.
+        </LegalSection>
+
+        <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"16px",marginBottom:16 }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:8 }}>Contact Us</div>
+          <div style={{ fontSize:13,color:T.muted,lineHeight:1.8 }}>
+            For privacy-related enquiries, contact:<br/>
+            <strong style={{ color:T.text }}>EcoCharge Ghana Ltd</strong><br/>
+            Email: ecochargeghanaltd@gmail.com<br/>
+            Phone: 0504008059
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── TERMS & CONDITIONS ────────────────────────────────────────
+function TermsAndConditions({ go }) {
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Terms & Conditions" sub="Last updated: June 2025" onBack={()=>go("about")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
+
+        <div style={{ background:T.highlightGrad2,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
+          <div style={{ fontWeight:800,fontSize:15,color:T.green,marginBottom:6 }}>Please Read Carefully</div>
+          <div style={{ fontSize:13,color:T.mutedLight,lineHeight:1.8 }}>
+            By downloading or using the EcoCharge Ghana application, you agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use the application.
+          </div>
+        </div>
+
+        <LegalSection title="1. Acceptance of Terms">
+These Terms and Conditions ("Terms") govern your use of the EcoCharge Ghana mobile application and related services ("Service") operated by EcoCharge Ghana Ltd ("Company", "we", "us"). By accessing or using the Service, you confirm that you are at least 18 years of age and legally capable of entering into a binding contract under the laws of the Republic of Ghana.
+        </LegalSection>
+
+        <LegalSection title="2. User Responsibilities">
+{`As a user of EcoCharge Ghana, you agree to:
+• Provide accurate and truthful registration information
+• Keep your account credentials confidential and secure
+• Ensure your vehicle is compatible with the charging equipment before initiating a session
+• Follow all safety instructions displayed at charging stations
+• Not tamper with, damage, or misuse any EcoCharge equipment
+• Report any faults, damage, or safety concerns to station staff immediately
+• Comply with all applicable Ghanaian laws and regulations`}
+        </LegalSection>
+
+        <LegalSection title="3. Charging Sessions">
+Charging sessions begin when you activate a charger via the app. You are responsible for monitoring your session. Sessions will be billed based on actual energy consumed (kWh) at the applicable tariff rate. An idle fee applies after the grace period if your vehicle remains connected but is no longer charging. EcoCharge Ghana reserves the right to terminate a session remotely if safety concerns arise or misuse is detected.
+        </LegalSection>
+
+        <LegalSection title="4. Reservations & Bookings">
+Reservations guarantee a charging bay for the selected time slot. Failure to arrive within 15 minutes of your reserved slot may result in forfeiture of the reservation without refund. Bookings are personal and non-transferable. EcoCharge Ghana reserves the right to cancel reservations in cases of equipment failure, emergency maintenance, or force majeure events.
+        </LegalSection>
+
+        <LegalSection title="5. Wallet Usage">
+The EcoCharge Wallet ("Wallet") is a prepaid digital balance used to pay for charging sessions and services. Wallet funds have no cash value and cannot be transferred to other users. The Wallet is subject to a minimum top-up amount of GH₵5.00. EcoCharge Ghana reserves the right to deduct outstanding charges from your Wallet balance. Unused Wallet balances may be refunded upon account closure, subject to the Refund Policy.
+        </LegalSection>
+
+        <LegalSection title="6. Payment Terms">
+All prices are displayed in Ghanaian Cedis (GH₵) and are inclusive of applicable taxes. Payment is made via Wallet deduction at the end of each charging session. For reservations, the estimated session cost is reserved (locked) in your Wallet at session start and finalised once the session ends. Payments are processed by Paystack; EcoCharge Ghana does not store full card details.
+        </LegalSection>
+
+        <LegalSection title="7. Refunds">
+Refunds are governed by our separate Refund Policy, available within the app. In general, unused Wallet balances and amounts charged in error are eligible for refund upon request, subject to verification.
+        </LegalSection>
+
+        <LegalSection title="8. Station Availability">
+While EcoCharge Ghana strives for 24/7 availability of all stations, we do not guarantee uninterrupted access. Stations may be temporarily unavailable due to maintenance, power outages, network issues, or events beyond our control. EcoCharge Ghana is not liable for inconvenience caused by station downtime, though affected charges will be refunded.
+        </LegalSection>
+
+        <LegalSection title="9. Prohibited Activities">
+{`You may not:
+• Use the Service for any unlawful purpose
+• Attempt to gain unauthorised access to EcoCharge systems or other users' accounts
+• Interfere with or disrupt the Service or servers/networks connected to it
+• Reverse-engineer, decompile, or attempt to extract source code from the application
+• Use automated systems (bots, scrapers) to access the Service without authorisation
+• Resell or commercially exploit the Service without written consent from EcoCharge Ghana`}
+        </LegalSection>
+
+        <LegalSection title="10. Limitation of Liability">
+To the maximum extent permitted by Ghanaian law, EcoCharge Ghana Ltd shall not be liable for indirect, incidental, or consequential damages arising from your use of the Service, including but not limited to vehicle damage from third-party equipment misuse, loss of data, or business interruption. Our total liability for any claim shall not exceed the amount you paid to EcoCharge Ghana in the three (3) months preceding the claim.
+        </LegalSection>
+
+        <LegalSection title="11. Governing Law">
+These Terms are governed by and construed in accordance with the laws of the Republic of Ghana. Any disputes arising from these Terms shall be subject to the exclusive jurisdiction of the courts of Ghana.
+        </LegalSection>
+
+        <LegalSection title="12. Updates to These Terms">
+We may revise these Terms from time to time. Material changes will be communicated via the app or email. Your continued use of the Service after changes take effect constitutes acceptance of the revised Terms.
+        </LegalSection>
+
+        <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"16px",marginBottom:16 }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:8 }}>Contact Us</div>
+          <div style={{ fontSize:13,color:T.muted,lineHeight:1.8 }}>
+            For questions about these Terms, contact:<br/>
+            <strong style={{ color:T.text }}>EcoCharge Ghana Ltd</strong><br/>
+            Email: ecochargeghanaltd@gmail.com<br/>
+            Phone: 0504008059
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── REFUND POLICY ─────────────────────────────────────────────
+function RefundPolicy({ go }) {
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Refund Policy" sub="Last updated: June 2025" onBack={()=>go("about")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
+
+        <div style={{ background:T.highlightGrad2,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
+          <div style={{ fontWeight:800,fontSize:15,color:T.green,marginBottom:6 }}>Fair & Transparent Refunds</div>
+          <div style={{ fontSize:13,color:T.mutedLight,lineHeight:1.8 }}>
+            EcoCharge Ghana is committed to ensuring you only pay for the energy and services you actually receive. This policy explains when and how refunds are issued.
+          </div>
+        </div>
+
+        <LegalSection title="1. Wallet Top-ups">
+Wallet top-ups are generally non-refundable once successfully credited, as the balance remains available for future charging sessions within the app. However, if a top-up was made in error (e.g. duplicate charge, incorrect amount due to a system fault), you may request a refund within 30 days of the transaction by contacting support with your payment reference.
+        </LegalSection>
+
+        <LegalSection title="2. Failed Charging Sessions">
+If a charging session fails to start after your Wallet has been debited or funds locked (e.g. due to charger fault, connectivity issue, or equipment malfunction), the reserved amount will be automatically released back to your Wallet within 24 hours. If the issue persists, contact support for a manual review and refund.
+        </LegalSection>
+
+        <LegalSection title="3. Duplicate Payments">
+If you are charged more than once for the same top-up or session due to a technical error, the duplicate amount will be refunded to your Wallet or original payment method within 5–7 business days of verification.
+        </LegalSection>
+
+        <LegalSection title="4. Reservation No-Shows">
+If you fail to arrive within 15 minutes of your reserved charging slot, the reservation may be forfeited in accordance with our Terms & Conditions, and the reserved amount is not refundable, except where the no-show was caused by a verified EcoCharge Ghana system or station fault.
+        </LegalSection>
+
+        <LegalSection title="5. Station Downtime">
+If a station or charger you booked becomes unavailable due to maintenance, power outage, or technical fault before your session starts, you will receive a full refund to your Wallet automatically, or upon request if not processed automatically within 24 hours.
+        </LegalSection>
+
+        <LegalSection title="6. Processing Times">
+{`Refund processing times depend on the method:
+• Wallet credit: instant to 24 hours
+• Original payment method (via Paystack): 5–10 business days, depending on your bank or mobile money provider
+• Account closure refunds: up to 14 business days after verification`}
+        </LegalSection>
+
+        <LegalSection title="7. Non-Refundable Items">
+{`The following are generally not eligible for refund:
+• Energy already delivered during a completed charging session
+• Idle fees incurred after the grace period
+• Reservation no-shows outside of verified EcoCharge Ghana fault
+• Wallet balances after 12 months of account inactivity, where permitted by law`}
+        </LegalSection>
+
+        <LegalSection title="8. How to Request a Refund">
+{`To request a refund, contact our support team with:
+• Your registered name and phone number
+• The transaction or booking reference
+• A brief description of the issue
+
+We aim to respond to all refund requests within 48 hours.`}
+        </LegalSection>
+
+        <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"16px",marginBottom:16 }}>
+          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:8 }}>Contact Support</div>
+          <div style={{ fontSize:13,color:T.muted,lineHeight:1.8,marginBottom:12 }}>
+            <strong style={{ color:T.text }}>EcoCharge Ghana Ltd</strong><br/>
+            Email: ecochargeghanaltd@gmail.com<br/>
+            Phone: 0504008059 / 0559561568<br/>
+            WhatsApp: 0504008059
+          </div>
+          <a href={`mailto:${CONTACT_INFO.email}?subject=Refund+Request`} className="tap"
+            style={{ display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,color:"#000",textDecoration:"none" }}>
+            <i className="fas fa-envelope"/> Request a Refund
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
@@ -3076,7 +3247,6 @@ function Bookings({ go,booking,user }) {
     </div>
   );
 }
-
 
 function ChargerAdmin({ go }) {
   const [chargers,setChargers]       = useState([]);
@@ -3336,7 +3506,6 @@ const fmtDuration = (sec) => {
 const fmtCost = (c) => c!=null ? `GH₵${Number(c).toFixed(2)}` : "--";
 const fmtKwh  = (k) => k!=null ? `${Number(k).toFixed(3)} kWh` : "--";
 const fmtDate = (d) => d ? new Date(d).toLocaleString("en-GH",{ day:"numeric",month:"short",hour:"2-digit",minute:"2-digit" }) : "--";
-
 
 function SessionManager({ go, user }) {
   const [sessions,  setSessions]  = useState([]);
@@ -3710,7 +3879,6 @@ function SessionManager({ go, user }) {
     </div>
   );
 }
-
 
 const toGHS    = (p) => p != null ? (p / 100).toFixed(2) : "0.00";
 const toPesewas = (g) => Math.round(parseFloat(g) * 100);
@@ -4089,7 +4257,6 @@ function WalletScreen({ go, user }) {
     </div>
   );
 }
-
 
 const PESEWAS = (p) => p != null ? (p/100).toFixed(2) : "0.00";
 const GHS     = (p) => `GH₵${PESEWAS(p)}`;
@@ -4503,7 +4670,6 @@ function PricingAdmin({ go, user }) {
   );
 }
 
-
 const ADMIN_TABS = [
   { id:"overview",  label:"Overview",  icon:"fa-tachometer-alt" },
   { id:"chargers",  label:"Chargers",  icon:"fa-charging-station" },
@@ -4516,30 +4682,25 @@ const ADMIN_TABS = [
 ];
 
 function AdminDashboard({ go, user }) {
-  const [tab,         setTab]       = useState("overview");
-  const [loading,     setLoading]   = useState(false);
-
-  const [overview,    setOverview]  = useState(null);
-  const [chargers,    setChargers]  = useState([]);
-  const [stations,    setStations]  = useState([]);
-  const [sessions,    setSessions]  = useState([]);
-  const [wallets,     setWallets]   = useState([]);
-  const [faults,      setFaults]    = useState([]);
-  const [revenue,     setRevenue]   = useState([]);
-  const [tariffs,     setTariffs]   = useState([]);
-
-  const [editStation, setEditStation] = useState(null);
-  const [editTariff,  setEditTariff]  = useState(null);
-  const [saving,      setSaving]      = useState(false);
-  const [msg,         setMsg]         = useState("");
+  const [tab,setTab]=useState("overview");
+  const [loading,setLoading]=useState(false);
+  const [overview,setOverview]=useState(null);
+  const [chargers,setChargers]=useState([]);
+  const [stations,setStations]=useState([]);
+  const [sessions,setSessions]=useState([]);
+  const [wallets,setWallets]=useState([]);
+  const [faults,setFaults]=useState([]);
+  const [revenue,setRevenue]=useState([]);
+  const [tariffs,setTariffs]=useState([]);
+  const [editStation,setEditStation]=useState(null);
+  const [saving,setSaving]=useState(false);
+  const [msg,setMsg]=useState("");
 
   const load = async (table, setter, query="") => {
     if (!SUPABASE_URL) return;
     try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/${table}${query}`,
-        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` }}
-      );
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`,
+        { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` }});
       const data = await res.json();
       if (Array.isArray(data)) setter(data);
     } catch(e) {}
@@ -4556,7 +4717,6 @@ function AdminDashboard({ go, user }) {
         fetch(`${SUPABASE_URL}/rest/v1/chargers?select=id,status,error_code&has_fault=eq.true`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` }}),
       ]);
       const [ses, wal, chr, flt] = await Promise.all([sesRes.json(), walRes.json(), charRes.json(), faultRes.json()]);
-
       const totalRevenue   = Array.isArray(ses) ? ses.reduce((a,s)=>a+(s.cost_total||0),0) : 0;
       const totalEnergy    = Array.isArray(ses) ? ses.reduce((a,s)=>a+(s.energy_kwh||0),0) : 0;
       const totalWallets   = Array.isArray(wal) ? wal.length : 0;
@@ -4565,7 +4725,6 @@ function AdminDashboard({ go, user }) {
       const faultCount     = Array.isArray(flt) ? flt.length : 0;
       const activeSessions = Array.isArray(ses) ? ses.filter(s=>s.status==="Charging").length : 0;
       const todaySes       = Array.isArray(ses) ? ses.filter(s=>new Date(s.created_at)>new Date(Date.now()-86400000)).length : 0;
-
       setOverview({ totalRevenue, totalEnergy, totalWallets, totalBalance, activeChargers, faultCount, activeSessions, todaySes, totalSessions: Array.isArray(ses)?ses.length:0 });
     } catch(e) {}
     setLoading(false);
@@ -4641,83 +4800,68 @@ function AdminDashboard({ go, user }) {
     </div>
   );
 
-  const OverviewTab = () => (
-    <div>
-      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
-        <div style={{ fontWeight:700,fontSize:15,color:T.text }}>Platform Overview</div>
-        <button onClick={loadOverview} className="tap" style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
-          <i className={`fas fa-sync${loading?" fa-spin":""}`}/> Refresh
-        </button>
-      </div>
-
-      {!overview&&loading&&<div style={{ textAlign:"center",padding:"30px 0" }}><Spinner/></div>}
-
-      {overview&&(
-        <>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10 }}>
-            <div style={{ background:T.highlightGrad,borderRadius:16,padding:"18px",border:"1px solid rgba(74,222,128,0.25)",gridColumn:"1/-1" }}>
+  const renderTab = () => {
+    if (tab==="overview") return (
+      <div>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+          <div style={{ fontWeight:700,fontSize:15,color:T.text }}>Platform Overview</div>
+          <button onClick={loadOverview} className="tap" style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+            <i className={`fas fa-sync${loading?" fa-spin":""}`}/> Refresh
+          </button>
+        </div>
+        {!overview&&loading&&<div style={{ textAlign:"center",padding:"30px 0" }}><Spinner/></div>}
+        {overview&&(
+          <>
+            <div style={{ background:T.highlightGrad,borderRadius:16,padding:"18px",border:"1px solid rgba(74,222,128,0.25)",marginBottom:10 }}>
               <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Total Revenue</div>
               <div style={{ fontWeight:900,fontSize:36,color:T.green }}>GH₵{(overview.totalRevenue/100).toFixed(2)}</div>
               <div style={{ fontSize:11,color:T.muted,marginTop:4 }}>{overview.totalSessions} sessions · {overview.totalEnergy.toFixed(1)} kWh delivered</div>
             </div>
-          </div>
-
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10 }}>
-            <StatCard label="Active Now"    value={overview.activeSessions} icon="fa-bolt"             color={T.green}  />
-            <StatCard label="Online Chargers" value={overview.activeChargers} icon="fa-charging-station" color={T.blue}   />
-            <StatCard label="Faults"        value={overview.faultCount}    icon="fa-exclamation-triangle" color={overview.faultCount>0?T.red:T.green} />
-          </div>
-
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10 }}>
-            <StatCard label="Today Sessions" value={overview.todaySes}   icon="fa-calendar-day" color={T.yellow} />
-            <StatCard label="Total Wallets"  value={overview.totalWallets} icon="fa-wallet"      color={T.blue}   />
-          </div>
-
-          <div style={{ background:T.card,borderRadius:14,padding:"14px 16px",border:`1px solid ${T.border}`,marginBottom:10 }}>
-            <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Total Wallet Balances (Platform)</div>
-            <div style={{ fontWeight:800,fontSize:22,color:T.yellow }}>GH₵{(overview.totalBalance/100).toFixed(2)}</div>
-            <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Across {overview.totalWallets} user wallets</div>
-          </div>
-
-          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}>Quick Actions</div>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
-            {[
-              { label:"View Chargers",  tab:"chargers", icon:"fa-charging-station", color:T.green  },
-              { label:"View Faults",    tab:"faults",   icon:"fa-exclamation-triangle",color:T.red },
-              { label:"Revenue Report", tab:"revenue",  icon:"fa-chart-line",       color:T.yellow },
-              { label:"Manage Pricing", tab:"pricing",  icon:"fa-tags",             color:"#a78bfa" },
-            ].map(a=>(
-              <button key={a.tab} onClick={()=>setTab(a.tab)} className="tap"
-                style={{ background:`${a.color}10`,border:`1px solid ${a.color}25`,borderRadius:12,padding:"13px",fontSize:12,fontWeight:700,color:a.color,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
-                <i className={`fas ${a.icon}`}/> {a.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-
-  const ChargersTab = () => (
-    <div>
-      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
-        <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{chargers.length} Chargers</div>
-        <button onClick={loadOcppChargers} className="tap" style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
-          <i className={`fas fa-sync${loading?" fa-spin":""}`}/> Refresh
-        </button>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10 }}>
+              <StatCard label="Active Now"    value={overview.activeSessions} icon="fa-bolt"             color={T.green}  />
+              <StatCard label="Online Chargers" value={overview.activeChargers} icon="fa-charging-station" color={T.blue}   />
+              <StatCard label="Faults"        value={overview.faultCount}    icon="fa-exclamation-triangle" color={overview.faultCount>0?T.red:T.green} />
+            </div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10 }}>
+              <StatCard label="Today Sessions" value={overview.todaySes}   icon="fa-calendar-day" color={T.yellow} />
+              <StatCard label="Total Wallets"  value={overview.totalWallets} icon="fa-wallet"      color={T.blue}   />
+            </div>
+            <div style={{ background:T.card,borderRadius:14,padding:"14px 16px",border:`1px solid ${T.border}`,marginBottom:10 }}>
+              <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Total Wallet Balances (Platform)</div>
+              <div style={{ fontWeight:800,fontSize:22,color:T.yellow }}>GH₵{(overview.totalBalance/100).toFixed(2)}</div>
+            </div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+              {[
+                { label:"View Chargers",  tab:"chargers", icon:"fa-charging-station", color:T.green  },
+                { label:"View Faults",    tab:"faults",   icon:"fa-exclamation-triangle",color:T.red },
+                { label:"Revenue Report", tab:"revenue",  icon:"fa-chart-line",       color:T.yellow },
+                { label:"Manage Pricing", tab:"pricing",  icon:"fa-tags",             color:"#a78bfa" },
+              ].map(a=>(
+                <button key={a.tab} onClick={()=>setTab(a.tab)} className="tap"
+                  style={{ background:`${a.color}10`,border:`1px solid ${a.color}25`,borderRadius:12,padding:"13px",fontSize:12,fontWeight:700,color:a.color,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+                  <i className={`fas ${a.icon}`}/> {a.label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
-      {chargers.length===0&&!loading&&(
-        <div style={{ textAlign:"center",padding:"30px 0",color:T.muted,fontSize:13 }}>
-          <i className="fas fa-charging-station" style={{ fontSize:40,display:"block",marginBottom:12,opacity:0.3 }}/>No chargers found
+    );
+
+    if (tab==="chargers") return (
+      <div>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+          <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{chargers.length} Chargers</div>
+          <button onClick={loadOcppChargers} className="tap" style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+            <i className={`fas fa-sync${loading?" fa-spin":""}`}/> Refresh
+          </button>
         </div>
-      )}
-      {chargers.map(c=>(
-        <div key={c.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${c.has_fault?"rgba(248,113,113,0.3)":T.border}`,marginBottom:10,overflow:"hidden" }}>
-          <div style={{ padding:"13px 14px" }}>
-            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
+        {chargers.map(c=>(
+          <div key={c.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${c.has_fault?"rgba(248,113,113,0.3)":T.border}`,marginBottom:10,padding:"13px 14px" }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
               <div>
                 <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{c.id}</div>
-                <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{c.model||c.info?.chargePointModel||"Unknown"} · {c.vendor||c.info?.chargePointVendor||""}</div>
+                <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{c.model||c.info?.chargePointModel||"Unknown"}</div>
               </div>
               <div style={{ display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4 }}>
                 <div style={{ background:`${statusColor(c.status)}15`,borderRadius:8,padding:"3px 10px" }}>
@@ -4728,23 +4872,6 @@ function AdminDashboard({ go, user }) {
                   {c.connected||c.online?"Online":"Offline"}
                 </div>
               </div>
-            </div>
-            {c.error_code&&c.error_code!=="NoError"&&(
-              <div style={{ background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.2)",borderRadius:8,padding:"6px 10px",marginBottom:8,fontSize:11,color:T.red }}>
-                <i className="fas fa-exclamation-triangle" style={{ marginRight:6 }}/>{c.error_code}
-              </div>
-            )}
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:10 }}>
-              {[
-                { label:"Last Beat", value:c.last_heartbeat||c.lastHeartbeat?new Date(c.last_heartbeat||c.lastHeartbeat).toLocaleTimeString("en-GH",{hour:"2-digit",minute:"2-digit"}):"--" },
-                { label:"Firmware",  value:c.firmware||c.info?.firmwareVersion||"--" },
-                { label:"Active TX", value:c.active_transaction||c.activeTransactions||0 },
-              ].map(r=>(
-                <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"7px" }}>
-                  <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase" }}>{r.label}</div>
-                  <div style={{ fontWeight:700,fontSize:11,color:T.text,marginTop:2 }}>{r.value}</div>
-                </div>
-              ))}
             </div>
             <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6 }}>
               {[
@@ -4759,133 +4886,154 @@ function AdminDashboard({ go, user }) {
               ))}
             </div>
           </div>
-        </div>
-      ))}
-    </div>
-  );
-
-  const StationsTab = () => {
-    const [localStations, setLocalStations] = useState(stations);
-    useEffect(()=>setLocalStations(stations),[stations]);
-
-    const saveStation = async (s) => {
-      setSaving(true);
-      try {
-        await fetch(`${SUPABASE_URL}/rest/v1/stations?id=eq.${s.id}`, {
-          method:"PATCH",
-          headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json", Prefer:"return=minimal" },
-          body: JSON.stringify({ name:s.name, city:s.city, bays:s.bays, open:s.open, solar:s.solar, hydrogen:s.hydrogen, time:s.time, lat:s.lat, lng:s.lng })
-        });
-        setMsg("Station saved ✅"); setTimeout(()=>setMsg(""),2000);
-        setEditStation(null);
-        load("stations", setStations, "?select=*&order=id");
-      } catch(e) {}
-      setSaving(false);
-    };
-
-    if (editStation) return (
-      <div>
-        <button onClick={()=>setEditStation(null)} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginBottom:14,display:"flex",alignItems:"center",gap:6 }}>
-          <i className="fas fa-arrow-left"/> Back to stations
-        </button>
-        <div style={{ background:T.card,borderRadius:16,padding:"16px",border:`1px solid ${T.border}` }}>
-          <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:14 }}>Edit: {editStation.name}</div>
-          {[
-            { label:"Station Name", key:"name",     type:"text"   },
-            { label:"City",         key:"city",     type:"text"   },
-            { label:"Total Bays",   key:"bays",     type:"number" },
-            { label:"Open Bays",    key:"open",     type:"number" },
-            { label:"Solar %",      key:"solar",    type:"number" },
-            { label:"Hydrogen %",   key:"hydrogen", type:"number" },
-            { label:"Wait Time",    key:"time",     type:"text"   },
-            { label:"Latitude",     key:"lat",      type:"number" },
-            { label:"Longitude",    key:"lng",      type:"number" },
-          ].map(f=>(
-            <div key={f.key} style={{ marginBottom:10 }}>
-              <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600,textTransform:"uppercase" }}>{f.label}</div>
-              <input type={f.type} value={editStation[f.key]||""} onChange={e=>setEditStation(p=>({...p,[f.key]:f.type==="number"?parseFloat(e.target.value)||0:e.target.value}))}
-                style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"11px 14px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
-            </div>
-          ))}
-          <button onClick={()=>saveStation(editStation)} disabled={saving} className="tap"
-            style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:4 }}>
-            {saving?<><Spinner/> Saving…</>:<><i className="fas fa-save"/> Save Station</>}
-          </button>
-        </div>
-      </div>
-    );
-
-    return (
-      <div>
-        <div style={{ fontWeight:700,fontSize:15,color:T.text,marginBottom:14 }}>{localStations.length} Stations</div>
-        {localStations.map(s=>(
-          <div key={s.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"13px 14px",marginBottom:10 }}>
-            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
-              <div>
-                <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{s.name}</div>
-                <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{s.city} · {s.bays} bays · {s.solar}% solar</div>
-              </div>
-              <button onClick={()=>setEditStation({...s})} className="tap"
-                style={{ background:`${T.green}10`,border:`1px solid ${T.green}25`,borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
-                Edit
-              </button>
-            </div>
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6 }}>
-              {[
-                { label:"Open", value:`${s.open}/${s.bays}`, color:T.green },
-                { label:"Solar",value:`${s.solar}%`,          color:T.yellow },
-                { label:"H₂",   value:`${s.hydrogen}%`,       color:T.blue },
-                { label:"Wait", value:s.time,                 color:T.muted },
-              ].map(r=>(
-                <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"6px",textAlign:"center" }}>
-                  <div style={{ fontWeight:700,fontSize:11,color:r.color }}>{r.value}</div>
-                  <div style={{ fontSize:9,color:T.muted }}>{r.label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
         ))}
       </div>
     );
-  };
 
-  const SessionsTab = () => {
-    const active = sessions.filter(s=>s.status==="Charging");
-    return (
-      <div>
-        {active.length>0&&(
-          <div style={{ background:"rgba(74,222,128,0.08)",border:"1px solid rgba(74,222,128,0.2)",borderRadius:14,padding:"12px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:10 }}>
-            <div style={{ width:10,height:10,borderRadius:"50%",background:T.green,flexShrink:0 }}/>
-            <div style={{ fontWeight:700,fontSize:13,color:T.green }}>{active.length} session{active.length>1?"s":""} charging live right now</div>
-          </div>
-        )}
-        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
-          <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{sessions.length} Sessions</div>
-          <button onClick={()=>load("charging_sessions",setSessions,"?select=*&order=created_at.desc&limit=100")} className="tap"
-            style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
-            <i className="fas fa-sync"/> Refresh
+    if (tab==="stations") {
+      if (editStation) return (
+        <div>
+          <button onClick={()=>setEditStation(null)} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginBottom:14,display:"flex",alignItems:"center",gap:6 }}>
+            <i className="fas fa-arrow-left"/> Back to stations
           </button>
+          <div style={{ background:T.card,borderRadius:16,padding:"16px",border:`1px solid ${T.border}` }}>
+            <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:14 }}>Edit: {editStation.name}</div>
+            {[
+              { label:"Station Name", key:"name",     type:"text"   },
+              { label:"City",         key:"city",     type:"text"   },
+              { label:"Total Bays",   key:"bays",     type:"number" },
+              { label:"Open Bays",    key:"open",     type:"number" },
+              { label:"Solar %",      key:"solar",    type:"number" },
+              { label:"Hydrogen %",   key:"hydrogen", type:"number" },
+              { label:"Wait Time",    key:"time",     type:"text"   },
+              { label:"Latitude",     key:"lat",      type:"number" },
+              { label:"Longitude",    key:"lng",      type:"number" },
+            ].map(f=>(
+              <div key={f.key} style={{ marginBottom:10 }}>
+                <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600,textTransform:"uppercase" }}>{f.label}</div>
+                <input type={f.type} value={editStation[f.key]||""} onChange={e=>setEditStation(p=>({...p,[f.key]:f.type==="number"?parseFloat(e.target.value)||0:e.target.value}))}
+                  style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"11px 14px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+              </div>
+            ))}
+            <button onClick={async()=>{
+              setSaving(true);
+              try {
+                await fetch(`${SUPABASE_URL}/rest/v1/stations?id=eq.${editStation.id}`, {
+                  method:"PATCH",
+                  headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json", Prefer:"return=minimal" },
+                  body: JSON.stringify({ name:editStation.name, city:editStation.city, bays:editStation.bays, open:editStation.open, solar:editStation.solar, hydrogen:editStation.hydrogen, time:editStation.time, lat:editStation.lat, lng:editStation.lng })
+                });
+                setMsg("Station saved ✅"); setTimeout(()=>setMsg(""),2000);
+                setEditStation(null);
+                load("stations", setStations, "?select=*&order=id");
+              } catch(e) {}
+              setSaving(false);
+            }} disabled={saving} className="tap"
+              style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:4 }}>
+              {saving?<><Spinner/> Saving…</>:<><i className="fas fa-save"/> Save Station</>}
+            </button>
+          </div>
         </div>
-        {sessions.map(s=>{
-          const sc = s.status==="Charging"?T.blue:s.status==="Completed"?T.green:s.status==="Faulted"?T.red:T.muted;
-          return (
-            <div key={s.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${s.status==="Charging"?"rgba(56,189,248,0.25)":T.border}`,padding:"13px 14px",marginBottom:8 }}>
+      );
+      return (
+        <div>
+          <div style={{ fontWeight:700,fontSize:15,color:T.text,marginBottom:14 }}>{stations.length} Stations</div>
+          {stations.map(s=>(
+            <div key={s.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"13px 14px",marginBottom:10 }}>
               <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
                 <div>
-                  <div style={{ fontWeight:700,fontSize:12,color:T.text,fontFamily:"monospace" }}>{s.session_ref||s.id?.slice(0,16)}</div>
-                  <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{s.charger_id||"--"} · {s.vehicle_type||"--"}</div>
+                  <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{s.name}</div>
+                  <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{s.city} · {s.bays} bays · {s.solar}% solar</div>
                 </div>
-                <div style={{ background:`${sc}15`,borderRadius:8,padding:"3px 10px" }}>
-                  <span style={{ fontSize:10,fontWeight:700,color:sc }}>{s.status}</span>
-                </div>
+                <button onClick={()=>setEditStation({...s})} className="tap"
+                  style={{ background:`${T.green}10`,border:`1px solid ${T.green}25`,borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
+                  Edit
+                </button>
               </div>
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6 }}>
-                {[
-                  { label:"kWh",    value:s.energy_kwh!=null?s.energy_kwh.toFixed(3):"--" },
-                  { label:"Min",    value:s.duration_min!=null?s.duration_min.toFixed(0):"--" },
-                  { label:"Cost",   value:s.cost_total?`₵${(s.cost_total/100).toFixed(0)}`:"--" },
-                  { label:"Pay",    value:s.payment_status||"--" },
-                ].map(r=>(
+                {[{ label:"Open",value:`${s.open}/${s.bays}`,color:T.green },{ label:"Solar",value:`${s.solar}%`,color:T.yellow },{ label:"H₂",value:`${s.hydrogen}%`,color:T.blue },{ label:"Wait",value:s.time,color:T.muted }].map(r=>(
+                  <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"6px",textAlign:"center" }}>
+                    <div style={{ fontWeight:700,fontSize:11,color:r.color }}>{r.value}</div>
+                    <div style={{ fontSize:9,color:T.muted }}>{r.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    if (tab==="sessions") {
+      const active = sessions.filter(s=>s.status==="Charging");
+      return (
+        <div>
+          {active.length>0&&(
+            <div style={{ background:"rgba(74,222,128,0.08)",border:"1px solid rgba(74,222,128,0.2)",borderRadius:14,padding:"12px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:10 }}>
+              <div style={{ width:10,height:10,borderRadius:"50%",background:T.green }}/>
+              <div style={{ fontWeight:700,fontSize:13,color:T.green }}>{active.length} session{active.length>1?"s":""} charging live right now</div>
+            </div>
+          )}
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+            <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{sessions.length} Sessions</div>
+            <button onClick={()=>load("charging_sessions",setSessions,"?select=*&order=created_at.desc&limit=100")} className="tap"
+              style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+              <i className="fas fa-sync"/> Refresh
+            </button>
+          </div>
+          {sessions.map(s=>{
+            const sc = s.status==="Charging"?T.blue:s.status==="Completed"?T.green:s.status==="Faulted"?T.red:T.muted;
+            return (
+              <div key={s.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${s.status==="Charging"?"rgba(56,189,248,0.25)":T.border}`,padding:"13px 14px",marginBottom:8 }}>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
+                  <div>
+                    <div style={{ fontWeight:700,fontSize:12,color:T.text,fontFamily:"monospace" }}>{s.session_ref||s.id?.slice(0,16)}</div>
+                    <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{s.charger_id||"--"} · {s.vehicle_type||"--"}</div>
+                  </div>
+                  <div style={{ background:`${sc}15`,borderRadius:8,padding:"3px 10px" }}>
+                    <span style={{ fontSize:10,fontWeight:700,color:sc }}>{s.status}</span>
+                  </div>
+                </div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6 }}>
+                  {[{ label:"kWh",value:s.energy_kwh!=null?s.energy_kwh.toFixed(3):"--" },{ label:"Min",value:s.duration_min!=null?s.duration_min.toFixed(0):"--" },{ label:"Cost",value:s.cost_total?`₵${(s.cost_total/100).toFixed(0)}`:"--" },{ label:"Pay",value:s.payment_status||"--" }].map(r=>(
+                    <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"6px",textAlign:"center" }}>
+                      <div style={{ fontWeight:700,fontSize:11,color:T.text }}>{r.value}</div>
+                      <div style={{ fontSize:9,color:T.muted }}>{r.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    if (tab==="wallets") {
+      const totalBal  = wallets.reduce((a,w)=>a+(w.balance_pesewas||0),0);
+      const totalIn   = wallets.reduce((a,w)=>a+(w.total_topped_up||0),0);
+      const totalSpent= wallets.reduce((a,w)=>a+(w.total_spent||0),0);
+      return (
+        <div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
+            {[{ label:"Total Balances",value:`GH₵${(totalBal/100).toFixed(0)}`,color:T.green },{ label:"Total Top-ups",value:`GH₵${(totalIn/100).toFixed(0)}`,color:T.blue },{ label:"Total Spent",value:`GH₵${(totalSpent/100).toFixed(0)}`,color:T.yellow },{ label:"Total Wallets",value:wallets.length,color:T.mutedLight }].map(s=>(
+              <div key={s.label} style={{ background:T.card,borderRadius:14,padding:"14px",border:`1px solid ${T.border}`,textAlign:"center" }}>
+                <div style={{ fontWeight:800,fontSize:20,color:s.color }}>{s.value}</div>
+                <div style={{ fontSize:10,color:T.muted,marginTop:3,textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+          {wallets.map(w=>(
+            <div key={w.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"13px 14px",marginBottom:8 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
+                <div>
+                  <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{w.display_name||w.email||"Anonymous"}</div>
+                  <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{w.email||"No email"}</div>
+                </div>
+                <div style={{ fontWeight:800,fontSize:16,color:T.green }}>GH₵{((w.balance_pesewas||0)/100).toFixed(2)}</div>
+              </div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6 }}>
+                {[{ label:"Topped Up",value:`GH₵${((w.total_topped_up||0)/100).toFixed(0)}` },{ label:"Spent",value:`GH₵${((w.total_spent||0)/100).toFixed(0)}` },{ label:"Sessions",value:w.session_count||0 }].map(r=>(
                   <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"6px",textAlign:"center" }}>
                     <div style={{ fontWeight:700,fontSize:11,color:T.text }}>{r.value}</div>
                     <div style={{ fontSize:9,color:T.muted }}>{r.label}</div>
@@ -4893,210 +5041,127 @@ function AdminDashboard({ go, user }) {
                 ))}
               </div>
             </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const WalletsTab = () => {
-    const totalBal  = wallets.reduce((a,w)=>a+(w.balance_pesewas||0),0);
-    const totalIn   = wallets.reduce((a,w)=>a+(w.total_topped_up||0),0);
-    const totalSpent= wallets.reduce((a,w)=>a+(w.total_spent||0),0);
-    return (
-      <div>
-        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
-          {[
-            { label:"Total Balances", value:`GH₵${(totalBal/100).toFixed(0)}`,  color:T.green  },
-            { label:"Total Top-ups",  value:`GH₵${(totalIn/100).toFixed(0)}`,   color:T.blue   },
-            { label:"Total Spent",    value:`GH₵${(totalSpent/100).toFixed(0)}`,color:T.yellow },
-            { label:"Total Wallets",  value:wallets.length,                     color:T.mutedLight },
-          ].map(s=>(
-            <div key={s.label} style={{ background:T.card,borderRadius:14,padding:"14px",border:`1px solid ${T.border}`,textAlign:"center" }}>
-              <div style={{ fontWeight:800,fontSize:20,color:s.color }}>{s.value}</div>
-              <div style={{ fontSize:10,color:T.muted,marginTop:3,textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
-            </div>
           ))}
         </div>
-        {wallets.map(w=>(
-          <div key={w.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"13px 14px",marginBottom:8 }}>
-            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
-              <div>
-                <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{w.display_name||w.email||"Anonymous"}</div>
-                <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{w.email||"No email"}</div>
+      );
+    }
+
+    if (tab==="revenue") {
+      const completed = revenue.filter(s=>s.status==="Completed"&&s.cost_total);
+      const totalRev  = completed.reduce((a,s)=>a+(s.cost_total||0),0);
+      const totalKwh  = completed.reduce((a,s)=>a+(s.energy_kwh||0),0);
+      const avgRev    = completed.length ? totalRev/completed.length : 0;
+      const byDay = {};
+      completed.forEach(s=>{ const day = s.created_at?.slice(0,10)||"Unknown"; if (!byDay[day]) byDay[day] = { rev:0, count:0, kwh:0 }; byDay[day].rev+=s.cost_total||0; byDay[day].count+=1; byDay[day].kwh+=s.energy_kwh||0; });
+      const days = Object.entries(byDay).sort((a,b)=>a[0]>b[0]?-1:1).slice(0,10);
+      const maxRev = Math.max(...days.map(d=>d[1].rev), 1);
+      return (
+        <div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
+            {[{ label:"Total Revenue",value:`GH₵${(totalRev/100).toFixed(2)}`,color:T.green },{ label:"Total Energy",value:`${totalKwh.toFixed(1)} kWh`,color:T.yellow },{ label:"Avg per Session",value:`GH₵${(avgRev/100).toFixed(2)}`,color:T.blue },{ label:"Paid Sessions",value:completed.length,color:T.green }].map(s=>(
+              <div key={s.label} style={{ background:T.card,borderRadius:14,padding:"14px",border:`1px solid ${T.border}`,textAlign:"center" }}>
+                <div style={{ fontWeight:800,fontSize:18,color:s.color }}>{s.value}</div>
+                <div style={{ fontSize:10,color:T.muted,marginTop:3,textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
               </div>
-              <div style={{ fontWeight:800,fontSize:16,color:T.green }}>GH₵{((w.balance_pesewas||0)/100).toFixed(2)}</div>
-            </div>
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6 }}>
-              {[
-                { label:"Topped Up", value:`GH₵${((w.total_topped_up||0)/100).toFixed(0)}` },
-                { label:"Spent",     value:`GH₵${((w.total_spent||0)/100).toFixed(0)}` },
-                { label:"Sessions",  value:w.session_count||0 },
-              ].map(r=>(
-                <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"6px",textAlign:"center" }}>
-                  <div style={{ fontWeight:700,fontSize:11,color:T.text }}>{r.value}</div>
-                  <div style={{ fontSize:9,color:T.muted }}>{r.label}</div>
+            ))}
+          </div>
+          <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
+            <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:14 }}>Revenue by Day</div>
+            {days.map(([day,d])=>(
+              <div key={day} style={{ marginBottom:10 }}>
+                <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
+                  <span style={{ fontSize:11,color:T.muted }}>{new Date(day).toLocaleDateString("en-GH",{day:"numeric",month:"short"})}</span>
+                  <span style={{ fontSize:11,fontWeight:700,color:T.green }}>GH₵{(d.rev/100).toFixed(2)} · {d.count} sessions</span>
                 </div>
-              ))}
+                <div style={{ height:8,borderRadius:4,background:T.surface,overflow:"hidden" }}>
+                  <div style={{ height:"100%",width:`${(d.rev/maxRev)*100}%`,background:`linear-gradient(90deg,${T.green},${T.blue})`,borderRadius:4 }}/>
+                </div>
+              </div>
+            ))}
+            {days.length===0&&<div style={{ textAlign:"center",color:T.muted,fontSize:13,padding:"20px 0" }}>No completed sessions yet</div>}
+          </div>
+        </div>
+      );
+    }
+
+    if (tab==="pricing") return (
+      <div>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+          <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{tariffs.length} Tariffs</div>
+          <button onClick={()=>go("pricing")} className="tap"
+            style={{ background:`${T.green}10`,border:`1px solid ${T.green}25`,borderRadius:10,padding:"7px 14px",fontSize:11,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+            <i className="fas fa-external-link-alt"/> Full Editor
+          </button>
+        </div>
+        {tariffs.map(t=>(
+          <div key={t.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${t.is_active?T.border:T.surface}`,padding:"13px 14px",marginBottom:8,opacity:t.is_active?1:0.55 }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6 }}>
+              <div>
+                <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{t.name}</div>
+                <div style={{ fontSize:10,color:T.muted }}>{t.code}</div>
+              </div>
+              <div style={{ display:"flex",gap:6,alignItems:"center" }}>
+                {t.is_promo&&<Badge label="PROMO" color={T.yellow}/>}
+                <div style={{ background:t.is_active?`${T.green}15`:T.surface,borderRadius:8,padding:"3px 10px" }}>
+                  <span style={{ fontSize:10,fontWeight:700,color:t.is_active?T.green:T.muted }}>{t.is_active?"ON":"OFF"}</span>
+                </div>
+              </div>
+            </div>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+              {t.price_per_kwh>0&&<div style={{ background:"rgba(74,222,128,0.08)",borderRadius:6,padding:"3px 8px",fontSize:10,color:T.green,fontWeight:700 }}>GH₵{(t.price_per_kwh/100).toFixed(2)}/kWh</div>}
+              {t.price_per_min>0&&<div style={{ background:"rgba(56,189,248,0.08)",borderRadius:6,padding:"3px 8px",fontSize:10,color:T.blue,fontWeight:700 }}>GH₵{(t.price_per_min/100).toFixed(2)}/min</div>}
             </div>
           </div>
         ))}
       </div>
     );
-  };
 
-  const RevenueTab = () => {
-    const completed = revenue.filter(s=>s.status==="Completed"&&s.cost_total);
-    const totalRev  = completed.reduce((a,s)=>a+(s.cost_total||0),0);
-    const totalKwh  = completed.reduce((a,s)=>a+(s.energy_kwh||0),0);
-    const avgRev    = completed.length ? totalRev/completed.length : 0;
-
-    const byDay = {};
-    completed.forEach(s=>{
-      const day = s.created_at?.slice(0,10)||"Unknown";
-      if (!byDay[day]) byDay[day] = { rev:0, count:0, kwh:0 };
-      byDay[day].rev   += s.cost_total||0;
-      byDay[day].count += 1;
-      byDay[day].kwh   += s.energy_kwh||0;
-    });
-    const days = Object.entries(byDay).sort((a,b)=>a[0]>b[0]?-1:1).slice(0,10);
-    const maxRev = Math.max(...days.map(d=>d[1].rev), 1);
-
-    return (
+    if (tab==="faults") return (
       <div>
-        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
-          {[
-            { label:"Total Revenue",  value:`GH₵${(totalRev/100).toFixed(2)}`,    color:T.green  },
-            { label:"Total Energy",   value:`${totalKwh.toFixed(1)} kWh`,          color:T.yellow },
-            { label:"Avg per Session",value:`GH₵${(avgRev/100).toFixed(2)}`,       color:T.blue   },
-            { label:"Paid Sessions",  value:completed.length,                      color:T.green  },
-          ].map(s=>(
-            <div key={s.label} style={{ background:T.card,borderRadius:14,padding:"14px",border:`1px solid ${T.border}`,textAlign:"center" }}>
-              <div style={{ fontWeight:800,fontSize:18,color:s.color }}>{s.value}</div>
-              <div style={{ fontSize:10,color:T.muted,marginTop:3,textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
-            </div>
-          ))}
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+          <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{faults.length} Active Fault{faults.length!==1?"s":""}</div>
+          <button onClick={()=>load("chargers",setFaults,"?select=*&has_fault=eq.true&order=updated_at.desc")} className="tap"
+            style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+            <i className="fas fa-sync"/> Refresh
+          </button>
         </div>
-
-        <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
-          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:14 }}>Revenue by Day</div>
-          {days.map(([day,d])=>(
-            <div key={day} style={{ marginBottom:10 }}>
-              <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
-                <span style={{ fontSize:11,color:T.muted }}>{new Date(day).toLocaleDateString("en-GH",{day:"numeric",month:"short"})}</span>
-                <span style={{ fontSize:11,fontWeight:700,color:T.green }}>GH₵{(d.rev/100).toFixed(2)} · {d.count} sessions</span>
+        {faults.length===0&&(
+          <div style={{ textAlign:"center",padding:"40px 0" }}>
+            <div style={{ width:64,height:64,borderRadius:"50%",background:"rgba(74,222,128,0.1)",border:`2px solid ${T.green}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px" }}>
+              <i className="fas fa-check" style={{ fontSize:26,color:T.green }}/>
+            </div>
+            <div style={{ fontWeight:700,fontSize:15,color:T.text,marginBottom:6 }}>All Systems Normal</div>
+            <div style={{ fontSize:12,color:T.muted }}>No active faults detected</div>
+          </div>
+        )}
+        {faults.map(f=>(
+          <div key={f.id} style={{ background:"rgba(248,113,113,0.06)",borderRadius:14,border:"1px solid rgba(248,113,113,0.2)",padding:"14px",marginBottom:10 }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
+              <div>
+                <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{f.id}</div>
+                {f.error_code&&<div style={{ fontSize:12,color:T.red,marginTop:4 }}><i className="fas fa-exclamation-circle" style={{ marginRight:6 }}/>Error: {f.error_code}</div>}
               </div>
-              <div style={{ height:8,borderRadius:4,background:T.surface,overflow:"hidden" }}>
-                <div style={{ height:"100%",width:`${(d.rev/maxRev)*100}%`,background:`linear-gradient(90deg,${T.green},${T.blue})`,borderRadius:4,transition:"width .5s ease" }}/>
+              <div style={{ background:"rgba(248,113,113,0.12)",borderRadius:8,padding:"3px 10px" }}>
+                <span style={{ fontSize:10,fontWeight:700,color:T.red }}>{f.status||"Faulted"}</span>
               </div>
             </div>
-          ))}
-          {days.length===0&&<div style={{ textAlign:"center",color:T.muted,fontSize:13,padding:"20px 0" }}>No completed sessions yet</div>}
-        </div>
-
-        <div style={{ background:T.highlightGrad,borderRadius:14,padding:"16px",border:"1px solid rgba(74,222,128,0.2)" }}>
-          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}><i className="fas fa-leaf" style={{ marginRight:8,color:T.green }}/>Environmental Impact</div>
-          {[
-            { label:"CO₂ Prevented", value:`${(totalKwh*0.5).toFixed(1)} kg`,    color:T.green  },
-            { label:"Solar Energy",  value:`${(totalKwh*0.85).toFixed(1)} kWh`,  color:T.yellow },
-            { label:"Clean Water",   value:`${completed.length*20} L delivered`,  color:T.blue   },
-          ].map(r=>(
-            <div key={r.label} style={{ display:"flex",justifyContent:"space-between",marginBottom:8 }}>
-              <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
-              <span style={{ color:r.color,fontWeight:700,fontSize:13 }}>{r.value}</span>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+              <button onClick={async()=>{ const r=await sendOcpp(f.id,"reset",{type:"Hard"}); setMsg(r?.success?"Reset sent ✅":"Reset failed ❌"); setTimeout(()=>setMsg(""),2000); }} className="tap"
+                style={{ background:"rgba(251,191,36,0.1)",border:"1px solid rgba(251,191,36,0.2)",borderRadius:10,padding:"10px",fontSize:12,fontWeight:700,color:T.yellow,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+                <i className="fas fa-redo"/> Hard Reset
+              </button>
+              <button onClick={async()=>{ await sbPatch("chargers",f.id,{has_fault:false,status:"Available",error_code:null}); load("chargers",setFaults,"?select=*&has_fault=eq.true"); }} className="tap"
+                style={{ background:"rgba(74,222,128,0.1)",border:"1px solid rgba(74,222,128,0.2)",borderRadius:10,padding:"10px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
+                <i className="fas fa-check"/> Clear Fault
+              </button>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
     );
+
+    return null;
   };
-
-  const PricingTab = () => (
-    <div>
-      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
-        <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{tariffs.length} Tariffs</div>
-        <button onClick={()=>go("pricing")} className="tap"
-          style={{ background:`${T.green}10`,border:`1px solid ${T.green}25`,borderRadius:10,padding:"7px 14px",fontSize:11,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
-          <i className="fas fa-external-link-alt"/> Full Editor
-        </button>
-      </div>
-      {tariffs.map(t=>(
-        <div key={t.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${t.is_active?T.border:T.surface}`,padding:"13px 14px",marginBottom:8,opacity:t.is_active?1:0.55 }}>
-          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6 }}>
-            <div>
-              <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{t.name}</div>
-              <div style={{ fontSize:10,color:T.muted }}>{t.code}</div>
-            </div>
-            <div style={{ display:"flex",gap:6,alignItems:"center" }}>
-              {t.is_promo&&<Badge label="PROMO" color={T.yellow}/>}
-              <div style={{ background:t.is_active?`${T.green}15`:T.surface,borderRadius:8,padding:"3px 10px" }}>
-                <span style={{ fontSize:10,fontWeight:700,color:t.is_active?T.green:T.muted }}>{t.is_active?"ON":"OFF"}</span>
-              </div>
-            </div>
-          </div>
-          <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
-            {t.price_per_kwh>0&&<div style={{ background:"rgba(74,222,128,0.08)",borderRadius:6,padding:"3px 8px",fontSize:10,color:T.green,fontWeight:700 }}>GH₵{(t.price_per_kwh/100).toFixed(2)}/kWh</div>}
-            {t.price_per_min>0&&<div style={{ background:"rgba(56,189,248,0.08)",borderRadius:6,padding:"3px 8px",fontSize:10,color:T.blue,fontWeight:700 }}>GH₵{(t.price_per_min/100).toFixed(2)}/min</div>}
-            {t.idle_fee_per_min>0&&<div style={{ background:"rgba(251,191,36,0.08)",borderRadius:6,padding:"3px 8px",fontSize:10,color:T.yellow,fontWeight:700 }}>Idle: GH₵{(t.idle_fee_per_min/100).toFixed(2)}/min</div>}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-
-  const FaultsTab = () => (
-    <div>
-      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
-        <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{faults.length} Active Fault{faults.length!==1?"s":""}</div>
-        <button onClick={()=>load("chargers",setFaults,"?select=*&has_fault=eq.true&order=updated_at.desc")} className="tap"
-          style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",fontSize:11,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
-          <i className="fas fa-sync"/> Refresh
-        </button>
-      </div>
-      {faults.length===0&&(
-        <div style={{ textAlign:"center",padding:"40px 0" }}>
-          <div style={{ width:64,height:64,borderRadius:"50%",background:"rgba(74,222,128,0.1)",border:`2px solid ${T.green}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px" }}>
-            <i className="fas fa-check" style={{ fontSize:26,color:T.green }}/>
-          </div>
-          <div style={{ fontWeight:700,fontSize:15,color:T.text,marginBottom:6 }}>All Systems Normal</div>
-          <div style={{ fontSize:12,color:T.muted }}>No active faults detected</div>
-        </div>
-      )}
-      {faults.map(f=>(
-        <div key={f.id} style={{ background:"rgba(248,113,113,0.06)",borderRadius:14,border:"1px solid rgba(248,113,113,0.2)",padding:"14px",marginBottom:10 }}>
-          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
-            <div>
-              <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{f.id}</div>
-              <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{f.location||f.city||"Unknown location"}</div>
-            </div>
-            <div style={{ background:"rgba(248,113,113,0.12)",borderRadius:8,padding:"3px 10px" }}>
-              <span style={{ fontSize:10,fontWeight:700,color:T.red }}>{f.status||"Faulted"}</span>
-            </div>
-          </div>
-          {f.error_code&&<div style={{ fontSize:12,color:T.red,marginBottom:8 }}><i className="fas fa-exclamation-circle" style={{ marginRight:6 }}/>Error: {f.error_code}</div>}
-          {f.status_info&&<div style={{ fontSize:11,color:T.mutedLight,marginBottom:10 }}>{f.status_info}</div>}
-          <div style={{ fontSize:10,color:T.muted,marginBottom:10 }}>Last update: {f.last_status_update?new Date(f.last_status_update).toLocaleString("en-GH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"--"}</div>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
-            <button onClick={async()=>{ const r=await sendOcpp(f.id,"reset",{type:"Hard"}); setMsg(r?.success?"Reset sent ✅":"Reset failed ❌"); setTimeout(()=>setMsg(""),2000); }} className="tap"
-              style={{ background:"rgba(251,191,36,0.1)",border:"1px solid rgba(251,191,36,0.2)",borderRadius:10,padding:"10px",fontSize:12,fontWeight:700,color:T.yellow,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
-              <i className="fas fa-redo"/> Hard Reset
-            </button>
-            <button onClick={async()=>{ await sbPatch("chargers",f.id,{has_fault:false,status:"Available",error_code:null}); load("chargers",setFaults,"?select=*&has_fault=eq.true"); }} className="tap"
-              style={{ background:"rgba(74,222,128,0.1)",border:"1px solid rgba(74,222,128,0.2)",borderRadius:10,padding:"10px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
-              <i className="fas fa-check"/> Clear Fault
-            </button>
-          </div>
-        </div>
-      ))}
-      <div style={{ background:T.card,borderRadius:14,padding:"14px",marginTop:10,border:`1px solid ${T.border}` }}>
-        <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}><i className="fas fa-history" style={{ marginRight:8,color:T.muted }}/>View Full Logs</div>
-        <button onClick={()=>go("chargers")} className="tap"
-          style={{ width:"100%",background:`${T.blue}10`,border:`1px solid ${T.blue}25`,borderRadius:10,padding:"11px",fontSize:12,fontWeight:700,color:T.blue,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
-          <i className="fas fa-external-link-alt"/> Open Charger Admin for Full Logs
-        </button>
-      </div>
-    </div>
-  );
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
@@ -5110,9 +5175,7 @@ function AdminDashboard({ go, user }) {
             <div style={{ fontSize:10,color:T.muted,marginTop:1 }}>EcoCharge Ghana · Management</div>
           </div>
         </div>
-        <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-          {msg&&<div style={{ fontSize:11,color:T.green,fontWeight:700 }}>{msg}</div>}
-        </div>
+        {msg&&<div style={{ fontSize:11,color:T.green,fontWeight:700 }}>{msg}</div>}
       </div>
 
       <div style={{ display:"flex",gap:6,overflowX:"auto",padding:"10px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0 }}>
@@ -5125,14 +5188,7 @@ function AdminDashboard({ go, user }) {
       </div>
 
       <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 100px" }}>
-        {tab==="overview" && <OverviewTab/>}
-        {tab==="chargers" && <ChargersTab/>}
-        {tab==="stations" && <StationsTab/>}
-        {tab==="sessions" && <SessionsTab/>}
-        {tab==="wallets"  && <WalletsTab/>}
-        {tab==="revenue"  && <RevenueTab/>}
-        {tab==="pricing"  && <PricingTab/>}
-        {tab==="faults"   && <FaultsTab/>}
+        {renderTab()}
       </div>
 
       <Nav active="Profile" go={go}/>
@@ -5154,7 +5210,7 @@ function AppInner() {
 
   const setUser=(u)=>{ setUserRaw(u); try { u?localStorage.setItem("eco_user",JSON.stringify(u)):localStorage.removeItem("eco_user"); } catch(e){} };
   const go=(s)=>{ setScreen(s);setDrawer(false); };
-  const goSecure=(s)=>{ const open=["splash","auth","about","home","detail","verify","map"]; if(!user&&!open.includes(s)){ setAuthMode("login");go("auth");return; } go(s); };
+  const goSecure=(s)=>{ const open=["splash","auth","about","home","detail","verify","map","privacypolicy","terms","refund"]; if(!user&&!open.includes(s)){ setAuthMode("login");go("auth");return; } go(s); };
 
   useEffect(()=>{
     if (SUPABASE_URL) sb("stations?select=*&order=id").then(d=>{ if(d?.length) setStations(d); });
@@ -5213,28 +5269,31 @@ function AppInner() {
   const props={ go:goSecure,stations,station:station||stations[0],setStation,user,setUser,vehicle,setVehicle,bookingMode,setBookingMode,booking,setBooking,selectedCharger,setSelectedCharger,onMenu:()=>setDrawer(true) };
 
   if (screen==="splash") return <><style>{CSS}</style><Splash onLogin={()=>{ setAuthMode("login");go("auth"); }} onRegister={()=>{ setAuthMode("register");go("auth"); }} onGuest={()=>go("home")}/></>;
-  if (screen==="auth") return <><style>{CSS}</style><Auth mode={authMode} onBack={(mode)=>{ if(mode){ setAuthMode(mode); } else { go("splash"); } }} onSuccess={(u)=>{ setUser(u);go("home"); }}/></>;
+  if (screen==="auth")   return <><style>{CSS}</style><Auth mode={authMode} onBack={(mode)=>{ if(mode){ setAuthMode(mode); } else { go("splash"); } }} onSuccess={(u)=>{ setUser(u);go("home"); }}/></>;
 
   const views={
-    chargers:<ChargerAdmin go={goSecure}/>,
-    sessions:<SessionManager go={goSecure} user={user}/>,
-    wallet:<WalletScreen go={goSecure} user={user}/>,
-    pricing:<PricingAdmin go={goSecure} user={user}/>,
-    admin:<AdminDashboard go={goSecure} user={user}/>,
-    notifications:<NotificationsScreen go={goSecure} user={user}/>,
-    home:<Home {...props}/>,
-    map:<MapScreen {...props}/>,
-    detail:<Detail {...props}/>,
-    chargerdetail:<ChargerDetail {...props}/>,
-    vehicles:<Vehicles {...props}/>,
-    chargenow:<ChargeNow {...props}/>,
-    booking:<Booking {...props}/>,
-    bookings:<Bookings {...props}/>,
-    qr:<QRScreen {...props}/>,
-    scan:<ScanToCharge {...props}/>,
-    verify:<Verify {...props}/>,
-    profile:<Profile {...props}/>,
-    about:<About {...props}/>
+    chargers:       <ChargerAdmin go={goSecure}/>,
+    sessions:       <SessionManager go={goSecure} user={user}/>,
+    wallet:         <WalletScreen go={goSecure} user={user}/>,
+    pricing:        <PricingAdmin go={goSecure} user={user}/>,
+    admin:          <AdminDashboard go={goSecure} user={user}/>,
+    notifications:  <NotificationsScreen go={goSecure} user={user}/>,
+    privacypolicy:  <PrivacyPolicy go={goSecure}/>,
+    terms:          <TermsAndConditions go={goSecure}/>,
+    refund:         <RefundPolicy go={goSecure}/>,
+    home:           <Home {...props}/>,
+    map:            <MapScreen {...props}/>,
+    detail:         <Detail {...props}/>,
+    chargerdetail:  <ChargerDetail {...props}/>,
+    vehicles:       <Vehicles {...props}/>,
+    chargenow:      <ChargeNow {...props}/>,
+    booking:        <Booking {...props}/>,
+    bookings:       <Bookings {...props}/>,
+    qr:             <QRScreen {...props}/>,
+    scan:           <ScanToCharge {...props}/>,
+    verify:         <Verify {...props}/>,
+    profile:        <Profile {...props}/>,
+    about:          <About {...props}/>,
   };
 
   return (
