@@ -2588,11 +2588,11 @@ function Profile({ go,user,setUser,onMenu }) {
   const tierPct=Math.min(100,Math.round((loyaltyData.points/tierNext)*100));
 
   const menuItems=[
-    { icon:"fa-car",            label:"My Vehicles",         screen:"detail"        },
+    { icon:"fa-car",            label:"My Vehicles",         screen:"myvehicles"    },
     { icon:"fa-bell",           label:"Notifications",       screen:"notifications" },
-    { icon:"fa-credit-card",    label:"Payment Methods",     screen:"home"          },
-    { icon:"fa-cog",            label:"Settings",            screen:"about"         },
-    { icon:"fa-question-circle",label:"Help & Support",      screen:"about"         },
+    { icon:"fa-credit-card",    label:"Payment Methods",     screen:"wallet"        },
+    { icon:"fa-cog",            label:"Settings",            screen:"settings"      },
+    { icon:"fa-leaf",           label:"Zero Emissions",      screen:"zeroemissions" },
     { icon:"fa-info-circle",    label:"About EcoCharge",     screen:"about"         },
     { icon:"fa-shield-alt",     label:"Privacy Policy",      screen:"privacypolicy" },
     { icon:"fa-file-contract",  label:"Terms & Conditions",  screen:"terms"         },
@@ -5196,6 +5196,393 @@ function AdminDashboard({ go, user }) {
   );
 }
 
+// ── MY VEHICLES SCREEN ───────────────────────────────────────
+const DEMO_VEHICLES = [
+  { id:1, make:"Tesla",   model:"Model 3",        type:"Electric Sedan", plate:"GR · 1234 · 21", battery:82, range:123, maxRange:560, capacity:75,  vehicleType:"BEV", primary:true,  color:"#1a1a1a" },
+  { id:2, make:"Hyundai", model:"Kona Electric",  type:"Electric SUV",   plate:"GV · 5678 · 23", battery:64, range:98,  maxRange:484, capacity:64,  vehicleType:"BEV", primary:false, color:"#e8e8e8" },
+  { id:3, make:"Nissan",  model:"Leaf",           type:"Electric Hatch", plate:"GW · 9101 · 22", battery:47, range:71,  maxRange:385, capacity:40,  vehicleType:"BEV", primary:false, color:"#2c3e50" },
+];
+
+function MyVehicles({ go }) {
+  const [vehicles, setVehicles] = useState(DEMO_VEHICLES);
+  const [selected, setSelected] = useState(DEMO_VEHICLES[0]);
+  const [showAdd, setShowAdd] = useState(false);
+
+  const setPrimary = (id) => {
+    setVehicles(prev => prev.map(v => ({ ...v, primary: v.id === id })));
+    setSelected(prev => ({ ...prev, primary: true }));
+  };
+
+  const batteryColor = (pct) => pct > 60 ? T.green : pct > 30 ? T.yellow : T.red;
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <div style={{ padding:"calc(14px + env(safe-area-inset-top,34px)) 18px 14px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
+        <button onClick={()=>go("profile")} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
+          <i className="fas fa-arrow-left" style={{ fontSize:20,color:T.text }}/>
+        </button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:800,fontSize:16,color:T.text }}>My Vehicles</div>
+          <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Manage your vehicles</div>
+        </div>
+        <button onClick={()=>setShowAdd(true)} className="tap"
+          style={{ background:`${T.green}18`,border:`1px solid ${T.green}44`,borderRadius:20,padding:"8px 16px",fontSize:13,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}>
+          <i className="fas fa-plus"/> Add Vehicle
+        </button>
+      </div>
+
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
+
+        {/* Primary vehicle hero card */}
+        <div className="fade" style={{ background:T.highlightGrad2,borderRadius:20,padding:"18px",marginBottom:16,border:`2px solid ${T.green}55`,position:"relative",overflow:"hidden" }}>
+          <div style={{ position:"absolute",inset:0,background:"radial-gradient(ellipse at 70% 50%,rgba(34,197,94,0.08) 0%,transparent 70%)",pointerEvents:"none" }}/>
+
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12 }}>
+            <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+              <i className="fas fa-star" style={{ fontSize:12,color:T.green }}/>
+              <span style={{ fontSize:12,fontWeight:700,color:T.green }}>Primary Vehicle</span>
+            </div>
+            <button className="tap" style={{ background:"none",border:"none",cursor:"pointer",color:T.muted,padding:4 }}>
+              <i className="fas fa-ellipsis-v" style={{ fontSize:16 }}/>
+            </button>
+          </div>
+
+          <div style={{ display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:16 }}>
+            <div>
+              <div style={{ fontWeight:900,fontSize:24,color:T.text,letterSpacing:-0.5 }}>{selected.make} {selected.model}</div>
+              <div style={{ fontSize:13,color:T.muted,marginTop:2 }}>{selected.type}</div>
+              <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:10,background:"rgba(255,255,255,0.07)",borderRadius:8,padding:"5px 10px",width:"fit-content" }}>
+                <span style={{ fontSize:14 }}>🇬🇭</span>
+                <span style={{ fontSize:12,color:T.muted,fontWeight:600 }}>GH</span>
+                <span style={{ fontSize:13,color:T.text,fontWeight:700,letterSpacing:1 }}>{selected.plate}</span>
+              </div>
+            </div>
+            <div style={{ width:130,height:80,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+              <i className="fas fa-car" style={{ fontSize:52,color:T.green,opacity:0.7 }}/>
+            </div>
+          </div>
+
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16,background:"rgba(0,0,0,0.2)",borderRadius:12,padding:"12px 8px" }}>
+            {[
+              { label:"Battery Capacity", value:`${selected.capacity} kWh`, icon:"fa-battery-full"  },
+              { label:"Max Range (WLTP)", value:`${selected.maxRange} km`,  icon:"fa-road"           },
+              { label:"Vehicle Type",     value:selected.vehicleType,       icon:"fa-bolt"           },
+            ].map(s=>(
+              <div key={s.label} style={{ textAlign:"center" }}>
+                <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>{s.label}</div>
+                <div style={{ fontWeight:800,fontSize:16,color:T.text }}>{s.value}</div>
+                <i className={`fas ${s.icon}`} style={{ fontSize:14,color:T.green,marginTop:4,display:"block" }}/>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ background:"rgba(0,0,0,0.25)",borderRadius:14,padding:"14px 16px",display:"flex",alignItems:"center",gap:16 }}>
+            <div style={{ position:"relative",width:60,height:60,flexShrink:0 }}>
+              <svg width="60" height="60" style={{ transform:"rotate(-90deg)" }}>
+                <circle cx="30" cy="30" r="24" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="6"/>
+                <circle cx="30" cy="30" r="24" fill="none" stroke={batteryColor(selected.battery)} strokeWidth="6"
+                  strokeDasharray={`${2*Math.PI*24}`}
+                  strokeDashoffset={`${2*Math.PI*24*(1-selected.battery/100)}`}
+                  strokeLinecap="round"/>
+              </svg>
+              <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                <span style={{ fontWeight:800,fontSize:13,color:batteryColor(selected.battery) }}>{selected.battery}%</span>
+              </div>
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:11,color:T.muted }}>Current Charge</div>
+              <div style={{ fontWeight:800,fontSize:20,color:T.text }}>{selected.range} km</div>
+              <div style={{ fontSize:11,color:T.muted }}>Estimated range</div>
+            </div>
+            {!selected.primary && (
+              <button onClick={()=>setPrimary(selected.id)} className="tap"
+                style={{ background:"none",border:`1px solid ${T.green}`,borderRadius:10,padding:"8px 14px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}>
+                <i className="far fa-star"/> Set as Primary
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Quick actions */}
+        <div className="fade1" style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:20 }}>
+          {[
+            { icon:"fa-chart-bar",   label:"Charging\nHistory",  screen:"sessions"  },
+            { icon:"fa-clock",       label:"Usage\nStats",       screen:"sessions"  },
+            { icon:"fa-cog",         label:"Settings",           screen:"settings"  },
+            { icon:"fa-bell",        label:"Alerts",             screen:"notifications" },
+          ].map(a=>(
+            <button key={a.label} onClick={()=>go(a.screen)} className="tap"
+              style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"14px 6px",display:"flex",flexDirection:"column",alignItems:"center",gap:8,cursor:"pointer",fontFamily:"inherit" }}>
+              <i className={`fas ${a.icon}`} style={{ fontSize:20,color:T.green }}/>
+              <span style={{ fontSize:10,fontWeight:700,color:T.text,textAlign:"center",lineHeight:1.4,whiteSpace:"pre-line" }}>{a.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Vehicle list */}
+        <div style={{ fontWeight:800,fontSize:16,color:T.text,marginBottom:12 }}>Your Vehicles</div>
+        {vehicles.map(v=>(
+          <div key={v.id} className="tap row" onClick={()=>setSelected(v)}
+            style={{ background:selected.id===v.id?"#0a2010":T.card,borderRadius:16,border:`1px solid ${selected.id===v.id?T.green:T.border}`,padding:"14px 16px",marginBottom:10,display:"flex",alignItems:"center",gap:14 }}>
+            <div style={{ width:54,height:40,background:"rgba(34,197,94,0.08)",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,overflow:"hidden" }}>
+              <i className="fas fa-car" style={{ fontSize:22,color:T.green,opacity:0.7 }}/>
+            </div>
+            <div style={{ flex:1,minWidth:0 }}>
+              <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:3 }}>
+                <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{v.make} {v.model}</div>
+                {v.primary&&<span style={{ background:`${T.green}22`,color:T.green,fontSize:10,fontWeight:700,borderRadius:6,padding:"2px 8px" }}>Primary</span>}
+              </div>
+              <div style={{ fontSize:11,color:T.muted }}>{v.plate}</div>
+            </div>
+            <div style={{ textAlign:"right",flexShrink:0 }}>
+              <div style={{ fontWeight:800,fontSize:16,color:batteryColor(v.battery) }}>{v.battery}%</div>
+              <div style={{ fontSize:11,color:T.muted }}>{v.range} km</div>
+            </div>
+            <i className="fas fa-chevron-right" style={{ fontSize:13,color:T.muted }}/>
+          </div>
+        ))}
+
+        {/* Security notice */}
+        <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px 16px",marginTop:6,display:"flex",alignItems:"center",gap:14 }}>
+          <div style={{ width:40,height:40,borderRadius:10,background:`${T.green}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+            <i className="fas fa-shield-alt" style={{ fontSize:16,color:T.green }}/>
+          </div>
+          <div>
+            <div style={{ fontWeight:700,fontSize:13,color:T.text }}>Vehicle data is secure</div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:3,lineHeight:1.5 }}>Your vehicle information is encrypted and used only to improve your charging experience.</div>
+          </div>
+        </div>
+
+      </div>
+      <Nav active="Profile" go={go}/>
+    </div>
+  );
+}
+
+// ── SETTINGS SCREEN ───────────────────────────────────────────
+function SettingsScreen({ go, user, setUser }) {
+  const { mode, toggleTheme } = useTheme();
+  const [notifications, setNotifications] = useState(true);
+  const [twoFactor, setTwoFactor] = useState(true);
+
+  const Section = ({ title, children }) => (
+    <div style={{ marginBottom:20 }}>
+      <div style={{ fontSize:11,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:8,paddingLeft:4 }}>{title}</div>
+      <div style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,overflow:"hidden" }}>
+        {children}
+      </div>
+    </div>
+  );
+
+  const Row = ({ icon, iconColor=T.green, label, sub, value, onPress, toggle, toggleValue, onToggle, last=false }) => (
+    <div className={onPress||onToggle?"tap row":""} onClick={onPress}
+      style={{ display:"flex",alignItems:"center",gap:14,padding:"15px 16px",borderBottom:last?"none":`1px solid ${T.border}20`,cursor:onPress?"pointer":"default" }}>
+      <div style={{ width:36,height:36,borderRadius:10,background:`${iconColor}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+        <i className={`fas ${icon}`} style={{ fontSize:15,color:iconColor }}/>
+      </div>
+      <div style={{ flex:1,minWidth:0 }}>
+        <div style={{ fontWeight:600,fontSize:14,color:T.text }}>{label}</div>
+        {sub&&<div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{sub}</div>}
+      </div>
+      {toggle ? (
+        <div onClick={e=>{ e.stopPropagation(); onToggle&&onToggle(); }} className="tap"
+          style={{ width:44,height:24,borderRadius:12,background:toggleValue?T.green:T.border,position:"relative",transition:"background .2s",flexShrink:0,cursor:"pointer" }}>
+          <div style={{ width:18,height:18,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:toggleValue?23:3,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,0.3)" }}/>
+        </div>
+      ) : value ? (
+        <span style={{ fontSize:13,fontWeight:600,color:T.green }}>{value}</span>
+      ) : null}
+      {onPress&&<i className="fas fa-chevron-right" style={{ fontSize:12,color:T.muted,flexShrink:0 }}/>}
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Settings" sub="Customize your EcoCharge experience" onBack={()=>go("profile")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
+
+        {/* Profile mini card */}
+        {user&&(
+          <div className="fade" style={{ background:T.highlightGrad2,borderRadius:16,padding:"16px",marginBottom:20,border:`1px solid ${T.greenDim}`,display:"flex",alignItems:"center",gap:14 }}>
+            <div style={{ width:52,height:52,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+              <i className="fas fa-user" style={{ fontSize:22,color:"#000" }}/>
+            </div>
+            <div style={{ flex:1,minWidth:0 }}>
+              <div style={{ fontWeight:700,fontSize:15,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user.name||user.email?.split("@")[0]}</div>
+              <div style={{ fontSize:12,color:T.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user.email}</div>
+              <div style={{ display:"flex",alignItems:"center",gap:5,marginTop:5 }}>
+                <i className="fas fa-shield-alt" style={{ fontSize:10,color:T.green }}/>
+                <span style={{ fontSize:11,fontWeight:700,color:T.green }}>Active Member</span>
+              </div>
+            </div>
+            <button onClick={()=>go("profile")} className="tap"
+              style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:10,padding:"8px 12px",fontSize:12,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+              <i className="fas fa-pencil-alt" style={{ fontSize:11 }}/> Edit Profile
+            </button>
+          </div>
+        )}
+
+        <Section title="Preferences">
+          <Row icon="fa-sun" label="Appearance" sub="Choose your preferred theme" value={mode==="dark"?"Dark":"Light"} onPress={toggleTheme}/>
+          <Row icon="fa-globe" label="Language" sub="Select your app language" value="English" onPress={()=>{}}/>
+          <Row icon="fa-bell" label="Notifications" sub="Manage push notifications" toggle toggleValue={notifications} onToggle={()=>setNotifications(v=>!v)} value={notifications?"Enabled":"Disabled"}/>
+          <Row icon="fa-tachometer-alt" label="Units" sub="Choose measurement units" value="Metric (km, kWh)" onPress={()=>{}} last/>
+        </Section>
+
+        <Section title="Account & Security">
+          <Row icon="fa-shield-alt" iconColor={T.blue} label="Security" sub="Change password, PIN & biometrics" onPress={()=>{}}/>
+          <Row icon="fa-lock" iconColor={T.green} label="Two-Factor Authentication" sub="Add an extra layer of security" toggle toggleValue={twoFactor} onToggle={()=>setTwoFactor(v=>!v)} value={twoFactor?"Enabled":"Disabled"}/>
+          <Row icon="fa-mobile-alt" iconColor={T.yellow} label="Active Sessions" sub="Manage your active sessions" value="2 sessions" onPress={()=>{}} last/>
+        </Section>
+
+        <Section title="App Settings">
+          <Row icon="fa-credit-card" iconColor={T.green} label="Payment Methods" sub="Manage your payment options" onPress={()=>go("wallet")}/>
+          <Row icon="fa-wallet" iconColor={T.yellow} label="Wallet Settings" sub="Auto top-up, low balance alerts" onPress={()=>go("wallet")}/>
+          <Row icon="fa-file-invoice" iconColor={T.blue} label="Download Invoices" sub="Download your invoices & receipts" onPress={()=>{}} last/>
+        </Section>
+
+        <Section title="Support & About">
+          <Row icon="fa-question-circle" iconColor={T.blue} label="Help Center" sub="FAQs and support articles" onPress={()=>go("about")}/>
+          <Row icon="fa-headset" iconColor={T.green} label="Contact Support" sub="Chat with us or send an email" onPress={()=>{ window.location.href=`mailto:ecochargeghanaltd@gmail.com`; }}/>
+          <Row icon="fa-info-circle" iconColor={T.mutedLight} label="About EcoCharge" sub={`Version ${APP_VERSION} · Build 100`} onPress={()=>go("about")} last/>
+        </Section>
+
+        {user&&(
+          <button onClick={()=>{ setUser(null); go("splash"); }} className="tap"
+            style={{ width:"100%",background:"rgba(248,113,113,.07)",border:"1px solid rgba(248,113,113,.2)",borderRadius:12,padding:"14px",fontSize:14,fontWeight:600,color:T.red,cursor:"pointer",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontFamily:"inherit" }}>
+            <i className="fas fa-sign-out-alt"/> Sign Out
+          </button>
+        )}
+      </div>
+      <Nav active="Profile" go={go}/>
+    </div>
+  );
+}
+
+// ── ZERO EMISSIONS SCREEN ─────────────────────────────────────
+function ZeroEmissions({ go }) {
+  const envStats = [
+    { icon:"fa-smog",   value:"4.56",   unit:"tonnes", label:"CO₂ Emissions\nAvoided",       color:T.green  },
+    { icon:"fa-seedling",value:"2,340", unit:"trees",  label:"Equivalent Trees\nPlanted",    color:T.green  },
+    { icon:"fa-bolt",   value:"18,720", unit:"kWh",    label:"Clean Energy\nDelivered",      color:T.yellow },
+    { icon:"fa-tint",   value:"56,100", unit:"liters", label:"Water\nSaved",                 color:T.blue   },
+  ];
+
+  const commitments = [
+    { icon:"fa-solar-panel",  label:"Renewable\nEnergy",      text:"All our stations are powered by solar and clean energy sources."               },
+    { icon:"fa-recycle",      label:"Zero Carbon\nFootprint",  text:"We are committed to reducing emissions and fighting climate change."            },
+    { icon:"fa-users",        label:"Community\nImpact",       text:"We create jobs, empower local communities and support green initiatives."       },
+    { icon:"fa-globe-africa", label:"Sustainable\nFuture",     text:"We innovate today to protect tomorrow for future generations."                  },
+  ];
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      {/* Hero */}
+      <div style={{ position:"relative",height:180,flexShrink:0,overflow:"hidden" }}>
+        <div style={{ position:"absolute",inset:0,background:"linear-gradient(135deg,#051a0a 0%,#0a2d12 50%,#051a0a 100%)" }}/>
+        <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"flex-end",padding:"0 20px",overflow:"hidden" }}>
+          <div style={{ opacity:0.15 }}>
+            <i className="fas fa-wind" style={{ fontSize:80,color:T.green,position:"absolute",right:40,top:20 }}/>
+            <i className="fas fa-solar-panel" style={{ fontSize:50,color:T.green,position:"absolute",right:100,bottom:20 }}/>
+          </div>
+        </div>
+        <div style={{ position:"absolute",top:"calc(16px + env(safe-area-inset-top, 34px))",left:14 }}>
+          <button onClick={()=>go("about")} className="tap" style={{ width:36,height:36,borderRadius:"50%",background:"rgba(0,0,0,0.45)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+            <i className="fas fa-arrow-left" style={{ fontSize:16,color:"#fff" }}/>
+          </button>
+        </div>
+        <div style={{ position:"absolute",bottom:16,left:16 }}>
+          <div style={{ fontWeight:900,fontSize:22,color:"#fff",letterSpacing:-0.5 }}>Zero Emissions</div>
+          <div style={{ fontSize:12,color:"rgba(255,255,255,0.65)",marginTop:4 }}>Our commitment to a cleaner future</div>
+        </div>
+      </div>
+
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
+
+        {/* Mission statement */}
+        <div className="fade" style={{ background:T.highlightGrad2,borderRadius:18,padding:"18px",marginBottom:16,border:`1px solid ${T.greenDim}`,display:"flex",gap:16,alignItems:"center" }}>
+          <div style={{ width:64,height:64,borderRadius:"50%",background:"rgba(34,197,94,0.15)",border:`2px solid ${T.green}44`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+            <i className="fas fa-leaf" style={{ fontSize:28,color:T.green }}/>
+          </div>
+          <div>
+            <div style={{ fontWeight:800,fontSize:17,color:T.green,lineHeight:1.3 }}>Driving change.<br/><span style={{ color:T.text }}>Powering a greener Ghana.</span></div>
+            <div style={{ fontSize:12,color:T.muted,marginTop:8,lineHeight:1.7 }}>At EcoCharge Ghana, we are building the foundation for a sustainable future through clean energy, innovation and community impact.</div>
+          </div>
+        </div>
+
+        {/* Environmental Impact */}
+        <div className="fade1" style={{ background:T.card,borderRadius:18,padding:"18px",marginBottom:16,border:`1px solid ${T.border}` }}>
+          <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:14 }}>
+            <i className="fas fa-leaf" style={{ fontSize:16,color:T.green }}/>
+            <div>
+              <div style={{ fontWeight:800,fontSize:15,color:T.text }}>Our Environmental Impact</div>
+              <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Together, we are creating real change.</div>
+            </div>
+          </div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10 }}>
+            {envStats.map((s,i)=>(
+              <div key={i} style={{ textAlign:"center",padding:"10px 4px",background:T.surfaceFaint,borderRadius:12 }}>
+                <i className={`fas ${s.icon}`} style={{ fontSize:18,color:s.color,marginBottom:6,display:"block" }}/>
+                <div style={{ fontWeight:900,fontSize:16,color:T.text,lineHeight:1 }}>{s.value}</div>
+                <div style={{ fontSize:10,color:s.color,fontWeight:700,marginTop:2 }}>{s.unit}</div>
+                <div style={{ fontSize:9,color:T.muted,marginTop:4,lineHeight:1.4,whiteSpace:"pre-line" }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 100% Clean Energy callout */}
+        <div className="fade1" style={{ background:T.highlightGrad2,borderRadius:16,padding:"16px",marginBottom:16,border:`1px solid ${T.greenDim}`,display:"flex",alignItems:"center",gap:14 }}>
+          <div style={{ width:48,height:48,borderRadius:12,background:"rgba(34,197,94,0.15)",border:`1px solid ${T.green}44`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+            <i className="fas fa-solar-panel" style={{ fontSize:20,color:T.blue }}/>
+          </div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontWeight:800,fontSize:14,color:T.green }}>100% Clean Energy</div>
+            <div style={{ fontSize:12,color:T.muted,marginTop:4,lineHeight:1.6 }}>Our charging stations are powered by solar and hydrogen energy — zero carbon footprint.</div>
+          </div>
+          <i className="fas fa-chevron-right" style={{ fontSize:12,color:T.muted,flexShrink:0 }}/>
+        </div>
+
+        {/* Our Commitment */}
+        <div className="fade2" style={{ marginBottom:16 }}>
+          <div style={{ fontWeight:800,fontSize:16,color:T.text,marginBottom:4 }}>Our Commitment</div>
+          <div style={{ fontSize:12,color:T.muted,marginBottom:14 }}>Beyond charging. Building a better tomorrow.</div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+            {commitments.map((c,i)=>(
+              <div key={i} style={{ background:T.card,borderRadius:16,padding:"16px",border:`1px solid ${T.border}` }}>
+                <div style={{ width:42,height:42,borderRadius:10,background:`${T.green}18`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:10 }}>
+                  <i className={`fas ${c.icon}`} style={{ fontSize:18,color:T.green }}/>
+                </div>
+                <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:6,whiteSpace:"pre-line",lineHeight:1.3 }}>{c.label}</div>
+                <div style={{ fontSize:11,color:T.muted,lineHeight:1.6 }}>{c.text}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* CTA banner */}
+        <div className="fade2" style={{ background:`linear-gradient(135deg,#051a0a,#0a2d12)`,borderRadius:18,padding:"20px",border:`1px solid ${T.greenDim}`,display:"flex",gap:16,alignItems:"center" }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontWeight:800,fontSize:16,color:T.text,lineHeight:1.4,marginBottom:8 }}>Every charge you make drives a cleaner future.</div>
+            <div style={{ fontSize:12,color:T.muted,lineHeight:1.6 }}>Thank you for being part of the EcoCharge movement.</div>
+          </div>
+          <div style={{ width:70,height:70,borderRadius:"50%",background:`${T.green}18`,border:`2px solid ${T.green}44`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+            <i className="fas fa-charging-station" style={{ fontSize:28,color:T.green }}/>
+          </div>
+        </div>
+
+        <div style={{ marginTop:20 }}>
+          <button onClick={()=>go("home")} className="tap"
+            style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+            <i className="fas fa-bolt"/> Start Charging Green
+          </button>
+        </div>
+      </div>
+      <Nav active="Profile" go={go}/>
+    </div>
+  );
+}
+
 function AppInner() {
   const [screen,setScreen]   = useState(()=>{ try { return localStorage.getItem("eco_user")?"home":"splash"; } catch(e){ return "splash"; } });
   const [authMode,setAuthMode]= useState("login");
@@ -5210,7 +5597,7 @@ function AppInner() {
 
   const setUser=(u)=>{ setUserRaw(u); try { u?localStorage.setItem("eco_user",JSON.stringify(u)):localStorage.removeItem("eco_user"); } catch(e){} };
   const go=(s)=>{ setScreen(s);setDrawer(false); };
-  const goSecure=(s)=>{ const open=["splash","auth","about","home","detail","verify","map","privacypolicy","terms","refund"]; if(!user&&!open.includes(s)){ setAuthMode("login");go("auth");return; } go(s); };
+  const goSecure=(s)=>{ const open=["splash","auth","about","home","detail","verify","map","privacypolicy","terms","refund","zeroemissions"]; if(!user&&!open.includes(s)){ setAuthMode("login");go("auth");return; } go(s); };
 
   useEffect(()=>{
     if (SUPABASE_URL) sb("stations?select=*&order=id").then(d=>{ if(d?.length) setStations(d); });
@@ -5281,6 +5668,9 @@ function AppInner() {
     privacypolicy:  <PrivacyPolicy go={goSecure}/>,
     terms:          <TermsAndConditions go={goSecure}/>,
     refund:         <RefundPolicy go={goSecure}/>,
+    myvehicles:     <MyVehicles go={goSecure}/>,
+    settings:       <SettingsScreen go={goSecure} user={user} setUser={setUser}/>,
+    zeroemissions:  <ZeroEmissions go={goSecure}/>,
     home:           <Home {...props}/>,
     map:            <MapScreen {...props}/>,
     detail:         <Detail {...props}/>,
