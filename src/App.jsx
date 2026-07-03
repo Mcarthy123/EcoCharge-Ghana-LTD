@@ -5354,29 +5354,59 @@ const VEHICLE_TYPE_ICON = {
 // Returns { source, make, model, year, battery, connector, range,
 //           maxPower, type, imageUrl, region, rawApiData }
 
+const VEHICLE_PHOTO_MAP = {
+  "tesla": {
+    "model 3": "https://digitalassets.tesla.com/tesla-contents/image/upload/f_auto,q_auto/Mega-Menu-Vehicles-Model-3.png",
+    "model y": "https://digitalassets.tesla.com/tesla-contents/image/upload/f_auto,q_auto/Mega-Menu-Vehicles-Model-Y.png",
+    "model s": "https://digitalassets.tesla.com/tesla-contents/image/upload/f_auto,q_auto/Mega-Menu-Vehicles-Model-S.png",
+    "model x": "https://digitalassets.tesla.com/tesla-contents/image/upload/f_auto,q_auto/Mega-Menu-Vehicles-Model-X.png",
+  },
+  "hyundai": {
+    "kona electric":  "https://www.hyundai.com/content/dam/hyundai/eu/en/models/kona-electric/2021-kona-electric/images/kona-electric-main.png",
+    "ioniq 5":  "https://www.hyundai.com/content/dam/hyundai/eu/en/models/ioniq5/2022-ioniq5/images/ioniq5-main.png",
+    "ioniq 6":  "https://www.hyundai.com/content/dam/hyundai/eu/en/models/ioniq6/2023-ioniq6/images/ioniq6-main.png",
+  },
+  "nissan": {
+    "leaf":   "https://www-europe.nissan-cdn.net/content/dam/Nissan/nissan_additional_assets/images/design-studio/gallery/leaf/main.png",
+    "ariya":  "https://www-europe.nissan-cdn.net/content/dam/Nissan/nissan_additional_assets/images/design-studio/gallery/ariya/main.png",
+  },
+  "byd": {
+    "dolphin": "https://www.byd.com/content/dam/byd-site/eu/cars/byd-dolphin/byd-dolphin-jelly-white.png",
+    "atto 3":  "https://www.byd.com/content/dam/byd-site/eu/cars/atto-3/byd-atto3-stellar-white.png",
+    "seal":    "https://www.byd.com/content/dam/byd-site/eu/cars/seal/Seal-aurora-white.png",
+    "han ev":  "https://www.byd.com/content/dam/byd-site/eu/cars/han/han-06-white-final.png",
+  },
+  "bmw": {
+    "ix3": "https://www.bmw.com/content/dam/bmw/marketDE/bmw_de/all-models/x-series/x3/bmw-x3-sp-new-class-stage.png",
+    "i4":  "https://www.bmw.com/content/dam/bmw/marketDE/bmw_de/all-models/4-series/i4/bmw-i4-sp-new-class-stage.png",
+    "ix":  "https://www.bmw.com/content/dam/bmw/marketDE/bmw_de/all-models/x-series/x-i/bmw-xi-sp-overview.png",
+  },
+  "volkswagen": {
+    "id.4": "https://www.volkswagen.de/content/dam/nemo/models/id4/id4_2023/n2/gallery/volkswagen-id-4-atd-1920x1080-gallery1.png",
+    "id.3": "https://www.volkswagen.de/content/dam/nemo/models/id3/id3_2023/n2/gallery/volkswagen-id-3-atd-1920x1080-gallery1.png",
+  },
+  "kia": {
+    "ev6":     "https://www.kia.com/content/dam/kia/us/en/home/images/vehicles/ev6/2024/medium/kia-ev6-acd-medium.png",
+    "niro ev": "https://www.kia.com/content/dam/kia/us/en/home/images/vehicles/niro-ev/2024/medium/kia-niro-ev-acd-medium.png",
+  },
+  "audi": {
+    "e-tron":    "https://www.audi.com/content/dam/nemo/models/q8/q8-e-tron/2024/1920x1080/A244034_web.jpg",
+    "q4 e-tron": "https://www.audi.com/content/dam/nemo/models/q4-e-tron/q4-e-tron/2024/1920x1080/A244108_web.jpg",
+  },
+  "mercedes": {
+    "eqa": "https://www.mercedes-benz.com/content/dam/hq/cars/new-car-showroom/eqa/eqa-253-pi-stage/08-2021/images/mercedes-benz-eqa-253-pi-showroom-stage-3302x1858.jpg",
+    "eqc": "https://www.mercedes-benz.com/content/dam/hq/cars/new-car-showroom/eqc/eqc-n293-pi-stage/06-2019/images/mercedes-benz-eqc-n293-pi-showroom-stage-3302x1858.jpg",
+  },
+  "polestar": {
+    "2": "https://www.polestar.com/dato-assets/10605/1648137137-polestar-2-2022-thunder-side-optimized.jpg",
+  },
+};
+
+// Returns a real photo URL for the given make/model, or null
 const getStaticImage = (make, model, year) => {
-  // Use imagin.studio demo tier — works in browser, no API key needed
-  const IMAGIN_MAKES_MAP = {
-    "tesla":"tesla","hyundai":"hyundai","nissan":"nissan","bmw":"bmw",
-    "mercedes":"mercedes-benz","volkswagen":"volkswagen","kia":"kia","audi":"audi",
-    "byd":"byd","polestar":"polestar","lucid":"lucid","rivian":"rivian",
-    "ford":"ford","chevrolet":"chevrolet","volvo":"volvo","porsche":"porsche",
-    "toyota":"toyota","honda":"honda","mini":"mini","renault":"renault",
-  };
-  const IMAGIN_MODELS_MAP = {
-    "model 3":"model-3","model y":"model-y","model s":"model-s","model x":"model-x",
-    "kona electric":"kona","ioniq 5":"ioniq-5","ioniq 6":"ioniq-6",
-    "leaf":"leaf","ariya":"ariya","ix3":"ix3","i4":"i4","ix":"ix",
-    "eqa":"eqa","eqc":"eqc","id.4":"id-4","id.3":"id-3",
-    "ev6":"ev6","niro ev":"niro","e-tron":"e-tron","q4 e-tron":"q4-e-tron",
-    "dolphin":"dolphin","atto 3":"atto-3","han ev":"han","seal":"seal",
-    "2":"polestar-2","air":"air",
-  };
-  const makeSlug  = IMAGIN_MAKES_MAP[make?.toLowerCase()];
-  const modelSlug = IMAGIN_MODELS_MAP[model?.toLowerCase()]
-    || model?.toLowerCase().replace(/\s+/g,"-");
-  if (!makeSlug) return null;
-  return `https://cdn.imagin.studio/getimage?customer=demo&make=${makeSlug}&modelFamily=${modelSlug}&modelYear=${year}&angle=side-1&width=800`;
+  const makeMap  = VEHICLE_PHOTO_MAP[make?.toLowerCase()];
+  if (!makeMap) return null;
+  return makeMap[model?.toLowerCase()] || null;
 };
 
 // Tier 1: CarsXE via Vercel serverless proxy — fixes CORS
