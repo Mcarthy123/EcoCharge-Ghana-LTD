@@ -5354,94 +5354,48 @@ const VEHICLE_TYPE_ICON = {
 // Returns { source, make, model, year, battery, connector, range,
 //           maxPower, type, imageUrl, region, rawApiData }
 
-// ── STATIC IMAGE MAP for common EVs ──────────────────────────
-// High-quality Wikimedia/manufacturer press images — always available,
-// no API call needed. Covers the vehicles users register most often.
-const STATIC_VEHICLE_IMAGES = {
-  "tesla":     {
-    "model 3":   "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/2019_Tesla_Model_3_Standard_Range_Plus_%28facelift%2C_red%29%2C_front_8.17.19.jpg/1280px-2019_Tesla_Model_3_Standard_Range_Plus_%28facelift%2C_red%29%2C_front_8.17.19.jpg",
-    "model y":   "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Tesla_Model_Y_red_cropped.jpg/1280px-Tesla_Model_Y_red_cropped.jpg",
-    "model s":   "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Tesla_Model_S_%28Facelift%2C_United_States%2C_Mk1%29%2C_front_8.27.19.jpg/1280px-Tesla_Model_S_%28Facelift%2C_United_States%2C_Mk1%29%2C_front_8.27.19.jpg",
-    "model x":   "https://upload.wikimedia.org/wikipedia/commons/thumb/6/sixty/2016_Tesla_Model_X_60D_%28HK%29.jpg/1280px-2016_Tesla_Model_X_60D_%28HK%29.jpg",
-  },
-  "hyundai":   {
-    "kona electric":  "https://upload.wikimedia.org/wikipedia/commons/thumb/2/29/Hyundai_Kona_Electric_facelift_2021_%28001%29.jpg/1280px-Hyundai_Kona_Electric_facelift_2021_%28001%29.jpg",
-    "ioniq 5":        "https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/2022_Hyundai_IONIQ_5_AWD_%28US%29%2C_front_9.28.22.jpg/1280px-2022_Hyundai_IONIQ_5_AWD_%28US%29%2C_front_9.28.22.jpg",
-    "ioniq 6":        "https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/2023_Hyundai_IONIQ_6_Standard_Range_2WD_%28US%29%2C_front_10.26.22.jpg/1280px-2023_Hyundai_IONIQ_6_Standard_Range_2WD_%28US%29%2C_front_10.26.22.jpg",
-  },
-  "nissan":    {
-    "leaf":    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/2018_Nissan_Leaf_40_kWh%2C_front_9.26.19.jpg/1280px-2018_Nissan_Leaf_40_kWh%2C_front_9.26.19.jpg",
-    "ariya":   "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/Nissan_Ariya_-_IMG_0372_%2851783742068%29.jpg/1280px-Nissan_Ariya_-_IMG_0372_%2851783742068%29.jpg",
-  },
-  "bmw":       {
-    "ix3":  "https://upload.wikimedia.org/wikipedia/commons/thumb/9/92/2021_BMW_iX3_Impressive_in_Sophisto_Grey%2C_front_8.28.21.jpg/1280px-2021_BMW_iX3_Impressive_in_Sophisto_Grey%2C_front_8.28.21.jpg",
-    "i4":   "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/2022_BMW_i4_eDrive40_%28US%29%2C_front_10.1.21.jpg/1280px-2022_BMW_i4_eDrive40_%28US%29%2C_front_10.1.21.jpg",
-    "ix":   "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9b/2022_BMW_iX_xDrive50%2C_front_10.31.21.jpg/1280px-2022_BMW_iX_xDrive50%2C_front_10.31.21.jpg",
-  },
-  "mercedes":  {
-    "eqa":  "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/2021_Mercedes-Benz_EQA_250_in_Mountain_Grey%2C_front_8.15.21.jpg/1280px-2021_Mercedes-Benz_EQA_250_in_Mountain_Grey%2C_front_8.15.21.jpg",
-    "eqc":  "https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/2020_Mercedes-Benz_EQC_400_4MATIC_in_Iridium_Silver%2C_front_7.6.20.jpg/1280px-2020_Mercedes-Benz_EQC_400_4MATIC_in_Iridium_Silver%2C_front_7.6.20.jpg",
-  },
-  "volkswagen":{ "id.4": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/2021_Volkswagen_ID.4_AWD_Pro_S_in_Glacier_White%2C_front_9.29.21.jpg/1280px-2021_Volkswagen_ID.4_AWD_Pro_S_in_Glacier_White%2C_front_9.29.21.jpg", "id.3": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/2020_Volkswagen_ID.3_1st_in_White%2C_front_8.13.20.jpg/1280px-2020_Volkswagen_ID.3_1st_in_White%2C_front_8.13.20.jpg" },
-  "kia":       { "ev6": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/2022_Kia_EV6_AWD_%28US%29%2C_front_9.21.21.jpg/1280px-2022_Kia_EV6_AWD_%28US%29%2C_front_9.21.21.jpg", "niro ev": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/2019_Kia_Niro_EV%2C_front_12.22.19.jpg/1280px-2019_Kia_Niro_EV%2C_front_12.22.19.jpg" },
-  "audi":      { "e-tron": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/2019_Audi_e-tron_55_quattro_in_Chronos_Grey%2C_front_9.26.19.jpg/1280px-2019_Audi_e-tron_55_quattro_in_Chronos_Grey%2C_front_9.26.19.jpg", "q4 e-tron": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/2022_Audi_Q4_e-tron_40_%28US%29%2C_front_10.1.21.jpg/1280px-2022_Audi_Q4_e-tron_40_%28US%29%2C_front_10.1.21.jpg" },
-  "byd":       { "dolphin": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/BYD_Dolphin_at_Auto_Shanghai_2021_%284%29.jpg/1280px-BYD_Dolphin_at_Auto_Shanghai_2021_%284%29.jpg", "atto 3": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/BYD_ATTO_3_%281%29.jpg/1280px-BYD_ATTO_3_%281%29.jpg", "han ev": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/BYD_Han_EV.jpg/1280px-BYD_Han_EV.jpg", "seal": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/75/BYD_Seal_01.jpg/1280px-BYD_Seal_01.jpg" },
-  "polestar":  { "2": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/2021_Polestar_2_in_Snow_Silver%2C_front_8.15.21.jpg/1280px-2021_Polestar_2_in_Snow_Silver%2C_front_8.15.21.jpg" },
-  "lucid":     { "air": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/Lucid_Air_Pure_RWD_Fathom_Blue.jpg/1280px-Lucid_Air_Pure_RWD_Fathom_Blue.jpg" },
-  "zeekr":     { "001": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/Zeekr_001_-_front.jpg/1280px-Zeekr_001_-_front.jpg" },
-  "nio":       { "et5": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/38/NIO_ET5_at_Auto_Shanghai_2021.jpg/1280px-NIO_ET5_at_Auto_Shanghai_2021.jpg" },
+const getStaticImage = (make, model, year) => {
+  // Use imagin.studio demo tier — works in browser, no API key needed
+  const IMAGIN_MAKES_MAP = {
+    "tesla":"tesla","hyundai":"hyundai","nissan":"nissan","bmw":"bmw",
+    "mercedes":"mercedes-benz","volkswagen":"volkswagen","kia":"kia","audi":"audi",
+    "byd":"byd","polestar":"polestar","lucid":"lucid","rivian":"rivian",
+    "ford":"ford","chevrolet":"chevrolet","volvo":"volvo","porsche":"porsche",
+    "toyota":"toyota","honda":"honda","mini":"mini","renault":"renault",
+  };
+  const IMAGIN_MODELS_MAP = {
+    "model 3":"model-3","model y":"model-y","model s":"model-s","model x":"model-x",
+    "kona electric":"kona","ioniq 5":"ioniq-5","ioniq 6":"ioniq-6",
+    "leaf":"leaf","ariya":"ariya","ix3":"ix3","i4":"i4","ix":"ix",
+    "eqa":"eqa","eqc":"eqc","id.4":"id-4","id.3":"id-3",
+    "ev6":"ev6","niro ev":"niro","e-tron":"e-tron","q4 e-tron":"q4-e-tron",
+    "dolphin":"dolphin","atto 3":"atto-3","han ev":"han","seal":"seal",
+    "2":"polestar-2","air":"air",
+  };
+  const makeSlug  = IMAGIN_MAKES_MAP[make?.toLowerCase()];
+  const modelSlug = IMAGIN_MODELS_MAP[model?.toLowerCase()]
+    || model?.toLowerCase().replace(/\s+/g,"-");
+  if (!makeSlug) return null;
+  return `https://cdn.imagin.studio/getimage?customer=demo&make=${makeSlug}&modelFamily=${modelSlug}&modelYear=${year}&angle=side-1&width=800`;
 };
 
-const getStaticImage = (make, model) => {
-  const m = STATIC_VEHICLE_IMAGES[make?.toLowerCase()];
-  if (!m) return null;
-  return m[model?.toLowerCase()] || null;
-};
-
-// Tier 1: CarsXE API live lookup
+// Tier 1: CarsXE via Vercel serverless proxy — fixes CORS
+// Direct browser → api.carsxe.com is blocked. Proxy calls it server-side.
 const lookupCarsXE = async (make, model, year) => {
-  if (!CARSXE_KEY) return null;
   try {
-    // CarsXE correct endpoint format
-    const params = new URLSearchParams({
-      key:   CARSXE_KEY,
-      make:  make,
-      model: model,
-      year:  String(year),
-    });
-
-    // Specs endpoint
-    const res = await fetch(`https://api.carsxe.com/specs?${params}`);
+    const params = new URLSearchParams({ make, model, year });
+    const res = await fetch(`/api/vehicle-image?${params}`);
     if (!res.ok) return null;
     const data = await res.json();
-    if (!data || data.error || data.message) return null;
-
-    // Image endpoint — CarsXE returns { images:[{link,angle,color},...] }
-    let imageUrl = null;
-    try {
-      const imgRes = await fetch(`https://api.carsxe.com/images?${params}`);
-      if (imgRes.ok) {
-        const imgData = await imgRes.json();
-        // Try to get a nice exterior angle
-        const imgs = imgData?.images || imgData?.data || [];
-        const exterior = imgs.find(i=>(i.angle||i.perspective||"").toLowerCase().includes("front"))
-          || imgs[0];
-        imageUrl = exterior?.link || exterior?.url || exterior?.src || null;
-      }
-    } catch(e) {}
-
-    // Normalise — CarsXE field names vary by plan
-    const s = data;
+    if (!data || data.error) return null;
     return {
-      source:   "carsxe",
-      make, model, year,
-      battery:  parseFloat(s.battery_capacity_kwh || s.battery_kwh || s.battery || 0) || null,
-      connector:s.charge_connector || s.connector || s.plug_type || null,
-      range:    parseFloat(s.range_km || s.electric_range_km || s.range || 0) || null,
-      maxPower: parseFloat(s.charge_power_kw || s.max_charge_kw || s.charging_power || 0) || null,
-      type:     s.body_style || s.body_type || "Electric Car",
-      imageUrl,
-      rawApiData: data,
+      source:"carsxe", make, model, year,
+      battery:   data.battery   || null,
+      connector: data.connector || null,
+      range:     data.range     || null,
+      maxPower:  data.maxPower  || null,
+      type:      data.bodyType  || "Electric Car",
+      imageUrl:  data.imageUrl  || null,
     };
   } catch(e) { return null; }
 };
@@ -5471,7 +5425,7 @@ const getVehicleInfo = async (make, model, year) => {
   if (!make || !model) return null;
 
   // Always check static image map first — instant, no API call
-  const staticImg = getStaticImage(make, model);
+  const staticImg = getStaticImage(make, model, year);
 
   // 1. CarsXE API
   const api = await lookupCarsXE(make, model, year);
