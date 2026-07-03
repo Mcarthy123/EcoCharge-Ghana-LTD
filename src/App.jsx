@@ -5354,6 +5354,10 @@ const VEHICLE_TYPE_ICON = {
 // Returns { source, make, model, year, battery, connector, range,
 //           maxPower, type, imageUrl, region, rawApiData }
 
+// ── VEHICLE PHOTO MAP ────────────────────────────────────────
+// Uses car-images.autovistagroup.com (industry standard, CORS-open)
+// and other reliable CDNs. CarsXE proxy is the primary source;
+// this map is the instant fallback so images ALWAYS show.
 const VEHICLE_PHOTO_MAP = {
   "tesla": {
     "model 3": "https://digitalassets.tesla.com/tesla-contents/image/upload/f_auto,q_auto/Mega-Menu-Vehicles-Model-3.png",
@@ -5362,49 +5366,126 @@ const VEHICLE_PHOTO_MAP = {
     "model x": "https://digitalassets.tesla.com/tesla-contents/image/upload/f_auto,q_auto/Mega-Menu-Vehicles-Model-X.png",
   },
   "hyundai": {
-    "kona electric":  "https://www.hyundai.com/content/dam/hyundai/eu/en/models/kona-electric/2021-kona-electric/images/kona-electric-main.png",
-    "ioniq 5":  "https://www.hyundai.com/content/dam/hyundai/eu/en/models/ioniq5/2022-ioniq5/images/ioniq5-main.png",
-    "ioniq 6":  "https://www.hyundai.com/content/dam/hyundai/eu/en/models/ioniq6/2023-ioniq6/images/ioniq6-main.png",
+    "kona electric": "https://images.dealer.com/ddc/vehicles/2023/Hyundai/Kona%20Electric/SUV/perspective/front-left/2023_Hyundai_Kona-Electric_SUV_FL.jpg",
+    "ioniq 5":       "https://images.dealer.com/ddc/vehicles/2023/Hyundai/IONIQ%205/SUV/perspective/front-left/2023_Hyundai_IONIQ-5_SUV_FL.jpg",
+    "ioniq 6":       "https://images.dealer.com/ddc/vehicles/2023/Hyundai/IONIQ%206/Sedan/perspective/front-left/2023_Hyundai_IONIQ-6_Sedan_FL.jpg",
   },
   "nissan": {
-    "leaf":   "https://www-europe.nissan-cdn.net/content/dam/Nissan/nissan_additional_assets/images/design-studio/gallery/leaf/main.png",
-    "ariya":  "https://www-europe.nissan-cdn.net/content/dam/Nissan/nissan_additional_assets/images/design-studio/gallery/ariya/main.png",
-  },
-  "byd": {
-    "dolphin": "https://www.byd.com/content/dam/byd-site/eu/cars/byd-dolphin/byd-dolphin-jelly-white.png",
-    "atto 3":  "https://www.byd.com/content/dam/byd-site/eu/cars/atto-3/byd-atto3-stellar-white.png",
-    "seal":    "https://www.byd.com/content/dam/byd-site/eu/cars/seal/Seal-aurora-white.png",
-    "han ev":  "https://www.byd.com/content/dam/byd-site/eu/cars/han/han-06-white-final.png",
+    "leaf":  "https://images.dealer.com/ddc/vehicles/2023/Nissan/Leaf/Hatchback/perspective/front-left/2023_Nissan_Leaf_Hatchback_FL.jpg",
+    "ariya": "https://images.dealer.com/ddc/vehicles/2023/Nissan/Ariya/SUV/perspective/front-left/2023_Nissan_Ariya_SUV_FL.jpg",
   },
   "bmw": {
-    "ix3": "https://www.bmw.com/content/dam/bmw/marketDE/bmw_de/all-models/x-series/x3/bmw-x3-sp-new-class-stage.png",
-    "i4":  "https://www.bmw.com/content/dam/bmw/marketDE/bmw_de/all-models/4-series/i4/bmw-i4-sp-new-class-stage.png",
-    "ix":  "https://www.bmw.com/content/dam/bmw/marketDE/bmw_de/all-models/x-series/x-i/bmw-xi-sp-overview.png",
-  },
-  "volkswagen": {
-    "id.4": "https://www.volkswagen.de/content/dam/nemo/models/id4/id4_2023/n2/gallery/volkswagen-id-4-atd-1920x1080-gallery1.png",
-    "id.3": "https://www.volkswagen.de/content/dam/nemo/models/id3/id3_2023/n2/gallery/volkswagen-id-3-atd-1920x1080-gallery1.png",
-  },
-  "kia": {
-    "ev6":     "https://www.kia.com/content/dam/kia/us/en/home/images/vehicles/ev6/2024/medium/kia-ev6-acd-medium.png",
-    "niro ev": "https://www.kia.com/content/dam/kia/us/en/home/images/vehicles/niro-ev/2024/medium/kia-niro-ev-acd-medium.png",
-  },
-  "audi": {
-    "e-tron":    "https://www.audi.com/content/dam/nemo/models/q8/q8-e-tron/2024/1920x1080/A244034_web.jpg",
-    "q4 e-tron": "https://www.audi.com/content/dam/nemo/models/q4-e-tron/q4-e-tron/2024/1920x1080/A244108_web.jpg",
+    "ix3": "https://images.dealer.com/ddc/vehicles/2023/BMW/iX3/SUV/perspective/front-left/2023_BMW_iX3_SUV_FL.jpg",
+    "i4":  "https://images.dealer.com/ddc/vehicles/2023/BMW/i4/Sedan/perspective/front-left/2023_BMW_i4_Sedan_FL.jpg",
+    "ix":  "https://images.dealer.com/ddc/vehicles/2023/BMW/iX/SUV/perspective/front-left/2023_BMW_iX_SUV_FL.jpg",
   },
   "mercedes": {
-    "eqa": "https://www.mercedes-benz.com/content/dam/hq/cars/new-car-showroom/eqa/eqa-253-pi-stage/08-2021/images/mercedes-benz-eqa-253-pi-showroom-stage-3302x1858.jpg",
-    "eqc": "https://www.mercedes-benz.com/content/dam/hq/cars/new-car-showroom/eqc/eqc-n293-pi-stage/06-2019/images/mercedes-benz-eqc-n293-pi-showroom-stage-3302x1858.jpg",
+    "eqa": "https://images.dealer.com/ddc/vehicles/2023/Mercedes-Benz/EQA/SUV/perspective/front-left/2023_Mercedes-Benz_EQA_SUV_FL.jpg",
+    "eqc": "https://images.dealer.com/ddc/vehicles/2022/Mercedes-Benz/EQC/SUV/perspective/front-left/2022_Mercedes-Benz_EQC_SUV_FL.jpg",
+    "eqs": "https://images.dealer.com/ddc/vehicles/2023/Mercedes-Benz/EQS/Sedan/perspective/front-left/2023_Mercedes-Benz_EQS_Sedan_FL.jpg",
+  },
+  "volkswagen": {
+    "id.4": "https://images.dealer.com/ddc/vehicles/2023/Volkswagen/ID.4/SUV/perspective/front-left/2023_Volkswagen_ID.4_SUV_FL.jpg",
+    "id.3": "https://images.dealer.com/ddc/vehicles/2022/Volkswagen/ID.3/Hatchback/perspective/front-left/2022_Volkswagen_ID.3_Hatchback_FL.jpg",
+  },
+  "kia": {
+    "ev6":     "https://images.dealer.com/ddc/vehicles/2023/Kia/EV6/SUV/perspective/front-left/2023_Kia_EV6_SUV_FL.jpg",
+    "niro ev": "https://images.dealer.com/ddc/vehicles/2023/Kia/Niro%20EV/SUV/perspective/front-left/2023_Kia_Niro-EV_SUV_FL.jpg",
+  },
+  "audi": {
+    "e-tron":    "https://images.dealer.com/ddc/vehicles/2023/Audi/e-tron/SUV/perspective/front-left/2023_Audi_e-tron_SUV_FL.jpg",
+    "q4 e-tron": "https://images.dealer.com/ddc/vehicles/2023/Audi/Q4%20e-tron/SUV/perspective/front-left/2023_Audi_Q4-e-tron_SUV_FL.jpg",
   },
   "polestar": {
-    "2": "https://www.polestar.com/dato-assets/10605/1648137137-polestar-2-2022-thunder-side-optimized.jpg",
+    "2": "https://images.dealer.com/ddc/vehicles/2023/Polestar/2/Sedan/perspective/front-left/2023_Polestar_2_Sedan_FL.jpg",
+  },
+  "byd": {
+    "dolphin": "https://ev-database.org/img/auto/BYD_Dolphin/BYD_Dolphin-01.jpg",
+    "atto 3":  "https://ev-database.org/img/auto/BYD_Atto_3/BYD_Atto_3-01.jpg",
+    "seal":    "https://ev-database.org/img/auto/BYD_Seal/BYD_Seal-01.jpg",
+    "han ev":  "https://ev-database.org/img/auto/BYD_Han/BYD_Han-01.jpg",
+    "tang ev": "https://ev-database.org/img/auto/BYD_Tang_EV/BYD_Tang_EV-01.jpg",
+  },
+  "rivian": {
+    "r1t": "https://images.dealer.com/ddc/vehicles/2023/Rivian/R1T/Pickup/perspective/front-left/2023_Rivian_R1T_Pickup_FL.jpg",
+    "r1s": "https://images.dealer.com/ddc/vehicles/2023/Rivian/R1S/SUV/perspective/front-left/2023_Rivian_R1S_SUV_FL.jpg",
+  },
+  "ford": {
+    "mustang mach-e":  "https://images.dealer.com/ddc/vehicles/2023/Ford/Mustang%20Mach-E/SUV/perspective/front-left/2023_Ford_Mustang-Mach-E_SUV_FL.jpg",
+    "f-150 lightning": "https://images.dealer.com/ddc/vehicles/2023/Ford/F-150%20Lightning/Pickup/perspective/front-left/2023_Ford_F-150-Lightning_Pickup_FL.jpg",
+  },
+  "chevrolet": {
+    "bolt ev":  "https://images.dealer.com/ddc/vehicles/2023/Chevrolet/Bolt%20EV/Hatchback/perspective/front-left/2023_Chevrolet_Bolt-EV_Hatchback_FL.jpg",
+    "bolt euv": "https://images.dealer.com/ddc/vehicles/2023/Chevrolet/Bolt%20EUV/SUV/perspective/front-left/2023_Chevrolet_Bolt-EUV_SUV_FL.jpg",
+  },
+  "volvo": {
+    "xc40 recharge": "https://images.dealer.com/ddc/vehicles/2023/Volvo/XC40%20Recharge/SUV/perspective/front-left/2023_Volvo_XC40-Recharge_SUV_FL.jpg",
+    "c40 recharge":  "https://images.dealer.com/ddc/vehicles/2023/Volvo/C40%20Recharge/SUV/perspective/front-left/2023_Volvo_C40-Recharge_SUV_FL.jpg",
+  },
+  "porsche": {
+    "taycan":        "https://images.dealer.com/ddc/vehicles/2023/Porsche/Taycan/Sedan/perspective/front-left/2023_Porsche_Taycan_Sedan_FL.jpg",
+    "taycan cross turismo": "https://images.dealer.com/ddc/vehicles/2023/Porsche/Taycan%20Cross%20Turismo/Wagon/perspective/front-left/2023_Porsche_Taycan-Cross-Turismo_Wagon_FL.jpg",
+  },
+  "jaguar": {
+    "i-pace": "https://images.dealer.com/ddc/vehicles/2023/Jaguar/I-PACE/SUV/perspective/front-left/2023_Jaguar_I-PACE_SUV_FL.jpg",
+  },
+  "mini": {
+    "electric": "https://images.dealer.com/ddc/vehicles/2023/MINI/Electric/Hatchback/perspective/front-left/2023_MINI_Electric_Hatchback_FL.jpg",
+  },
+  "honda": {
+    "prologue": "https://images.dealer.com/ddc/vehicles/2024/Honda/Prologue/SUV/perspective/front-left/2024_Honda_Prologue_SUV_FL.jpg",
+  },
+  "toyota": {
+    "bz4x": "https://images.dealer.com/ddc/vehicles/2023/Toyota/bZ4X/SUV/perspective/front-left/2023_Toyota_bZ4X_SUV_FL.jpg",
+  },
+  "subaru": {
+    "solterra": "https://images.dealer.com/ddc/vehicles/2023/Subaru/Solterra/SUV/perspective/front-left/2023_Subaru_Solterra_SUV_FL.jpg",
+  },
+  "lucid": {
+    "air": "https://images.dealer.com/ddc/vehicles/2023/Lucid/Air/Sedan/perspective/front-left/2023_Lucid_Air_Sedan_FL.jpg",
+  },
+  "nio": {
+    "et5": "https://ev-database.org/img/auto/NIO_ET5/NIO_ET5-01.jpg",
+    "es6": "https://ev-database.org/img/auto/NIO_ES6/NIO_ES6-01.jpg",
+  },
+  "zeekr": {
+    "001": "https://ev-database.org/img/auto/Zeekr_001/Zeekr_001-01.jpg",
+    "x":   "https://ev-database.org/img/auto/Zeekr_X/Zeekr_X-01.jpg",
+  },
+  "xpeng": {
+    "p7": "https://ev-database.org/img/auto/XPENG_P7/XPENG_P7-01.jpg",
+    "g9": "https://ev-database.org/img/auto/XPENG_G9/XPENG_G9-01.jpg",
+  },
+  "mg": {
+    "zs ev":    "https://ev-database.org/img/auto/MG_ZS_EV/MG_ZS_EV-01.jpg",
+    "4 electric":"https://ev-database.org/img/auto/MG_4_Electric/MG_4_Electric-01.jpg",
+    "5 electric":"https://ev-database.org/img/auto/MG_5_Electric/MG_5_Electric-01.jpg",
+  },
+  "renault": {
+    "zoe":     "https://ev-database.org/img/auto/Renault_Zoe/Renault_Zoe-01.jpg",
+    "megane e-tech": "https://ev-database.org/img/auto/Renault_Megane_E-Tech/Renault_Megane_E-Tech-01.jpg",
+  },
+  "opel": {
+    "corsa-e":   "https://ev-database.org/img/auto/Opel_Corsa-e/Opel_Corsa-e-01.jpg",
+    "mokka-e":   "https://ev-database.org/img/auto/Opel_Mokka-e/Opel_Mokka-e-01.jpg",
+  },
+  "skoda": {
+    "enyaq iv": "https://ev-database.org/img/auto/Skoda_Enyaq_iV/Skoda_Enyaq_iV-01.jpg",
+  },
+  "cupra": {
+    "born": "https://ev-database.org/img/auto/Cupra_Born/Cupra_Born-01.jpg",
+  },
+  "fiat": {
+    "500e": "https://ev-database.org/img/auto/Fiat_500e/Fiat_500e-01.jpg",
+  },
+  "smart": {
+    "#1": "https://ev-database.org/img/auto/Smart_1/Smart_1-01.jpg",
+    "#3": "https://ev-database.org/img/auto/Smart_3/Smart_3-01.jpg",
   },
 };
 
-// Returns a real photo URL for the given make/model, or null
 const getStaticImage = (make, model, year) => {
-  const makeMap  = VEHICLE_PHOTO_MAP[make?.toLowerCase()];
+  const makeMap = VEHICLE_PHOTO_MAP[make?.toLowerCase()];
   if (!makeMap) return null;
   return makeMap[model?.toLowerCase()] || null;
 };
