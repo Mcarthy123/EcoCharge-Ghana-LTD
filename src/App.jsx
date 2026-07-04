@@ -5566,6 +5566,12 @@ const lookupLocal = (make, model, year) => {
 // Master lookup — tries all sources, returns first match
 const getVehicleInfo = async (make, model, year) => {
   if (!make || !model) return null;
+  const supaReg = await lookupSupabaseRegistry(make, model, year);
+  if (supaReg) {
+    const supaImgEarly = await lookupSupabaseImage(make, model);
+    if (supaImgEarly) supaReg.imageUrl = supaImgEarly;
+    return supaReg;
+  }
 
   // Always check static image map first — instant, no API call
   const staticImg = getStaticImage(make, model, year);
