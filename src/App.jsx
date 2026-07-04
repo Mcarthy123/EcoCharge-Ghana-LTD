@@ -214,9 +214,9 @@ const Logo = ({ size=34 }) => {
 // for a given vehicle type, falling back to a plain icon if the image fails to load.
 const VEHICLE_IMAGES = { Car:"/car-charging.jpg", Scooter:"/scooter-charging.jpg", Tricycle:"/tricycle-charging.jpg" };
 const VEHICLE_FALLBACK_ICON = { Car:"fa-car-side", Scooter:"fa-motorcycle", Tricycle:"fa-truck-pickup" };
-const VehicleAvatar = ({ vehicleType="Car", size=64 }) => {
+const VehicleAvatar = ({ vehicleType="Car", imageUrl=null, size=64 }) => {
   const [err,setErr] = useState(false);
-  const src = VEHICLE_IMAGES[vehicleType] || VEHICLE_IMAGES.Car;
+  const src = imageUrl || VEHICLE_IMAGES[vehicleType] || VEHICLE_IMAGES.Car;
   if (!err) return (
     <img src={src} alt={vehicleType} onError={()=>setErr(true)}
       style={{ width:size,height:size,borderRadius:"50%",objectFit:"cover",border:`2px solid ${T.green}`,flexShrink:0 }}/>
@@ -1559,12 +1559,40 @@ function ChargerDetail({ go,selectedCharger,setBookingMode,setStation,user }) {
   );
 }
 
-function Vehicles({ go,setVehicle,bookingMode }) {
+function Vehicles({ go,setVehicle,bookingMode,user }) {
   const [sel,setSel] = useState(null);
+  const [myVehicles,setMyVehicles] = useState([]);
+  const [loadingMine,setLoadingMine] = useState(true);
+  useEffect(()=>{ (async()=>{ if(user?.id){ const v=await loadUserVehicles(user.id); setMyVehicles(v); } setLoadingMine(false); })(); },[user]);
+  const pickReal=(v)=>{
+    const priceMatch = v.vehicle_type==="Electric Motorcycle" ? VEHICLES[1]
+      : v.vehicle_type==="Electric Tricycle" ? VEHICLES[2] : VEHICLES[0];
+    setSel({ ...priceMatch, type:v.vehicle_type||priceMatch.type, imageUrl:v.image_url, nickname:v.nickname, vehicleId:v.id });
+  };
   const vehicleImages={ Car:"/car-charging.jpg",Scooter:"/scooter-charging.jpg",Tricycle:"/tricycle-charging.jpg" };
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Select Vehicle" sub={bookingMode==="now"?"Charging now — choose your vehicle":"Reserving for later — choose your vehicle"} onBack={()=>go("detail")}/>
+      {!loadingMine && myVehicles.length>0 && (
+        <div style={{ padding:"14px 14px 0" }}>
+          <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10 }}>Your Vehicles</div>
+          <div style={{ display:"flex",gap:10,overflowX:"auto",paddingBottom:10 }}>
+            {myVehicles.map(v=>(
+              <div key={v.id} className="tap" onClick={()=>pickReal(v)}
+                style={{ flexShrink:0,width:130,borderRadius:14,overflow:"hidden",border:`2px solid ${sel?.vehicleId===v.id?T.green:T.border}`,background:T.card }}>
+                <div style={{ height:80,background:T.surface,position:"relative" }}>
+                  {v.image_url && <img src={v.image_url} alt={v.nickname} style={{ width:"100%",height:"100%",objectFit:"cover" }}/>}
+                </div>
+                <div style={{ padding:"8px 10px" }}>
+                  <div style={{ fontWeight:700,fontSize:12,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{v.nickname}</div>
+                  <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{v.manufacturer} {v.model}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
       <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 100px" }}>
         {VEHICLES.map((v,i)=>(
           <div key={v.type} className={`tap fade${i}`} onClick={()=>setSel(v)}
@@ -1622,7 +1650,7 @@ function Booking({ go,station,vehicle,user,setBooking }) {
     if (!email.trim()||!email.includes("@")) { setErr("Enter a valid email");return; }
     setLoad(true);setErr("");
     const ref=genRef();
-    const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",slot_time:slots[slotIdx].toISOString(),duration_min:dur.value,amount:total,name,phone,email,user_id:user?.id||null,pay_method:payHow,status:"confirmed",created_at:new Date().toISOString() };
+    const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",vehicleImageUrl:vehicle?.imageUrl||null,slot_time:slots[slotIdx].toISOString(),duration_min:dur.value,amount:total,name,phone,email,user_id:user?.id||null,pay_method:payHow,status:"confirmed",created_at:new Date().toISOString() };
     let saved=true;
     if (SUPABASE_URL) saved=await sb("bookings",{ method:"POST",headers:{ Prefer:"return=minimal" },body:JSON.stringify(data) });
     if (!saved) { setErr("Could not save booking. Please check your connection and try again."); setLoad(false); return; }
@@ -1648,7 +1676,7 @@ function Booking({ go,station,vehicle,user,setBooking }) {
             <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{s.name}</div>
             <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>{vehicle?.type||"Car"} · {s.city}</div>
           </div>
-          <VehicleAvatar vehicleType={vehicle?.type||"Car"} size={50}/>
+          <VehicleAvatar vehicleType={vehicle?.type||"Car"} imageUrl={vehicle?.imageUrl} size={50}/>
         </div>
         <div className="fade1" style={{ background:T.card,borderRadius:16,padding:"14px 16px",marginBottom:12,border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}><i className="fas fa-clock" style={{ marginRight:8,color:T.green }}/> Select Time</div>
@@ -1784,7 +1812,7 @@ function ChargeNow({ go,station,vehicle,user,setBooking }) {
     if (!email.trim()||!email.includes("@")) { setErr("Enter a valid email");return; }
     setLoad(true);setErr("");
     const ref=genRef();
-    const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",slot_time:new Date().toISOString(),duration_min:null,amount:null,name,phone,email,user_id:user?.id||null,pay_method:"wallet",booking_mode:"now",status:"confirmed",created_at:new Date().toISOString() };
+    const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",vehicleImageUrl:vehicle?.imageUrl||null,slot_time:new Date().toISOString(),duration_min:null,amount:null,name,phone,email,user_id:user?.id||null,pay_method:"wallet",booking_mode:"now",status:"confirmed",created_at:new Date().toISOString() };
     let saved=true;
     if (SUPABASE_URL) saved=await sb("bookings",{ method:"POST",headers:{ Prefer:"return=minimal" },body:JSON.stringify(data) });
     if (!saved) { setErr("Could not start your session. Please check your connection and try again."); setLoad(false); return; }
@@ -1803,7 +1831,7 @@ function ChargeNow({ go,station,vehicle,user,setBooking }) {
             <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{s.name}</div>
             <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>{vehicle?.type||"Car"} · {s.city}</div>
           </div>
-          <VehicleAvatar vehicleType={vehicle?.type||"Car"} size={50}/>
+          <VehicleAvatar vehicleType={vehicle?.type||"Car"} imageUrl={vehicle?.imageUrl} size={50}/>
         </div>
         <div className="fade1" style={{ background:T.card,borderRadius:16,padding:"14px 16px",marginBottom:12,border:`1px solid ${T.border}` }}>
           <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:10 }}><i className="fas fa-money-bill-alt" style={{ marginRight:8,color:T.green }}/> Cost</div>
@@ -2267,7 +2295,7 @@ function QRScreen({ go, booking, setBooking, user }) {
           </div>
         </div>
         <div style={{ display:'flex',justifyContent:'center',marginBottom:8 }}>
-          <VehicleAvatar vehicleType={b.vehicle} size={120}/>
+          <VehicleAvatar vehicleType={b.vehicle} imageUrl={b.vehicleImageUrl} size={120}/>
         </div>
         <div style={{ textAlign:'center',color:T.green,fontWeight:600,fontSize:13,marginBottom:22 }}>
           <span style={{ display:'inline-block',width:6,height:6,borderRadius:'50%',background:T.green,marginRight:6 }}/>
