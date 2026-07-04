@@ -5484,6 +5484,38 @@ const VEHICLE_PHOTO_MAP = {
   },
 };
 
+
+const lookupSupabaseRegistry = async (make, model, year) => {
+  if (!SUPABASE_URL) return null;
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/vehicle_registry?brand=eq.${encodeURIComponent(make)}&model=eq.${encodeURIComponent(model)}&select=*`,
+      { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` } }
+    );
+    const data = await res.json();
+    const row = Array.isArray(data) ? data[0] : null;
+    if (!row) return null;
+    return {
+      source: "supabase_registry", make, model, year,
+      battery: row.battery_capacity_kwh, connector: row.connector_type,
+      range: row.estimated_range_km, maxPower: row.max_charging_power_kw,
+      type: row.type, imageUrl: null,
+    };
+  } catch(e) { return null; }
+};
+
+const lookupSupabaseImage = async (make, model) => {
+  if (!SUPABASE_URL) return null;
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/vehicle_image_registry?brand=eq.${encodeURIComponent(make)}&model=eq.${encodeURIComponent(model)}&select=image_url`,
+      { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` } }
+    );
+    const data = await res.json();
+    return data?.[0]?.image_url || null;
+  } catch(e) { return null; }
+};
+
 const getStaticImage = (make, model, year) => {
   const makeMap = VEHICLE_PHOTO_MAP[make?.toLowerCase()];
   if (!makeMap) return null;
