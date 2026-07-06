@@ -5,16 +5,11 @@
 // Paystack, Supabase, QR, Booking, Verify, Map
 // ============================================================
 import { useState, useEffect, useRef, useContext, createContext } from "react";
-import { useState, useEffect, useRef, useContext, createContext } from "react";
 import AIRoutePlanner from "./AIRoutePlanner";
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL        || "";
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY   || "";
 const PAYSTACK_KEY  = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "";
-const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL        || "";
-const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY   || "";
-const PAYSTACK_KEY  = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "";
-
 // ── AUTH TOKEN HELPER ─────────────────────────────────────────
 // Reads the real user session token from localStorage (set by
 // Supabase Auth on sign-in). Falls back to anon key for public
@@ -6937,16 +6932,14 @@ function AppInner() {
     booking:        <Booking {...props}/>,
     bookings:       <Bookings {...props}/>,
     qr:             <QRScreen {...props}/>,
-    scan:           <ScanToCharge {...props}/>,
-    verify:         <Verify {...props}/>,
-    profile:        <Profile {...props}/>,
-    about:          <About {...props}/>,
-  };
-profile:        <Profile {...props}/>,
-    about:          <About {...props}/>,
-    routeplanner:   <AIRoutePlanner go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
-  };
-  return (
+   scan:           <ScanToCharge {...props}/>,
+      verify:         <Verify {...props}/>,
+      profile:        <Profile {...props}/>,
+      about:          <About {...props}/>,
+      routeplanner:   <AIRoutePlanner go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
+    };
+
+    return (
     <><style>{CSS}</style>
     <div style={{ position:"relative",height:"100vh",overflow:"hidden",background:T.bg }}>
       <Drawer open={drawer} onClose={()=>setDrawer(false)} go={goSecure} user={user} onLogout={()=>{ setUser(null);go("splash"); }}/>
