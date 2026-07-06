@@ -24,9 +24,7 @@ const getToken = () => {
   } catch(e) {}
   return SUPABASE_ANON;
 };
-  } catch(e) {}
-  return SUPABASE_ANON;
-};
+ 
 
 const sb = async (path, opts = {}) => {
   if (!SUPABASE_URL) return null;
