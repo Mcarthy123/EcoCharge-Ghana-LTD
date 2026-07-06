@@ -16,12 +16,14 @@ const PAYSTACK_KEY  = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "";
 // endpoints. This fixes all RLS policies that use auth.uid().
 const getToken = () => {
   try {
-    const key = `sb-${SUPABASE_URL.split("//")[1].split(".")[0]}-auth-token`;
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem("eco_user");
     if (raw) {
-      const p = JSON.parse(raw);
-      return p?.access_token || SUPABASE_ANON;
+      const u = JSON.parse(raw);
+      if (u?.token && u.token !== "demo") return u.token;
     }
+  } catch(e) {}
+  return SUPABASE_ANON;
+};
   } catch(e) {}
   return SUPABASE_ANON;
 };
