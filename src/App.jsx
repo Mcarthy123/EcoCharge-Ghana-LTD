@@ -6940,9 +6940,10 @@ function AppInner() {
       about:          <About {...props}/>,
       routeplanner:   <AIRoutePlanner go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
     };
-  reservations: <ReservationSystem go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
+ reservations: <ReservationSystem go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
+    };
 
-    return (
+      return (
     <><style>{CSS}</style>
     <div style={{ position:"relative",height:"100vh",overflow:"hidden",background:T.bg }}>
       <Drawer open={drawer} onClose={()=>setDrawer(false)} go={goSecure} user={user} onLogout={()=>{ setUser(null);go("splash"); }}/>
