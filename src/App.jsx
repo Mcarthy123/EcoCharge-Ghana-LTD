@@ -6,6 +6,7 @@
 // ============================================================
 import { useState, useEffect, useRef, useContext, createContext } from "react";
 import AIRoutePlanner from "./AIRoutePlanner";
+import ReservationSystem from "./ReservationSystem";
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL        || "";
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY   || "";
@@ -523,10 +524,11 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => {
           { icon:"fa-plug",             label:"All Stations",    screen:"detail"        },
           { icon:"fa-user",             label:"My Profile",      screen:"profile"       },
           { icon:"fa-bell",             label:"Notifications",   screen:"notifications" },
-    { icon:"fa-bell",             label:"Notifications",   screen:"notifications" },
+    
     { icon:"fa-route",            label:"AI Route Planner", screen:"routeplanner", color:T.green },
+    { icon:"fa-calendar-check", label:"Reserve a Charger", screen:"reservations", color:T.green },
     { icon:"fa-info-circle",      label:"About EcoCharge", screen:"about"         },
-          { icon:"fa-info-circle",      label:"About EcoCharge", screen:"about"         },
+          
           { icon:"fa-bolt",             label:"Verify Booking",  screen:"verify",       color:T.yellow },
           { icon:"fa-charging-station", label:"Charger Admin",   screen:"chargers",     color:T.blue   },
           { icon:"fa-list-alt",         label:"Session Manager", screen:"sessions",     color:T.green  },
@@ -6938,6 +6940,7 @@ function AppInner() {
       about:          <About {...props}/>,
       routeplanner:   <AIRoutePlanner go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
     };
+  reservations: <ReservationSystem go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
 
     return (
     <><style>{CSS}</style>
