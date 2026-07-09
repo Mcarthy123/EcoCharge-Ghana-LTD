@@ -6939,7 +6939,7 @@ function AppInner() {
       profile:        <Profile {...props}/>,
       about:          <About {...props}/>,
       routeplanner:   <AIRoutePlanner go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
-    };
+    
  reservations: <ReservationSystem go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
     };
 
