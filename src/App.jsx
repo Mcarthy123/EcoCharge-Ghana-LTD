@@ -31,13 +31,13 @@ const sb = async (path, opts = {}) => {
   if (!SUPABASE_URL) return null;
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      ...opts,
       headers: {
         apikey: SUPABASE_ANON,
         Authorization: `Bearer ${getToken()}`,
         "Content-Type": "application/json",
         ...opts.headers
       },
-      ...opts,
     });
     return res.ok ? res.json() : null;
   } catch(e) { return null; }
