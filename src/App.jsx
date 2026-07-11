@@ -39,7 +39,9 @@ const sb = async (path, opts = {}) => {
         ...opts.headers
       },
     });
-    return res.ok ? res.json() : null;
+   if (!res.ok) return null;
+const text = await res.text();
+return text ? JSON.parse(text) : true;
   } catch(e) { return null; }
 };
 
