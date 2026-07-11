@@ -3187,102 +3187,265 @@ function StationReview({go,station,user,onClose}){
   );
 }
 
-function Bookings({ go,booking,user }) {
-  const [now,setNow]=useState(new Date());
+function Bookings({ go, user, setSelectedBooking }) {
+  const [all, setAll] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState("active");
+  const [now, setNow] = useState(new Date());
+
   useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return ()=>clearInterval(t); },[]);
-  let b=booking;
-  if (!b) { try { const s=localStorage.getItem("eco_booking"); if(s) b=JSON.parse(s); } catch(e){} }
-  const getCountdown=(b)=>{
+
+  const load = async () => {
+    setLoading(true);
+    if (SUPABASE_URL && user?.id) {
+      const data = await sb(`bookings?user_id=eq.${user.id}&order=created_at.desc&limit=100`);
+      setAll(Array.isArray(data)?data:[]);
+    } else {
+      let b=null; try { const s=localStorage.getItem("eco_booking"); if(s) b=JSON.parse(s); } catch(e){}
+      setAll(b?[b]:[]);
+    }
+    setLoading(false);
+  };
+  useEffect(()=>{ load(); },[user]);
+
+  const isImminent = (b) => {
+    if (!b.slot_time) return true;
+    const start = new Date(b.slot_time);
+    return start.getTime() - now.getTime() < 5*60000;
+  };
+  const categorize = (b) => {
+    if (b.status==="completed") return "completed";
+    if (b.status==="cancelled"||b.status==="expired") return "cancelled";
+    if (b.status==="charging") return "active";
+    if (b.status==="confirmed" && isImminent(b)) return "active";
+    return "upcoming";
+  };
+
+  const grouped = { active:[], upcoming:[], completed:[], cancelled:[] };
+  all.forEach(b=>grouped[categorize(b)].push(b));
+
+  const TABS = [
+    { id:"active",    label:"Active",    color:T.green },
+    { id:"upcoming",  label:"Upcoming",  color:T.blue  },
+    { id:"completed", label:"Completed", color:T.green },
+    { id:"cancelled", label:"Cancelled", color:T.red   },
+  ];
+
+  const getCountdown = (b) => {
     if (!b?.slot_time||!b?.duration_min) return null;
     const start=new Date(b.slot_time);
     const end=new Date(start.getTime()+b.duration_min*60000);
     const diff=end-now;
-    if (diff<=0) return { done:true,pct:100 };
+    if (diff<=0) return { done:true };
     const started=now>=start;
-    if (!started) { const wait=start-now; const wm=Math.floor(wait/60000); const ws=Math.floor((wait%60000)/1000); return { waiting:true,label:`Starts in ${wm}m ${ws}s`,pct:0 }; }
-    const elapsed=now-start;
-    const total=b.duration_min*60000;
-    const pct=Math.min(100,Math.round((elapsed/total)*100));
-    const rem=end-now;
-    const rm=Math.floor(rem/60000);
-    const rs=Math.floor((rem%60000)/1000);
-    return { active:true,label:`${rm}m ${rs}s remaining`,pct };
+    if (!started) { const wait=start-now; const wm=Math.floor(wait/60000); const ws=Math.floor((wait%60000)/1000); return { waiting:true,label:`${wm}m ${ws}s` }; }
+    const rem=end-now; const rm=Math.floor(rem/60000); const rs=Math.floor((rem%60000)/1000);
+    return { active:true,label:`${rm}m ${rs}s` };
   };
+
+  const openDetail = (b) => { setSelectedBooking(b); go("bookingdetail"); };
+  const list = grouped[tab];
+
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="My Bookings" sub="Your charging sessions" onBack={()=>go("home")}/>
-      <div style={{ flex:1,overflowY:"auto",padding:"20px 14px 100px" }}>
-        {b ? (
-          <>
-            {(()=>{
-              const cd=getCountdown(b);
-              return (
-                <div className="fade" style={{ background:T.highlightGrad2,borderRadius:18,padding:"18px",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
-                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14 }}>
-                    <div>
-                      <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Active Booking</div>
-                      <div style={{ fontWeight:800,fontSize:18,color:T.text }}>{b.station}</div>
-                      <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>{b.vehicle} · {b.duration_min} min session</div>
-                    </div>
-                    <div style={{ background:b.status==="confirmed"?"rgba(74,222,128,0.15)":"rgba(251,191,36,0.15)",borderRadius:10,padding:"5px 12px" }}>
-                      <span style={{ fontSize:11,fontWeight:700,color:b.status==="confirmed"?T.green:T.yellow }}>{b.status==="confirmed"?"✓ Confirmed":"Pending"}</span>
-                    </div>
-                  </div>
-                  {cd&&(
-                    <div style={{ marginBottom:14 }}>
-                      <div style={{ display:"flex",justifyContent:"space-between",marginBottom:8 }}>
-                        <span style={{ fontSize:12,color:T.muted }}>{cd.done?"Session complete":cd.waiting?cd.label:"Time remaining"}</span>
-                        <span style={{ fontSize:12,fontWeight:700,color:T.green }}>{cd.done?"Done ✅":cd.active?cd.label:""}</span>
-                      </div>
-                      <div style={{ height:8,borderRadius:4,background:T.track,overflow:"hidden" }}>
-                        <div style={{ height:"100%",width:`${cd.pct}%`,background:`linear-gradient(90deg,${T.green},${T.blue})`,transition:"width 1s linear",borderRadius:4 }}/>
-                      </div>
-                      {cd.active&&<div style={{ textAlign:"center",marginTop:12 }}><div style={{ fontWeight:900,fontSize:36,color:T.green,fontFamily:"monospace",letterSpacing:2 }}>{cd.label}</div><div style={{ fontSize:11,color:T.muted,marginTop:4 }}>charging in progress</div></div>}
-                    </div>
-                  )}
-                  {[{ label:"Reference",value:b.reference },{ label:"Amount",value:b.booking_mode==="now"?"Metered — billed per kWh":`GH₵${b.amount}` },{ label:"Payment",value:b.pay_method==="wallet"||b.pay_method==="now"?"Charged from wallet":"Pay on Arrival" },{ label:"Water",value:"20L included 💧" }].map(r=>(
-                    <div key={r.label} style={{ display:"flex",justifyContent:"space-between",marginBottom:8,paddingBottom:8,borderBottom:`1px solid rgba(255,255,255,0.06)` }}>
-                      <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
-                      <span style={{ color:T.text,fontWeight:600,fontSize:13 }}>{r.value}</span>
-                    </div>
-                  ))}
-                  <button onClick={()=>go("qr")} className="tap"
-                    style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:8 }}>
-                    <i className="fas fa-qrcode"/> View Charging Pass
-                  </button>
-                </div>
-              );
-            })()}
-            <div style={{ background:"linear-gradient(135deg,#1a1000,#2d1a00)",borderRadius:16,padding:"16px",border:`1px solid rgba(251,191,36,0.2)`,marginBottom:16 }}>
-              <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:10 }}>
-                <div style={{ width:40,height:40,borderRadius:"50%",background:"rgba(251,191,36,0.15)",display:"flex",alignItems:"center",justifyContent:"center" }}>
-                  <i className="fas fa-star" style={{ fontSize:18,color:T.yellow }}/>
-                </div>
-                <div>
-                  <div style={{ fontWeight:700,fontSize:14,color:T.text }}>EcoCharge Rewards</div>
-                  <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Coming soon — earn credits for charging</div>
-                </div>
-              </div>
-              <div style={{ fontSize:12,color:T.muted,lineHeight:1.7 }}>Every charge earns you points. Redeem for <span style={{ color:T.yellow,fontWeight:600 }}>airtime</span>, <span style={{ color:T.green,fontWeight:600 }}>discounted charging</span>, and more!</div>
+      <Header title="My Bookings" sub="Manage all your charger reservations" onBack={()=>go("home")}/>
+      <div style={{ display:"flex",padding:"12px 14px 0",gap:6 }}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} className="tap"
+            style={{ flex:1,background:"none",border:"none",borderBottom:`2px solid ${tab===t.id?t.color:"transparent"}`,padding:"0 0 10px",cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",alignItems:"center",gap:4 }}>
+            <div style={{ width:26,height:26,borderRadius:"50%",background:tab===t.id?`${t.color}18`:T.surface,display:"flex",alignItems:"center",justifyContent:"center" }}>
+              <span style={{ fontSize:11,fontWeight:800,color:tab===t.id?t.color:T.muted }}>{grouped[t.id].length}</span>
             </div>
-          </>
-        ) : (
+            <span style={{ fontSize:10,fontWeight:700,color:tab===t.id?t.color:T.muted }}>{t.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
+        {loading && <div style={{ textAlign:"center",padding:"40px 0" }}><Spinner/></div>}
+
+        {!loading && tab==="active" && list.map(b=>{
+          const cd=getCountdown(b);
+          return (
+            <div key={b.reference} className="fade" style={{ background:T.highlightGrad2,borderRadius:18,padding:"18px",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14 }}>
+                <Badge label={b.status==="charging"?"Charging":"Reserved"} color={T.green}/>
+                <span style={{ fontSize:10,color:T.muted,fontFamily:"monospace" }}>{b.reference}</span>
+              </div>
+              <div style={{ fontWeight:800,fontSize:18,color:T.text,marginBottom:2 }}>{b.station}</div>
+              <div style={{ fontSize:12,color:T.muted,marginBottom:14 }}>{b.city} · {b.vehicle}</div>
+              {cd&&!cd.done&&(
+                <div style={{ textAlign:"center",background:T.innerTint,borderRadius:12,padding:"14px",marginBottom:14 }}>
+                  <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>{cd.waiting?"Reservation expires in":"Time remaining"}</div>
+                  <div style={{ fontWeight:900,fontSize:28,color:T.green,fontFamily:"monospace" }}>{cd.label}</div>
+                </div>
+              )}
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+                <button onClick={()=>openDetail(b)} className="tap" style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"13px",fontSize:13,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>View Details</button>
+                <button onClick={()=>go("qr")} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px",fontSize:13,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}><i className="fas fa-qrcode" style={{marginRight:6}}/>QR Pass</button>
+              </div>
+            </div>
+          );
+        })}
+
+        {!loading && list.length===0 && (
           <div style={{ textAlign:"center",padding:"50px 20px" }}>
             <i className="fas fa-calendar-times" style={{ fontSize:56,color:T.muted,marginBottom:16,display:"block" }}/>
-            <div style={{ fontWeight:700,fontSize:18,color:T.text,marginBottom:8 }}>No Bookings Yet</div>
-            <div style={{ color:T.muted,fontSize:13,marginBottom:28,lineHeight:1.8 }}>Find a station and book your<br/>first charging session</div>
-            <button onClick={()=>go("map")} className="tap"
-              style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"14px 28px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:8,margin:"0 auto" }}>
-              <i className="fas fa-map-marker-alt"/> Find a Station
-            </button>
+            <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>Nothing here yet</div>
+            <div style={{ color:T.muted,fontSize:13,marginBottom:24 }}>{tab==="active"?"Find a station and start charging":`No ${tab} bookings`}</div>
+            {tab==="active"&&<button onClick={()=>go("map")} className="tap" style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"13px 26px",fontSize:14,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>Find a Station</button>}
           </div>
         )}
+
+        {!loading && tab!=="active" && list.map(b=>{
+          const cat=categorize(b);
+          const color = cat==="completed"?T.green:cat==="cancelled"?T.red:T.blue;
+          return (
+            <div key={b.reference} className="tap row" onClick={()=>openDetail(b)}
+              style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px",marginBottom:10 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
+                <div>
+                  <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{b.station}</div>
+                  <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{b.reference} · {new Date(b.created_at).toLocaleDateString("en-GH",{day:"numeric",month:"short"})}</div>
+                </div>
+                <Badge label={cat[0].toUpperCase()+cat.slice(1)} color={color}/>
+              </div>
+              <div style={{ fontSize:12,color:T.mutedLight }}>{b.vehicle} · {b.amount?`GH₵${b.amount}`:"Metered"}</div>
+            </div>
+          );
+        })}
       </div>
       <Nav active="Sessions" go={go}/>
     </div>
   );
 }
+function BookingDetail({ go, booking, user }) {
+  const b = booking;
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
 
+  useEffect(()=>{
+    if (!b?.reference || !SUPABASE_URL) { setLoading(false); return; }
+    (async()=>{
+      const data = await sb(`charging_sessions?booking_ref=eq.${b.reference}&order=started_at.desc&limit=1`);
+      if (Array.isArray(data)&&data[0]) setSession(data[0]);
+      setLoading(false);
+    })();
+  },[b]);
+
+  if (!b) return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Booking Details" onBack={()=>go("bookings")}/>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:T.muted,fontSize:13 }}>No booking selected.</div>
+    </div>
+  );
+
+  const status = b.status==="charging"?"Charging":b.status==="completed"?"Completed":b.status==="cancelled"?"Cancelled":"Reserved";
+  const statusColor = status==="Charging"?T.blue:status==="Completed"?T.green:status==="Cancelled"?T.red:T.green;
+  const STEPS = ["Reserved","Arrived","Charging","Completed","Receipt"];
+  const stepIndex = { Reserved:0, Arrived:1, Charging:2, Completed:3 }[status] ?? 0;
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <div style={{ height:180,position:"relative",flexShrink:0,overflow:"hidden" }}>
+        <img src="/station2.jpg" alt="" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.55)" }} onError={e=>e.target.style.display="none"}/>
+        <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.2),rgba(0,0,0,0.6))" }}/>
+        <div style={{ position:"absolute",top:"calc(16px + env(safe-area-inset-top,34px))",left:14,right:14,display:"flex",justifyContent:"space-between" }}>
+          <button onClick={()=>go("bookings")} className="tap" style={{ width:36,height:36,borderRadius:"50%",background:"rgba(0,0,0,0.45)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+            <i className="fas fa-arrow-left" style={{ fontSize:16,color:"#fff" }}/>
+          </button>
+          <Badge label={status} color={statusColor}/>
+        </div>
+        <div style={{ position:"absolute",bottom:14,left:16 }}>
+          <div style={{ fontWeight:800,fontSize:18,color:"#fff" }}>{b.station}</div>
+          <div style={{ fontSize:11,color:"rgba(255,255,255,0.7)" }}>{b.reference}</div>
+        </div>
+      </div>
+
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
+        <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px 16px",marginBottom:14,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10 }}>
+          {[{l:"Charger",v:b.charger_id||"—"},{l:"Date",v:new Date(b.slot_time||b.created_at).toLocaleDateString("en-GH",{day:"numeric",month:"short"})},{l:"Time",v:fmtTime(b.slot_time||b.created_at)}].map(r=>(
+            <div key={r.l} style={{ textAlign:"center" }}>
+              <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase" }}>{r.l}</div>
+              <div style={{ fontWeight:700,fontSize:13,color:T.text,marginTop:3 }}>{r.v}</div>
+            </div>
+          ))}
+        </div>
+
+        {status!=="Cancelled"&&(
+          <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"18px 12px",marginBottom:14 }}>
+            <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:16 }}>Booking Status</div>
+            <div style={{ display:"flex",alignItems:"center" }}>
+              {STEPS.map((s,i)=>(
+                <div key={s} style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center" }}>
+                  <div style={{ display:"flex",alignItems:"center",width:"100%" }}>
+                    <div style={{ flex:i===0?0:1,height:2,background:i<=stepIndex?T.green:T.border }}/>
+                    <div style={{ width:22,height:22,borderRadius:"50%",background:i<=stepIndex?T.green:T.border,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                      {i<stepIndex ? <i className="fas fa-check" style={{ fontSize:9,color:"#000" }}/> : i===stepIndex ? <i className="fas fa-bolt" style={{ fontSize:9,color:"#000" }}/> : null}
+                    </div>
+                    <div style={{ flex:i===STEPS.length-1?0:1,height:2,background:i<stepIndex?T.green:T.border }}/>
+                  </div>
+                  <span style={{ fontSize:8,color:i<=stepIndex?T.text:T.muted,marginTop:6,textAlign:"center" }}>{s}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {status==="Charging" && (
+          <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"16px",marginBottom:14 }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
+              <span style={{ fontWeight:700,fontSize:13,color:T.text }}>Live Charging Session</span>
+              <Badge label="Live" color={T.green}/>
+            </div>
+            {loading ? <div style={{ textAlign:"center",padding:"14px 0" }}><Spinner/></div> : (
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14 }}>
+                {[
+                  { l:"Energy", v: session?.energy_kwh!=null?`${session.energy_kwh.toFixed(2)} kWh`:"—", icon:"fa-battery-half" },
+                  { l:"Cost",   v: session?.cost_total!=null?`GH₵${(session.cost_total/100).toFixed(2)}`:"—", icon:"fa-money-bill-alt" },
+                ].map(m=>(
+                  <div key={m.l} style={{ background:T.surfaceFaint,borderRadius:10,padding:"12px" }}>
+                    <i className={`fas ${m.icon}`} style={{ fontSize:13,color:T.green,marginBottom:6,display:"block" }}/>
+                    <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{m.v}</div>
+                    <div style={{ fontSize:9,color:T.muted,marginTop:2 }}>{m.l}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button onClick={()=>go("qr")} className="tap" style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+              <i className="fas fa-bolt" style={{ marginRight:8 }}/> Open Live Session
+            </button>
+          </div>
+        )}
+
+        {status==="Completed" && (
+          <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"16px",marginBottom:14 }}>
+            <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}>Receipt</div>
+            {[
+              { l:"Energy Delivered", v: session?.energy_kwh!=null?`${session.energy_kwh.toFixed(3)} kWh`:"—" },
+              { l:"Total Cost",       v: session?.cost_total!=null?`GH₵${(session.cost_total/100).toFixed(2)}`:`GH₵${b.amount||"—"}` },
+              { l:"Payment",          v: session?.payment_status||"Paid" },
+            ].map(r=>(
+              <div key={r.l} style={{ display:"flex",justifyContent:"space-between",marginBottom:8,paddingBottom:8,borderBottom:`1px solid rgba(255,255,255,0.06)` }}>
+                <span style={{ color:T.muted,fontSize:13 }}>{r.l}</span>
+                <span style={{ color:T.text,fontWeight:600,fontSize:13 }}>{r.v}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"16px" }}>
+          {[{l:"Vehicle",v:b.vehicle},{l:"Payment",v:b.pay_method==="wallet"||b.pay_method==="now"?"Charged from wallet":"Pay on Arrival"},{l:"Water",v:"20L included 💧"}].map(r=>(
+            <div key={r.l} style={{ display:"flex",justifyContent:"space-between",marginBottom:8,paddingBottom:8,borderBottom:`1px solid rgba(255,255,255,0.06)` }}>
+              <span style={{ color:T.muted,fontSize:13 }}>{r.l}</span>
+              <span style={{ color:T.text,fontWeight:600,fontSize:13 }}>{r.v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 function ChargerAdmin({ go }) {
   const [chargers,setChargers]       = useState([]);
   const [sessions,setSessions]       = useState([]);
@@ -6850,6 +7013,7 @@ function AppInner() {
   const [booking,setBooking]  = useState(()=>{ try { const b=localStorage.getItem("eco_booking"); return b?JSON.parse(b):null; } catch(e){ return null; } });
   const [user,setUserRaw]     = useState(()=>{ try { const u=localStorage.getItem("eco_user"); return u?JSON.parse(u):null; } catch(e){ return null; } });
   const [drawer,setDrawer]    = useState(false);
+  const [selectedBooking,setSelectedBooking]= useState(null);
 
   const setUser=(u)=>{ setUserRaw(u); try { u?localStorage.setItem("eco_user",JSON.stringify(u)):localStorage.removeItem("eco_user"); } catch(e){} };
   const go=(s)=>{ setScreen(s);setDrawer(false); };
@@ -6909,7 +7073,7 @@ function AppInner() {
     }
   },[]);
 
-  const props={ go:goSecure,stations,station:station||stations[0],setStation,user,setUser,vehicle,setVehicle,bookingMode,setBookingMode,booking,setBooking,selectedCharger,setSelectedCharger,onMenu:()=>setDrawer(true) };
+ const props={ go:goSecure,stations,station:station||stations[0],setStation,user,setUser,vehicle,setVehicle,bookingMode,setBookingMode,booking,setBooking,selectedCharger,setSelectedCharger,selectedBooking,setSelectedBooking,onMenu:()=>setDrawer(true) };
 
   if (screen==="splash") return <><style>{CSS}</style><Splash onLogin={()=>{ setAuthMode("login");go("auth"); }} onRegister={()=>{ setAuthMode("register");go("auth"); }} onGuest={()=>go("home")}/></>;
   if (screen==="auth")   return <><style>{CSS}</style><Auth mode={authMode} onBack={(mode)=>{ if(mode){ setAuthMode(mode); } else { go("splash"); } }} onSuccess={(u)=>{ setUser(u);go("home"); }}/></>;
@@ -6935,6 +7099,7 @@ function AppInner() {
     chargenow:      <ChargeNow {...props}/>,
     booking:        <Booking {...props}/>,
     bookings:       <Bookings {...props}/>,
+    bookingdetail:  <BookingDetail {...props}/>,
     qr:             <QRScreen {...props}/>,
    scan:           <ScanToCharge {...props}/>,
       verify:         <Verify {...props}/>,
