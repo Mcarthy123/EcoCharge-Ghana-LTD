@@ -1902,6 +1902,24 @@ function QRScreen({ go, booking, setBooking, user }) {
   const [checks,      setChecks]     = useState({});
   const [walletBal,   setWalletBal]  = useState(null);
   const [costSoFar,   setCostSoFar]  = useState(0);
+  const [vehicleDetails, setVehicleDetails] = useState(null);
+  useEffect(()=>{
+    if (!user?.id || !SUPABASE_URL) return;
+    sb(`user_vehicles?user_id=eq.${user.id}&order=is_default.desc,created_at.asc&limit=5`).then(list=>{
+      if (!Array.isArray(list)||!list.length) return;
+      const match = list.find(v=>v.vehicle_type===b?.vehicle) || list.find(v=>v.is_default) || list[0];
+      setVehicleDetails(match);
+    });
+  },[user, b?.reference]);
+
+  const GENERIC_AMENITIES = [
+    { icon:"fa-mug-hot",     label:"Coffee Shop" },
+    { icon:"fa-wifi",        label:"Free Wi-Fi"  },
+    { icon:"fa-restroom",    label:"Restroom"    },
+    { icon:"fa-store",       label:"Convenience Store" },
+    { icon:"fa-couch",       label:"Waiting Lounge" },
+    { icon:"fa-car",         label:"Car Wash"    },
+  ];
   const [realtimeData, setRealtimeData] = useState(null);
   const [estRemaining, setEstRemaining] = useState(null);
   const [powerHistory, setPowerHistory] = useState([]);
@@ -2268,15 +2286,15 @@ function QRScreen({ go, booking, setBooking, user }) {
     </div>
   );
 
-  if (phase === 'charging' || phase === 'stopping') return (
+ if (phase === 'charging' || phase === 'stopping') return (
     <div style={{ display:'flex',flexDirection:'column',height:'100%',background:T.bg }}>
       <div style={{ padding:'16px 18px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${T.border}`,flexShrink:0 }}>
         <button onClick={()=>go("home")} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
           <i className="fas fa-chevron-left" style={{ fontSize:18,color:T.text }}/>
         </button>
         <div style={{ textAlign:'center' }}>
-          <div style={{ fontSize:11,color:T.muted }}>{phase==='stopping'?'Stopping':'Charging'}</div>
-          <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{b.charger_id||'Charger'}</div>
+          <div style={{ fontSize:11,color:T.green,display:"flex",alignItems:"center",gap:5,justifyContent:"center" }}><span style={{width:6,height:6,borderRadius:"50%",background:T.green}}/>Session Active</div>
+          <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{phase==='stopping'?'Stopping':'Charging Now'}</div>
         </div>
         <button onClick={stopCharging} disabled={phase==='stopping'} className="tap"
           style={{ background:"none",border:`1px solid ${T.red}`,borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,color:T.red,cursor:phase==='stopping'?'default':'pointer',fontFamily:'inherit',opacity:phase==='stopping'?0.6:1 }}>
@@ -2284,86 +2302,115 @@ function QRScreen({ go, booking, setBooking, user }) {
         </button>
       </div>
 
-      <div style={{ flex:1,overflowY:'auto',padding:'20px 16px 24px' }}>
-        <div style={{ textAlign:'center',fontSize:12,color:T.muted,marginBottom:18 }}>{b.station}</div>
-        <div style={{ display:'flex',alignItems:'center',justifyContent:'center',marginBottom:8,position:'relative' }}>
-          <div style={{ position:'relative',width:210,height:210 }}>
-            <svg width='210' height='210' style={{ transform:'rotate(-90deg)' }}>
-              <circle cx='105' cy='105' r='90' fill='none' stroke={T.surface} strokeWidth='14'/>
-              <circle cx='105' cy='105' r='90' fill='none' stroke={T.green} strokeWidth='14'
-                strokeDasharray={`${2*Math.PI*90}`}
-                strokeDashoffset={`${2*Math.PI*90*(1-pct/100)}`}
-                strokeLinecap='round' style={{ transition:'stroke-dashoffset 1s linear' }}/>
-            </svg>
-            <div style={{ position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center' }}>
-              <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Charging Power</div>
-              <div style={{ fontWeight:800,fontSize:34,color:T.text,lineHeight:1 }}>{livePower.toFixed(1)} <span style={{ fontSize:16,color:T.muted,fontWeight:600 }}>kW</span></div>
+      <div style={{ flex:1,overflowY:'auto',padding:'16px 16px 24px' }}>
+
+        {/* Station card */}
+        <div style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,padding:"14px",marginBottom:14,display:"flex",gap:12 }}>
+          <div style={{ width:64,height:64,borderRadius:10,overflow:"hidden",flexShrink:0,background:T.surface }}>
+            <img src="/station2.jpg" alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} onError={e=>e.target.style.display="none"}/>
+          </div>
+          <div style={{ flex:1,minWidth:0 }}>
+            <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{b.station}</div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{b.city}</div>
+            <div style={{ display:"flex",gap:8,marginTop:6,flexWrap:"wrap" }}>
+              <Badge label={b.charger_id||"Charger"} color={T.blue}/>
+              <Badge label="150 kW DC Fast" color={T.yellow}/>
             </div>
           </div>
         </div>
-        <div style={{ display:'flex',justifyContent:'center',marginBottom:8 }}>
-          <VehicleAvatar vehicleType={b.vehicle} imageUrl={b.vehicleImageUrl} size={120}/>
+
+        {/* Vehicle identity card */}
+        <div style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,padding:"14px",marginBottom:14,display:"flex",gap:14,alignItems:"center" }}>
+          <VehicleAvatar vehicleType={b.vehicle} imageUrl={b.vehicleImageUrl||vehicleDetails?.image_url} size={64}/>
+          <div style={{ flex:1,minWidth:0 }}>
+            <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{vehicleDetails?.nickname || b.vehicle}</div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{vehicleDetails ? `${vehicleDetails.year||""} ${vehicleDetails.manufacturer||""} ${vehicleDetails.model||""}`.trim() : b.vehicle}</div>
+            <div style={{ display:"flex",gap:8,marginTop:6,flexWrap:"wrap" }}>
+              {vehicleDetails?.battery_capacity && <Badge label={`${vehicleDetails.battery_capacity} kWh battery`} color={T.green}/>}
+              {vehicleDetails?.connector_type && <Badge label={vehicleDetails.connector_type} color={T.muted}/>}
+            </div>
+          </div>
         </div>
-        <div style={{ textAlign:'center',color:T.green,fontWeight:600,fontSize:13,marginBottom:22 }}>
-          <span style={{ display:'inline-block',width:6,height:6,borderRadius:'50%',background:T.green,marginRight:6 }}/>
-          {phase==='stopping'?'Stopping…':'Charging…'}
+
+        {/* Live status */}
+        <div style={{ display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16 }}>
+          <div style={{ position:'relative',width:190,height:190 }}>
+            <svg width='190' height='190' style={{ transform:'rotate(-90deg)' }}>
+              <circle cx='95' cy='95' r='80' fill='none' stroke={T.surface} strokeWidth='13'/>
+              <circle cx='95' cy='95' r='80' fill='none' stroke={T.green} strokeWidth='13'
+                strokeDasharray={`${2*Math.PI*80}`}
+                strokeDashoffset={`${2*Math.PI*80*(1-Math.min(livePower/150,1))}`}
+                strokeLinecap='round' style={{ transition:'stroke-dashoffset 1s linear' }}/>
+            </svg>
+            <div style={{ position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center' }}>
+              <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Charging Speed</div>
+              <div style={{ fontWeight:800,fontSize:30,color:T.text,lineHeight:1 }}>{livePower.toFixed(1)}</div>
+              <div style={{ fontSize:12,color:T.muted }}>kW</div>
+            </div>
+          </div>
         </div>
 
         <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16 }}>
           {[
             { label:'Energy',   value:liveKwh.toFixed(2),           unit:'kWh' },
-            { label:'Duration', value:fmtElapsed(elapsed),          unit:'hh:mm:ss' },
+            { label:'Duration', value:fmtElapsed(elapsed),          unit:null },
             { label:'Cost',     value:`GH₵${costSoFar.toFixed(2)}`, unit:null },
           ].map(m=>(
             <div key={m.label} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:'14px 8px',textAlign:'center' }}>
-              <div style={{ fontWeight:700,fontSize:17,color:T.text }}>{m.value}</div>
+              <div style={{ fontWeight:700,fontSize:16,color:T.text }}>{m.value}</div>
               <div style={{ fontSize:10,color:T.muted,marginTop:4 }}>{m.label}</div>
               {m.unit&&<div style={{ fontSize:9,color:T.muted,marginTop:1 }}>{m.unit}</div>}
             </div>
           ))}
         </div>
 
-        <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,overflow:'hidden',marginBottom:14 }}>
-          <div className="tap" onClick={()=>setDetailsOpen(o=>!o)} style={{ padding:'14px 16px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer' }}>
-            <span style={{ fontWeight:700,fontSize:13,color:T.text }}>Session Details</span>
-            <i className={`fas fa-chevron-${detailsOpen?'up':'down'}`} style={{ fontSize:12,color:T.muted }}/>
-          </div>
-          {detailsOpen&&(
-            <div style={{ padding:'0 16px 16px' }}>
-              {[
-                { label:'Session ID',  value:sessionId||'--' },
-                { label:'Charger',     value:b.charger_id||'ECOCHARGE-001' },
-                { label:'Rate',        value:'GH₵0.85/kWh + GH₵5 base' },
-                { label:'Est. Finish', value:estRemaining?`~${estRemaining} remaining`:'--' },
-              ].map(r=>(
-                <div key={r.label} style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,paddingBottom:8,borderBottom:`1px solid ${T.border}` }}>
-                  <span style={{ color:T.muted,fontSize:12 }}>{r.label}</span>
-                  <span style={{ color:T.text,fontWeight:600,fontSize:12 }}>{r.value}</span>
-                </div>
-              ))}
-              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,paddingBottom:8,borderBottom:`1px solid ${T.border}` }}>
-                <span style={{ color:T.muted,fontSize:12 }}>Wallet Balance</span>
-                <span style={{ color:walletBal!=null&&walletBal<(costSoFar*100+500)?T.red:T.green,fontWeight:700,fontSize:12 }}>
-                  {walletBal!=null?`GH₵${(walletBal/100).toFixed(2)}`:'--'}
-                </span>
-              </div>
-              {powerHistory.length>2&&(
-                <div style={{ marginTop:12 }}>
-                  <div style={{ fontSize:11,color:T.muted,marginBottom:8 }}>Power history</div>
-                  <div style={{ height:40,display:'flex',alignItems:'flex-end',gap:2 }}>
-                    {powerHistory.map((p,i)=>{
-                      const maxP=Math.max(...powerHistory.map(x=>x.v),0.1);
-                      const h=Math.max(4,Math.round((p.v/maxP)*36));
-                      return <div key={i} style={{ flex:1,height:`${h}px`,background:i===powerHistory.length-1?T.green:T.surface,borderRadius:'2px 2px 0 0' }}/>;
-                    })}
+        {/* Progress timeline */}
+        <div style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,padding:"16px",marginBottom:14 }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:16 }}>Session Timeline</div>
+          <div style={{ display:"flex",alignItems:"center" }}>
+            {["Connected","Charging","Complete"].map((s,i)=>{
+              const stepDone = i===0 ? true : i===1 ? true : phase==="stopping"||phase==="completed";
+              return (
+                <div key={s} style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center" }}>
+                  <div style={{ display:"flex",alignItems:"center",width:"100%" }}>
+                    <div style={{ flex:i===0?0:1,height:2,background:stepDone?T.green:T.border }}/>
+                    <div style={{ width:20,height:20,borderRadius:"50%",background:stepDone?T.green:T.border,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                      {stepDone&&<i className="fas fa-check" style={{ fontSize:9,color:"#000" }}/>}
+                    </div>
+                    <div style={{ flex:i===2?0:1,height:2,background:i<1?T.green:T.border }}/>
                   </div>
+                  <span style={{ fontSize:9,color:T.text,marginTop:6 }}>{s}</span>
                 </div>
-              )}
-              <div style={{ fontSize:10,color:T.muted,textAlign:'center',marginTop:12 }}>
-                {realtimeData?'Live data from charger':'Simulated data — connect OCPP charger for live readings'}
-              </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Environmental impact */}
+        <div style={{ background:T.highlightGrad,borderRadius:16,padding:"14px 16px",marginBottom:14,border:"1px solid rgba(74,222,128,0.2)",display:"flex",justifyContent:"space-around" }}>
+          {[
+            { label:"CO₂ Avoided", value:`${(liveKwh*0.5).toFixed(2)} kg`, icon:"fa-leaf", color:T.green },
+            { label:"Water Ready", value:"20 L", icon:"fa-tint", color:T.blue },
+          ].map(s=>(
+            <div key={s.label} style={{ textAlign:"center" }}>
+              <i className={`fas ${s.icon}`} style={{ fontSize:16,color:s.color,marginBottom:6,display:"block" }}/>
+              <div style={{ fontWeight:800,fontSize:15,color:s.color }}>{s.value}</div>
+              <div style={{ fontSize:9,color:T.muted,marginTop:2 }}>{s.label}</div>
             </div>
-          )}
+          ))}
+        </div>
+
+        {/* Amenities */}
+        <div style={{ marginBottom:14 }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}>While You Charge</div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
+            {GENERIC_AMENITIES.map(a=>(
+              <div key={a.label} style={{ background:T.card,borderRadius:12,border:`1px solid ${T.border}`,padding:"12px 6px",textAlign:"center" }}>
+                <i className={`fas ${a.icon}`} style={{ fontSize:16,color:T.green,marginBottom:6,display:"block" }}/>
+                <div style={{ fontSize:10,color:T.mutedLight,lineHeight:1.3 }}>{a.label}</div>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div style={{ fontSize:11,color:T.muted,textAlign:'center',lineHeight:1.7 }}>
@@ -3280,9 +3327,10 @@ function Bookings({ go, user, setSelectedBooking }) {
                   <div style={{ fontWeight:900,fontSize:28,color:T.green,fontFamily:"monospace" }}>{cd.label}</div>
                 </div>
               )}
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
-                <button onClick={()=>openDetail(b)} className="tap" style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"13px",fontSize:13,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>View Details</button>
-                <button onClick={()=>go("qr")} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px",fontSize:13,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}><i className="fas fa-qrcode" style={{marginRight:6}}/>QR Pass</button>
+             <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
+                <button onClick={()=>openDetail(b)} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 4px",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>View Details</button>
+                <button onClick={()=>window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.station+" "+b.city)}`,"_blank")} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 4px",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}><i className="fas fa-directions" style={{marginRight:5}}/>Navigate</button>
+                <button onClick={async()=>{ if(SUPABASE_URL) await sb(`bookings?reference=eq.${b.reference}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({status:"cancelled"})}); load(); }} className="tap" style={{ background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.25)",borderRadius:12,padding:"12px 4px",fontSize:12,fontWeight:700,color:T.red,cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>
               </div>
             </div>
           );
@@ -3297,20 +3345,44 @@ function Bookings({ go, user, setSelectedBooking }) {
           </div>
         )}
 
-        {!loading && tab!=="active" && list.map(b=>{
-          const cat=categorize(b);
-          const color = cat==="completed"?T.green:cat==="cancelled"?T.red:T.blue;
+       {!loading && tab==="active" && list.map((b,idx)=>{
+          const cd=getCountdown(b);
+          const stationImgs=["/station1.jpg","/station2.jpg","/station3.jpg"];
           return (
-            <div key={b.reference} className="tap row" onClick={()=>openDetail(b)}
-              style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px",marginBottom:10 }}>
-              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
-                <div>
-                  <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{b.station}</div>
-                  <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{b.reference} · {new Date(b.created_at).toLocaleDateString("en-GH",{day:"numeric",month:"short"})}</div>
+            <div key={b.reference} className="fade" style={{ background:T.card,borderRadius:18,marginBottom:16,border:`1px solid ${T.greenDim}`,overflow:"hidden" }}>
+              <div style={{ height:130,position:"relative" }}>
+                <img src={stationImgs[idx%3]} alt="" style={{ width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.7)" }} onError={e=>{ e.target.style.display="none"; }}/>
+                <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.1),rgba(0,0,0,0.6))" }}/>
+                <div style={{ position:"absolute",top:12,left:12 }}><Badge label={b.status==="charging"?"Charging":"Reserved"} color={T.green}/></div>
+                <div style={{ position:"absolute",top:12,right:12,fontSize:10,color:"rgba(255,255,255,0.7)",fontFamily:"monospace" }}>{b.reference}</div>
+                <div style={{ position:"absolute",bottom:10,left:14 }}>
+                  <div style={{ fontWeight:800,fontSize:17,color:"#fff" }}>{b.station}</div>
+                  <div style={{ fontSize:11,color:"rgba(255,255,255,0.75)",marginTop:2 }}><i className="fas fa-map-marker-alt" style={{marginRight:4}}/>{b.city}</div>
                 </div>
-                <Badge label={cat[0].toUpperCase()+cat.slice(1)} color={color}/>
               </div>
-              <div style={{ fontSize:12,color:T.mutedLight }}>{b.vehicle} · {b.amount?`GH₵${b.amount}`:"Metered"}</div>
+              <div style={{ padding:"16px" }}>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
+                  <div>
+                    <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase" }}><i className="fas fa-charging-station" style={{marginRight:5}}/>Charger</div>
+                    <div style={{ fontWeight:700,fontSize:13,color:T.text,marginTop:3 }}>{b.charger_id||"Not assigned"}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase" }}><i className="fas fa-car" style={{marginRight:5}}/>Vehicle</div>
+                    <div style={{ fontWeight:700,fontSize:13,color:T.text,marginTop:3 }}>{b.vehicle}</div>
+                  </div>
+                </div>
+                {cd&&!cd.done&&(
+                  <div style={{ textAlign:"center",background:T.innerTint,borderRadius:12,padding:"14px",marginBottom:14 }}>
+                    <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>{cd.waiting?"Reservation expires in":"Time remaining"}</div>
+                    <div style={{ fontWeight:900,fontSize:28,color:T.green,fontFamily:"monospace" }}>{cd.label}</div>
+                  </div>
+                )}
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
+                  <button onClick={()=>openDetail(b)} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 4px",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>Details</button>
+                  <button onClick={()=>window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.station+" "+b.city)}`,"_blank")} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 4px",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}><i className="fas fa-directions" style={{marginRight:5}}/>Navigate</button>
+                  <button onClick={async()=>{ if(SUPABASE_URL) await sb(`bookings?reference=eq.${b.reference}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({status:"cancelled"})}); load(); }} className="tap" style={{ background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.25)",borderRadius:12,padding:"12px 4px",fontSize:12,fontWeight:700,color:T.red,cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>
+                </div>
+              </div>
             </div>
           );
         })}
