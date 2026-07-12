@@ -1903,6 +1903,9 @@ function QRScreen({ go, booking, setBooking, user }) {
   const [walletBal,   setWalletBal]  = useState(null);
   const [costSoFar,   setCostSoFar]  = useState(0);
   const [vehicleDetails, setVehicleDetails] = useState(null);
+  const [showBatteryPrompt, setShowBatteryPrompt] = useState(false);
+  const [batteryInput, setBatteryInput] = useState("");
+  const [startBatteryPct, setStartBatteryPct] = useState(null);
   useEffect(()=>{
     if (!user?.id || !SUPABASE_URL) return;
     sb(`user_vehicles?user_id=eq.${user.id}&order=is_default.desc,created_at.asc&limit=5`).then(list=>{
@@ -2328,6 +2331,16 @@ function QRScreen({ go, booking, setBooking, user }) {
             <div style={{ display:"flex",gap:8,marginTop:6,flexWrap:"wrap" }}>
               {vehicleDetails?.battery_capacity && <Badge label={`${vehicleDetails.battery_capacity} kWh battery`} color={T.green}/>}
               {vehicleDetails?.connector_type && <Badge label={vehicleDetails.connector_type} color={T.muted}/>}
+              {startBatteryPct!=null && vehicleDetails?.battery_capacity && (()=>{
+                const pct = Math.min(100, startBatteryPct + (liveKwh/vehicleDetails.battery_capacity*100));
+                const range = vehicleDetails.estimated_range ? Math.round(vehicleDetails.estimated_range*(pct/100)) : null;
+                return (
+                  <>
+                    <Badge label={`~${pct.toFixed(0)}% battery (est.)`} color={T.green}/>
+                    {range!=null && <Badge label={`~${range} km range (est.)`} color={T.blue}/>}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -2526,7 +2539,7 @@ function QRScreen({ go, booking, setBooking, user }) {
             </div>
           ))}
         </div>
-        <button onClick={startCharging} className="tap"
+        <button onClick={()=>{ if(vehicleDetails?.battery_capacity && vehicleDetails?.estimated_range){ setShowBatteryPrompt(true); } else { startCharging(); } }} className="tap"
           style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"18px",fontSize:17,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:10,boxShadow:`0 4px 24px rgba(74,222,128,0.45)` }}>
           <i className="fas fa-bolt"/> Start Charging
         </button>
@@ -2539,6 +2552,23 @@ function QRScreen({ go, booking, setBooking, user }) {
           <i className="fas fa-map-marker-alt"/> View Station on Map
         </button>
       </div>
+      {showBatteryPrompt && (
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:400,display:"flex",alignItems:"flex-end",justifyContent:"center" }}>
+          <div style={{ background:T.card,borderRadius:"20px 20px 0 0",padding:"24px 20px 40px",width:"100%",maxWidth:480,border:`1px solid ${T.border}` }}>
+            <div style={{ fontWeight:800,fontSize:16,color:T.text,marginBottom:6 }}>What's your battery level?</div>
+            <div style={{ fontSize:12,color:T.muted,marginBottom:16,lineHeight:1.6 }}>Check your car's dashboard and enter it here — we'll use this to estimate your range as you charge.</div>
+            <input type="number" min="0" max="100" placeholder="e.g. 42" value={batteryInput}
+              onChange={e=>setBatteryInput(e.target.value)}
+              style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"16px",color:T.text,fontSize:24,fontWeight:700,textAlign:"center",marginBottom:16,fontFamily:"inherit" }}/>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+              <button onClick={()=>{ setShowBatteryPrompt(false); setStartBatteryPct(null); startCharging(); }} className="tap"
+                style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px",fontSize:13,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit" }}>Skip</button>
+              <button onClick={()=>{ const p=parseInt(batteryInput); setStartBatteryPct(isNaN(p)?null:Math.max(0,Math.min(100,p))); setShowBatteryPrompt(false); startCharging(); }} className="tap"
+                style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:13,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>Continue</button>
+            </div>
+          </div>
+        </div>
+      )}
       <Nav active="Stations" go={go}/>
     </div>
   );
