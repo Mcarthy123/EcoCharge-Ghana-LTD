@@ -178,6 +178,7 @@ const CSS = `
   body{font-family:'Inter',sans-serif;background:#0a0d10;color:#fff;-webkit-font-smoothing:antialiased;}
   @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
   @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
   .fade{animation:fadeUp .3s ease both}
   .fade1{animation:fadeUp .3s .06s ease both}
   .fade2{animation:fadeUp .3s .12s ease both}
@@ -226,6 +227,83 @@ const VehicleAvatar = ({ vehicleType="Car", imageUrl=null, size=64 }) => {
   );
   return <i className={`fas ${VEHICLE_FALLBACK_ICON[vehicleType]||"fa-car-side"}`} style={{ fontSize:size*0.47,color:T.green }}/>;
 };
+function InteractiveVehicleCard({ vehicle, size=260, chargingActive=false, chargingComplete=false, energyDeliveredKwh=0, startBatteryPct=null }) {
+  const [tilt, setTilt] = useState({ x:0, y:0 });
+  const [panel, setPanel] = useState(null);
+  const cardRef = useRef(null);
+
+  const handleMove = (clientX, clientY) => {
+    const el = cardRef.current; if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const px = (clientX - rect.left) / rect.width;
+    const py = (clientY - rect.top) / rect.height;
+    setTilt({ x:(0.5-py)*12, y:(px-0.5)*16 });
+  };
+  const resetTilt = () => setTilt({ x:0, y:0 });
+
+  const capacity = vehicle?.battery_capacity;
+  const fillPct = (chargingActive && capacity)
+    ? Math.min(100, (startBatteryPct||0) + (energyDeliveredKwh/capacity)*100)
+    : null;
+  const hasHealth = vehicle?.battery_health != null;
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",alignItems:"center" }}>
+      <div ref={cardRef}
+        onMouseMove={e=>handleMove(e.clientX,e.clientY)} onMouseLeave={resetTilt}
+        onTouchMove={e=>{ const t=e.touches[0]; if(t) handleMove(t.clientX,t.clientY); }} onTouchEnd={resetTilt}
+        style={{ width:size,height:size*0.72,position:"relative",borderRadius:24,overflow:"hidden",
+          background: chargingComplete ? "linear-gradient(145deg, rgba(34,197,94,0.12), rgba(0,0,0,0.4))" : "linear-gradient(145deg, rgba(255,255,255,0.04), rgba(0,0,0,0.35))",
+          border:`1px solid ${chargingComplete?T.green:T.border}`,
+          boxShadow: chargingComplete ? "0 0 40px rgba(34,197,94,0.35)" : "none",
+          transform:`perspective(800px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
+          transition: tilt.x===0&&tilt.y===0 ? "transform .4s ease" : "transform .05s linear",
+          touchAction:"pan-y" }}>
+        {vehicle?.image_url ? (
+          <img src={vehicle.image_url} alt={vehicle.nickname||vehicle.model} style={{ width:"100%",height:"100%",objectFit:"cover" }} onError={e=>{ e.target.style.display="none"; }}/>
+        ) : (
+          <div style={{ width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center" }}>
+            <i className={`fas ${VEHICLE_TYPE_ICON[vehicle?.vehicle_type]||"fa-car"}`} style={{ fontSize:56,color:T.green,opacity:0.3 }}/>
+          </div>
+        )}
+        {chargingActive && fillPct!=null && (
+          <div style={{ position:"absolute",left:0,right:0,bottom:0,height:`${fillPct}%`,background:"linear-gradient(to top, rgba(34,197,94,0.45), rgba(34,197,94,0.05))",transition:"height 1s linear",pointerEvents:"none" }}/>
+        )}
+        {chargingActive && fillPct==null && (
+          <div style={{ position:"absolute",inset:0,background:"linear-gradient(120deg, transparent 0%, rgba(34,197,94,0.15) 50%, transparent 100%)",backgroundSize:"200% 100%",animation:"shimmer 2s linear infinite",pointerEvents:"none" }}/>
+        )}
+        {chargingComplete && (
+          <div style={{ position:"absolute",top:10,left:10,background:"rgba(34,197,94,0.9)",borderRadius:20,padding:"5px 12px",display:"flex",alignItems:"center",gap:6 }}>
+            <i className="fas fa-check-circle" style={{ fontSize:11,color:"#000" }}/>
+            <span style={{ fontSize:11,fontWeight:800,color:"#000" }}>Ready to Drive</span>
+          </div>
+        )}
+        <button onClick={()=>setPanel(panel==="connector"?null:"connector")} className="tap"
+          style={{ position:"absolute",bottom:10,right:10,width:38,height:38,borderRadius:"50%",background:"rgba(0,0,0,0.55)",backdropFilter:"blur(6px)",border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+          <i className="fas fa-plug" style={{ fontSize:14,color:T.blue }}/>
+        </button>
+        <button onClick={()=>setPanel(panel==="battery"?null:"battery")} className="tap"
+          style={{ position:"absolute",bottom:10,left:10,width:38,height:38,borderRadius:"50%",background:"rgba(0,0,0,0.55)",backdropFilter:"blur(6px)",border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+          <i className="fas fa-battery-three-quarters" style={{ fontSize:14,color:T.green }}/>
+        </button>
+      </div>
+      {panel==="connector"&&(
+        <div className="fade" style={{ width:"100%",maxWidth:size,marginTop:10,background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:"14px 16px" }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:8 }}><i className="fas fa-plug" style={{marginRight:8,color:T.blue}}/>Connector</div>
+          <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}><span style={{ fontSize:12,color:T.muted }}>Type</span><span style={{ fontSize:12,fontWeight:700,color:T.text }}>{vehicle?.connector_type||"Not set"}</span></div>
+          <div style={{ display:"flex",justifyContent:"space-between" }}><span style={{ fontSize:12,color:T.muted }}>Max Charging Power</span><span style={{ fontSize:12,fontWeight:700,color:T.text }}>{vehicle?.max_charging_power?`${vehicle.max_charging_power} kW`:"Not set"}</span></div>
+        </div>
+      )}
+      {panel==="battery"&&(
+        <div className="fade" style={{ width:"100%",maxWidth:size,marginTop:10,background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:"14px 16px" }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:8 }}><i className="fas fa-battery-three-quarters" style={{marginRight:8,color:T.green}}/>Battery</div>
+          <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}><span style={{ fontSize:12,color:T.muted }}>Capacity</span><span style={{ fontSize:12,fontWeight:700,color:T.text }}>{vehicle?.battery_capacity?`${vehicle.battery_capacity} kWh`:"Not set"}</span></div>
+          <div style={{ display:"flex",justifyContent:"space-between" }}><span style={{ fontSize:12,color:T.muted }}>Battery Health</span><span style={{ fontSize:12,fontWeight:700,color:hasHealth?T.green:T.muted }}>{hasHealth?`${vehicle.battery_health}%`:"Not Available"}</span></div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── NOTIFICATIONS ─────────────────────────────────────────────
 const NOTIF_CONFIG={
@@ -2439,6 +2517,9 @@ function QRScreen({ go, booking, setBooking, user }) {
   if (phase === "completed") return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Session Complete" sub="Thank you for charging!" onBack={()=>go("home")}/>
+      <div style={{ display:"flex",justifyContent:"center",margin:"16px 0" }}>
+          <InteractiveVehicleCard vehicle={{...vehicleDetails, image_url:b.vehicleImageUrl||vehicleDetails?.image_url, vehicle_type:b.vehicle}} chargingComplete={true} size={220}/>
+        </div>
       <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 100px" }}>
         <div className="fade" style={{ textAlign:"center",marginBottom:24 }}>
           <div style={{ width:80,height:80,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",boxShadow:`0 4px 24px rgba(74,222,128,0.4)` }}>
@@ -6358,7 +6439,7 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
         )}
 
         {/* Step 3: Battery, Connector, Range, Power */}
-        {step===3&&(
+        {step===4&&(
           <>
             {/* Lookup status banner */}
             {lookupLoading&&(
