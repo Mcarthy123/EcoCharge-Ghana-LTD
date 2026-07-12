@@ -1910,10 +1910,10 @@ function QRScreen({ go, booking, setBooking, user }) {
     if (!user?.id || !SUPABASE_URL) return;
     sb(`user_vehicles?user_id=eq.${user.id}&order=is_default.desc,created_at.asc&limit=5`).then(list=>{
       if (!Array.isArray(list)||!list.length) return;
-      const match = list.find(v=>v.vehicle_type===b?.vehicle) || list.find(v=>v.is_default) || list[0];
+    const match = list.find(v=>v.vehicle_type===booking?.vehicle) || list.find(v=>v.is_default) || list[0];
       setVehicleDetails(match);
     });
-  },[user, b?.reference]);
+  },[user, booking?.reference]);
 
   const GENERIC_AMENITIES = [
     { icon:"fa-mug-hot",     label:"Coffee Shop" },
