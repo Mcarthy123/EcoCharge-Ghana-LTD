@@ -537,6 +537,7 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => {
           { icon:"fa-wallet",           label:"My Wallet",       screen:"wallet",       color:T.yellow },
           { icon:"fa-tags",             label:"Pricing Engine",  screen:"pricing",      color:"#a78bfa" },
           { icon:"fa-shield-alt",       label:"Admin Dashboard", screen:"admin",        color:"#f87171" },
+    { icon:"fa-car",              label:"Vehicle Registry", screen:"vehicleregistry", color:T.blue },
         ].map(item=>(
           <div key={item.label} className="tap row" onClick={()=>{ go(item.screen);onClose(); }}
             style={{ display:"flex",alignItems:"center",gap:14,padding:"16px 20px",borderBottom:`1px solid ${T.border}20` }}>
@@ -5497,7 +5498,94 @@ function AdminDashboard({ go, user }) {
     </div>
   );
 }
+function AdminVehicleRegistry({ go }) {
+  const [subs, setSubs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [edits, setEdits] = useState({});
+  const [busy, setBusy] = useState("");
 
+  const load = async () => {
+    setLoading(true);
+    const data = await sb(`vehicle_registry_submissions?status=eq.pending_review&order=submitted_at.desc`);
+    setSubs(Array.isArray(data)?data:[]);
+    setLoading(false);
+  };
+  useEffect(()=>{ load(); },[]);
+
+  const setField = (id, field, val) => setEdits(prev=>({ ...prev, [id]: { ...prev[id], [field]: val } }));
+  const val = (s, field) => edits[s.id]?.[field] ?? s[field] ?? "";
+
+  const approve = async (s) => {
+    setBusy(s.id);
+    const battery  = parseFloat(val(s,"battery_capacity")) || null;
+    const connector= val(s,"connector_type") || null;
+    const range    = parseFloat(val(s,"estimated_range")) || null;
+    const maxPower = parseFloat(val(s,"max_charging_power")) || null;
+    const type     = val(s,"vehicle_type") || "Electric Car";
+
+    await sb("vehicle_registry", { method:"POST", headers:{ Prefer:"return=minimal" }, body: JSON.stringify({
+      brand: s.make, model: s.model, battery_capacity_kwh: battery, connector_type: connector,
+      estimated_range_km: range, max_charging_power_kw: maxPower, type,
+    })});
+    await sb(`vehicle_registry_submissions?id=eq.${s.id}`, { method:"PATCH", headers:{ Prefer:"return=minimal" }, body: JSON.stringify({ status:"approved" }) });
+    setSubs(prev=>prev.filter(x=>x.id!==s.id));
+    setBusy("");
+  };
+
+  const reject = async (s) => {
+    setBusy(s.id);
+    await sb(`vehicle_registry_submissions?id=eq.${s.id}`, { method:"PATCH", headers:{ Prefer:"return=minimal" }, body: JSON.stringify({ status:"rejected" }) });
+    setSubs(prev=>prev.filter(x=>x.id!==s.id));
+    setBusy("");
+  };
+
+  const inp = (s, field, label, placeholder="") => (
+    <div style={{ marginBottom:10 }}>
+      <div style={{ fontSize:10,color:T.muted,marginBottom:4,fontWeight:600 }}>{label}</div>
+      <input value={val(s,field)} placeholder={placeholder} onChange={e=>setField(s.id,field,e.target.value)}
+        style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:8,padding:"9px 12px",color:T.text,fontSize:13,fontFamily:"inherit" }}/>
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Vehicle Registry" sub={`${subs.length} pending review`} onBack={()=>go("home")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 100px" }}>
+        {loading && <div style={{ textAlign:"center",padding:"30px 0" }}><Spinner/></div>}
+        {!loading && subs.length===0 && (
+          <div style={{ textAlign:"center",padding:"50px 20px" }}>
+            <i className="fas fa-check-circle" style={{ fontSize:48,color:T.green,marginBottom:14,display:"block" }}/>
+            <div style={{ fontWeight:700,fontSize:15,color:T.text }}>All caught up</div>
+            <div style={{ fontSize:12,color:T.muted,marginTop:6 }}>No vehicles waiting for review</div>
+          </div>
+        )}
+        {subs.map(s=>(
+          <div key={s.id} style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,padding:"16px",marginBottom:14 }}>
+            <div style={{ fontWeight:800,fontSize:15,color:T.text,marginBottom:2 }}>{s.make} {s.model}</div>
+            <div style={{ fontSize:11,color:T.muted,marginBottom:14 }}>{s.year} · submitted {new Date(s.submitted_at).toLocaleDateString("en-GH",{day:"numeric",month:"short"})}</div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+              {inp(s,"vehicle_type","Vehicle Type","e.g. Electric Motorcycle")}
+              {inp(s,"connector_type","Connector","e.g. Proprietary")}
+              {inp(s,"battery_capacity","Battery (kWh)","e.g. 2.5")}
+              {inp(s,"estimated_range","Range (km)","e.g. 100")}
+              {inp(s,"max_charging_power","Max Power (kW)","e.g. 2.0")}
+            </div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:6 }}>
+              <button onClick={()=>reject(s)} disabled={busy===s.id} className="tap"
+                style={{ background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.25)",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,color:T.red,cursor:"pointer",fontFamily:"inherit" }}>
+                Reject
+              </button>
+              <button onClick={()=>approve(s)} disabled={busy===s.id} className="tap"
+                style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+                {busy===s.id ? <Spinner/> : "Approve & Add to Registry"}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 // ── MY VEHICLES SCREEN ───────────────────────────────────────
 // ── VEHICLE DATABASE SERVICE ──────────────────────────────────
 // Clean service abstraction — swap mock data for a real API later.
@@ -7188,6 +7276,7 @@ function AppInner() {
     wallet:         <WalletScreen go={goSecure} user={user}/>,
     pricing:        <PricingAdmin go={goSecure} user={user}/>,
     admin:          <AdminDashboard go={goSecure} user={user}/>,
+    vehicleregistry:<AdminVehicleRegistry go={goSecure}/>,
     notifications:  <NotificationsScreen go={goSecure} user={user}/>,
     privacypolicy:  <PrivacyPolicy go={goSecure}/>,
     terms:          <TermsAndConditions go={goSecure}/>,
