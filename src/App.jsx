@@ -6193,6 +6193,14 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
   const [step, setStep] = useState(1); // 1=type, 2=details, 3=specs
 
   const [nickname,     setNickname]     = useState(editVehicle?.nickname     || "");
+  const [preferredChargeLimit, setPreferredChargeLimit] = useState(editVehicle?.preferred_charge_limit || 80);
+  const [homeCharging,   setHomeCharging]   = useState(editVehicle?.home_charging_available ?? null);
+  const [solarCharging,  setSolarCharging]  = useState(editVehicle?.solar_charging_available ?? null);
+  const [dailyDistance,  setDailyDistance]  = useState(editVehicle?.daily_distance_km || "");
+  const [batteryHealthPct, setBatteryHealthPct] = useState(editVehicle?.battery_health_pct || "");
+  const [lastServiceDate,  setLastServiceDate]  = useState(editVehicle?.last_service_date || "");
+  const [dcFastFreq,     setDcFastFreq]     = useState(editVehicle?.dc_fast_charge_frequency || "");
+  const [chargeAbove90Freq, setChargeAbove90Freq] = useState(editVehicle?.charge_above_90_frequency || "");
   const [vehicleType,  setVehicleType]  = useState(editVehicle?.vehicle_type || "");
   const [manufacturer, setManufacturer] = useState(editVehicle?.manufacturer || "");
   const [model,        setModel]        = useState(editVehicle?.model        || "");
@@ -6286,6 +6294,15 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
       is_default: isDefault,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      preferred_charge_limit: preferredChargeLimit,
+      home_charging_available: homeCharging,
+      solar_charging_available: solarCharging,
+      daily_distance_km: parseFloat(dailyDistance) || null,
+      battery_health_pct: parseFloat(batteryHealthPct) || null,
+      battery_health_source: batteryHealthPct ? "self_reported" : null,
+      last_service_date: lastServiceDate || null,
+      dc_fast_charge_frequency: dcFastFreq || null,
+      charge_above_90_frequency: chargeAbove90Freq || null,
     };
 
     let saved;
@@ -6337,7 +6354,7 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
 
       {/* Step indicator */}
       <div style={{ display:"flex",gap:0,padding:"12px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0 }}>
-        {["Vehicle","Details","Specs"].map((s,i)=>(
+        {["Vehicle","Details","Battery","Specs"].map((s,i)=>(
           <div key={s} style={{ flex:1,display:"flex",alignItems:"center" }}>
             <div style={{ display:"flex",flexDirection:"column",alignItems:"center",flex:1 }}>
               <div style={{ width:28,height:28,borderRadius:"50%",background:step>i+1?T.green:step===i+1?T.green:"rgba(255,255,255,0.1)",border:`2px solid ${step>=i+1?T.green:T.border}`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:4 }}>
@@ -6439,6 +6456,49 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
         )}
 
         {/* Step 3: Battery, Connector, Range, Power */}
+        {step===3&&(
+          <>
+            <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:6 }}>Charging Preferences</div>
+            <div style={{ fontSize:12,color:T.muted,marginBottom:16,lineHeight:1.6 }}>Helps EcoCharge suggest the right charge level for your battery over time.</div>
+
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8 }}>Preferred Charging Limit</div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
+                {[80,90,100].map(p=>(
+                  <button key={p} onClick={()=>setPreferredChargeLimit(p)} className="tap"
+                    style={{ background:preferredChargeLimit===p?T.green:T.inputBg,border:`1px solid ${preferredChargeLimit===p?T.green:T.border}`,borderRadius:10,padding:"12px 4px",fontSize:14,fontWeight:700,color:preferredChargeLimit===p?"#000":T.muted,cursor:"pointer",fontFamily:"inherit" }}>{p}%</button>
+                ))}
+              </div>
+              {preferredChargeLimit<100 && <div style={{ fontSize:10,color:T.green,marginTop:6 }}><i className="fas fa-leaf" style={{marginRight:5}}/>Charging below 100% regularly can help extend battery life.</div>}
+            </div>
+
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16 }}>
+              {[{label:"Home Charging?", val:homeCharging, set:setHomeCharging},{label:"Solar Charging?", val:solarCharging, set:setSolarCharging}].map(f=>(
+                <div key={f.label}>
+                  <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8 }}>{f.label}</div>
+                  <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+                    {[["Yes",true],["No",false]].map(([lbl,v])=>(
+                      <button key={lbl} onClick={()=>f.set(v)} className="tap"
+                        style={{ background:f.val===v?T.green:T.inputBg,border:`1px solid ${f.val===v?T.green:T.border}`,borderRadius:10,padding:"10px 4px",fontSize:12,fontWeight:700,color:f.val===v?"#000":T.muted,cursor:"pointer",fontFamily:"inherit" }}>{lbl}</button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {inp("Typical Daily Driving Distance (km)", dailyDistance, setDailyDistance, "number", "e.g. 40")}
+
+            <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px 16px",marginTop:6 }}>
+              <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:4 }}>Battery Health (Optional)</div>
+              <div style={{ fontSize:11,color:T.muted,marginBottom:14,lineHeight:1.6 }}>All entries here are self-reported by you, not measured by EcoCharge.</div>
+              {inp("Battery Health % (if known)", batteryHealthPct, setBatteryHealthPct, "number", "e.g. 92")}
+              {batteryHealthPct && <div style={{ fontSize:10,color:T.yellow,marginTop:-8,marginBottom:14 }}><i className="fas fa-info-circle" style={{marginRight:5}}/>Self-reported — not measured</div>}
+              {inp("Last Battery Service Date", lastServiceDate, setLastServiceDate, "date")}
+              {sel("DC Fast Charging Frequency", dcFastFreq, setDcFastFreq, ["Rarely","Sometimes","Frequently"].map(o=>({value:o,label:o})), "Select frequency")}
+              {sel("Charge Above 90% Frequency", chargeAbove90Freq, setChargeAbove90Freq, ["Rarely","Sometimes","Frequently"].map(o=>({value:o,label:o})), "Select frequency")}
+            </div>
+          </>
+        )}
         {step===4&&(
           <>
             {/* Lookup status banner */}
@@ -6562,7 +6622,7 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
               <i className="fas fa-arrow-left"/> Back
             </button>
           )}
-          {step<3 ? (
+          {step<4 ? (
             <button onClick={()=>{
               if (step===1&&!vehicleType){ setError("Please select a vehicle type"); return; }
               if (step===1&&!nickname.trim()){ setError("Please enter a vehicle nickname"); return; }
