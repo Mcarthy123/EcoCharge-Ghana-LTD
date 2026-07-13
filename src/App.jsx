@@ -2403,9 +2403,30 @@ function QRScreen({ go, booking, setBooking, user }) {
           </div>
         </div>
 
-        {/* Vehicle identity card */}
-        <div style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,padding:"14px",marginBottom:14,display:"flex",gap:14,alignItems:"center" }}>
-          <VehicleAvatar vehicleType={b.vehicle} imageUrl={b.vehicleImageUrl||vehicleDetails?.image_url} size={64}/>
+       {/* Vehicle identity - large interactive card */}
+        <div style={{ display:"flex",justifyContent:"center",marginBottom:14 }}>
+          <InteractiveVehicleCard
+            vehicle={{...vehicleDetails, image_url:b.vehicleImageUrl||vehicleDetails?.image_url, vehicle_type:b.vehicle}}
+            chargingActive={true} energyDeliveredKwh={liveKwh} startBatteryPct={startBatteryPct} size={320}/>
+        </div>
+        <div style={{ textAlign:"center",marginBottom:14 }}>
+          <div style={{ fontWeight:700,fontSize:16,color:T.text }}>{vehicleDetails?.nickname || b.vehicle}</div>
+          <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>{vehicleDetails ? `${vehicleDetails.year||""} ${vehicleDetails.manufacturer||""} ${vehicleDetails.model||""}`.trim() : b.vehicle}</div>
+          <div style={{ display:"flex",gap:8,marginTop:8,flexWrap:"wrap",justifyContent:"center" }}>
+            {vehicleDetails?.battery_capacity && <Badge label={`${vehicleDetails.battery_capacity} kWh battery`} color={T.green}/>}
+            {vehicleDetails?.connector_type && <Badge label={vehicleDetails.connector_type} color={T.muted}/>}
+            {startBatteryPct!=null && vehicleDetails?.battery_capacity && (()=>{
+              const pct = Math.min(100, startBatteryPct + (liveKwh/vehicleDetails.battery_capacity*100));
+              const range = vehicleDetails.estimated_range ? Math.round(vehicleDetails.estimated_range*(pct/100)) : null;
+              return (
+                <>
+                  <Badge label={`~${pct.toFixed(0)}% battery (est.)`} color={T.green}/>
+                  {range!=null && <Badge label={`~${range} km range (est.)`} color={T.blue}/>}
+                </>
+              );
+            })()}
+          </div>
+        </div>
           <div style={{ flex:1,minWidth:0 }}>
             <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{vehicleDetails?.nickname || b.vehicle}</div>
             <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{vehicleDetails ? `${vehicleDetails.year||""} ${vehicleDetails.manufacturer||""} ${vehicleDetails.model||""}`.trim() : b.vehicle}</div>
