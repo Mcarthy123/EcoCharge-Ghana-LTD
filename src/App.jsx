@@ -2532,7 +2532,7 @@ function QRScreen({ go, booking, setBooking, user }) {
           Wallet will be debited GH₵{costSoFar.toFixed(2)} when you stop · 85% solar powered
         </div>
       </div>
-    </div>
+
   );
 
   if (phase === "completed") return (
