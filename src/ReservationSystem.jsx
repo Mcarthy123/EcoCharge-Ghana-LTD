@@ -20,10 +20,11 @@
 // ============================================================
 import { useState, useEffect, useRef } from "react";
 
-const GRACE_PERIOD_MIN = 10;
-const ARRIVAL_RADIUS_KM = 0.5;
+const GRACE_PERIOD_MIN = 10; // fallback default; actual value now comes from ReliabilityService.tier()
+const ARRIVAL_RADIUS_KM = 0.1; // 100m auto check-in radius per spec
 const AVG_SESSION_MIN = 25; // heuristic for queue wait estimates
-const DEFAULT_DEPOSIT_PESEWAS = 1000; // GH₵10 flat refundable deposit
+const DEFAULT_DEPOSIT_PESEWAS = 1000; // legacy — kept for existing forfeited deposit records only
+const QUEUE_OFFER_WINDOW_MIN = 2; // minutes a queued driver has to accept an offered charger
 const DEFAULT_CHARGER_KW = 60;
 const DEFAULT_PRICE_PER_KWH = 0.85;
 const CO2_PER_KWH = 0.5;
@@ -137,14 +138,29 @@ const QueueService = {
   async leave(queueId, ctx) {
     return sbPatch(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `queue?id=eq.${queueId}`, { status:"left" });
   },
+  // Offers the charger to the next waiting driver with a 2-minute accept window,
+  // instead of silently assigning it. If they don't accept in time, offer moves on.
   async advanceNext(chargerId, ctx) {
     const data = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `queue?charger_id=eq.${chargerId}&status=eq.waiting&select=*&order=position.asc&limit=1`);
     const next = Array.isArray(data) ? data[0] : null;
     if (next) {
-      await sbPatch(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `queue?id=eq.${next.id}`, { status:"active" });
-      await NotificationService.send(next.user_id, "queue_update", "You're Up!", "A charger you were queued for is now available for you.", { charger_id:chargerId }, ctx);
+      const offeredAt = new Date();
+      const expiresAt = new Date(offeredAt.getTime() + QUEUE_OFFER_WINDOW_MIN*60000);
+      await sbPatch(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `queue?id=eq.${next.id}`, {
+        status:"offered", offered_at:offeredAt.toISOString(), offer_expires_at:expiresAt.toISOString(),
+      });
+      await NotificationService.send(next.user_id, "queue_update", "You're Up!", `A charger you were queued for is available. Accept within ${QUEUE_OFFER_WINDOW_MIN} minutes or it goes to the next driver.`, { charger_id:chargerId }, ctx);
     }
     return next;
+  },
+  async acceptOffer(queueId, ctx) {
+    return sbPatch(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `queue?id=eq.${queueId}`, { status:"active" });
+  },
+  // Called when an offer's 2-minute window lapses unaccepted — mild score penalty, then passes to next.
+  async expireOffer(queueEntry, chargerId, ctx) {
+    await sbPatch(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `queue?id=eq.${queueEntry.id}`, { status:"expired" });
+    await NotificationService.send(queueEntry.user_id, "queue_update", "Offer Expired", "You didn't accept in time, so the charger was offered to the next driver in line.", { charger_id:chargerId }, ctx);
+    return this.advanceNext(chargerId, ctx);
   },
 };
 
@@ -174,6 +190,36 @@ const DepositService = {
   },
 };
 
+// ── RELIABILITY SERVICE (trust-based, replaces fixed deposits) ──
+// Score lives on the wallets row (already loaded everywhere a user_id is).
+// Every user starts at 100. Good behaviour raises it, no-shows/abuse lower it.
+// The score determines booking privileges — see tier().
+const ReliabilityService = {
+  async getScore(userId, ctx) {
+    const d = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `wallets?user_id=eq.${userId}&select=reliability_score`);
+    const s = d?.[0]?.reliability_score;
+    return (s == null) ? 100 : s;
+  },
+  async adjust(userId, delta, reason, ctx) {
+    const current = await this.getScore(userId, ctx);
+    const next = Math.max(0, Math.min(100, current + delta));
+    await sbPatch(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `wallets?user_id=eq.${userId}`, { reliability_score: next });
+    await sbPost(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, "reliability_history", {
+      user_id: userId, delta, reason, score_after: next, created_at: new Date().toISOString(),
+    });
+    return { score: next, delta, reason };
+  },
+  // Booking privileges by tier — this is the trust ladder from the spec.
+  tier(score) {
+    if (score >= 90) return { label:"Excellent", color:"#22C55E", graceMin:15, bookingWindowHr:72, queueBoost:2, restricted:false };
+    if (score >= 70) return { label:"Good",      color:"#38bdf8", graceMin:10, bookingWindowHr:48, queueBoost:1, restricted:false };
+    if (score >= 40) return { label:"Fair",      color:"#fbbf24", graceMin:7,  bookingWindowHr:24, queueBoost:0, restricted:false };
+    return             { label:"Restricted", color:"#f87171", graceMin:5,  bookingWindowHr:6,  queueBoost:-1, restricted:true };
+  },
+  // Standard point deltas — kept in one place so behaviour is consistent everywhere.
+  POINTS: { onTimeArrival:+2, completedSession:+1, earlyCancel:+1, lateArrival:-5, noShow:-15, fakeReservation:-25 },
+};
+
 // ── NOTIFICATION SERVICE ─────────────────────────────────────────
 const NotificationService = {
   async send(userId, type, title, body, metadata, ctx) {
@@ -186,9 +232,10 @@ const NotificationService = {
 
 // ── BOOKING SERVICE ───────────────────────────────────────────
 const BookingService = {
-  async create({ user, station, charger, vehicle, arrivalTime, durationMin, estimatedCost, ctx }) {
+  async create({ user, station, charger, vehicle, arrivalTime, durationMin, estimatedCost, gracePeriodMin, ctx }) {
     const reference = genRef();
-    const graceExpires = new Date(arrivalTime.getTime() + GRACE_PERIOD_MIN*60000);
+    const graceMin = gracePeriodMin || GRACE_PERIOD_MIN;
+    const graceExpires = new Date(arrivalTime.getTime() + graceMin*60000);
     const record = {
       reference, station: station.name, city: station.city, charger_id: charger.id,
       vehicle: vehicle?.vehicle_type || vehicle?.type || "Car",
@@ -196,7 +243,7 @@ const BookingService = {
       slot_time: arrivalTime.toISOString(), duration_min: durationMin, amount: estimatedCost,
       name: user?.name || "", phone: "", email: user?.email || "",
       user_id: user?.id || null, pay_method: "wallet", status: "confirmed",
-      grace_expires_at: graceExpires.toISOString(), deposit_status: "held",
+      grace_expires_at: graceExpires.toISOString(), grace_period_min: graceMin,
       created_at: new Date().toISOString(),
     };
     const saved = await sbPost(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, "bookings", record, true);
@@ -359,6 +406,7 @@ function ReservationFlow({ T, go, station, charger, user, vehicles, ctx, onBack,
   const [durationMin, setDurationMin] = useState(60);
   const [payMethod, setPayMethod] = useState("wallet");
   const [walletBal, setWalletBal] = useState(null);
+  const [reliability, setReliability] = useState(100);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -366,30 +414,33 @@ function ReservationFlow({ T, go, station, charger, user, vehicles, ctx, onBack,
   const power = charger.power_kw || charger.max_power_kw || DEFAULT_CHARGER_KW;
   const estimatedKwh = Math.min(power, 40) * (durationMin/60) * 0.8; // conservative estimate
   const estimatedCost = +(estimatedKwh * price + 5).toFixed(2); // + base fee, matches existing app convention
-  const depositPesewas = DEFAULT_DEPOSIT_PESEWAS;
+  const tier = ReliabilityService.tier(reliability);
+  // Booking window is capped by trust tier — low-score users can only book close to now.
+  const maxArrivalMins = Math.min(60, tier.bookingWindowHr * 60);
+  const arrivalOptions = [15, 30, 45, 60].filter(m => m <= maxArrivalMins || m === 15);
 
   useEffect(()=>{
     if (!user?.id) return;
     sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `wallets?user_id=eq.${user.id}&select=balance_pesewas`)
       .then(d=>setWalletBal(d?.[0]?.balance_pesewas ?? null));
+    ReliabilityService.getScore(user.id, ctx).then(setReliability);
   }, [user]);
 
   const arrivalTime = new Date(Date.now() + arrivalMinsFromNow*60000);
 
   const confirm = async () => {
     if (!selectedVehicle) { setError("Please select a vehicle."); return; }
-    if (walletBal != null && walletBal < depositPesewas) {
-      setError(`Insufficient wallet balance for the GH₵${(depositPesewas/100).toFixed(2)} deposit. Please top up first.`);
+    if (tier.restricted) {
+      setError("Your reliability score is too low for new reservations right now. Complete a few Charge Now sessions on time to rebuild it.");
       return;
     }
     setSaving(true); setError("");
-    const booking = await BookingService.create({ user, station, charger, vehicle:selectedVehicle, arrivalTime, durationMin, estimatedCost, ctx });
-    await DepositService.hold(user.id, booking.reference, depositPesewas, ctx);
+    const booking = await BookingService.create({ user, station, charger, vehicle:selectedVehicle, arrivalTime, durationMin, estimatedCost, gracePeriodMin: tier.graceMin, ctx });
     const status = StationService.chargerStatus(charger);
     if (status !== "Available") {
       await QueueService.join(charger.id, station.id, user.id, booking.reference, ctx);
     }
-    await NotificationService.send(user.id, "booking_confirmed", "Reservation Confirmed", `${station.name} reserved for ${fmtTime(arrivalTime)}. GH₵${(depositPesewas/100).toFixed(2)} deposit held.`, { reference:booking.reference }, ctx);
+    await NotificationService.send(user.id, "booking_confirmed", "Reservation Confirmed", `${station.name} reserved for ${fmtTime(arrivalTime)}. ${tier.graceMin}-minute grace period based on your reliability tier.`, { reference:booking.reference }, ctx);
     setSaving(false);
     onConfirmed(booking);
   };
@@ -398,6 +449,16 @@ function ReservationFlow({ T, go, station, charger, user, vehicles, ctx, onBack,
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header T={T} title="Reserve Charger" sub={`${station.name} · ${charger.label||charger.id}`} onBack={onBack}/>
       <div style={{ flex:1,overflowY:"auto",padding:"14px 16px 120px" }}>
+
+        <Card T={T} style={{ padding:"12px 16px", marginBottom:14, background:`${tier.color}12`, border:`1px solid ${tier.color}44`, display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ width:40,height:40,borderRadius:"50%",background:`${tier.color}22`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+            <i className="fas fa-shield-alt" style={{ color:tier.color,fontSize:16 }}/>
+          </div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontWeight:800,fontSize:13,color:tier.color }}>Reliability: {tier.label} ({reliability})</div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{tier.graceMin}-minute grace period · book up to {maxArrivalMins}m ahead</div>
+          </div>
+        </Card>
 
         <Card T={T} style={{ padding:16, marginBottom:14 }}>
           <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10 }}>Vehicle</div>
@@ -419,14 +480,17 @@ function ReservationFlow({ T, go, station, charger, user, vehicles, ctx, onBack,
         <Card T={T} style={{ padding:16, marginBottom:14 }}>
           <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10 }}>Arrival Time</div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:8 }}>
-            {[15,30,45,60].map(m=>(
-              <button key={m} onClick={()=>setArrivalMinsFromNow(m)} className="tap"
-                style={{ background:arrivalMinsFromNow===m?T.green:T.inputBg,border:`1px solid ${arrivalMinsFromNow===m?T.green:T.border}`,borderRadius:10,padding:"10px 4px",fontSize:12,fontWeight:700,color:arrivalMinsFromNow===m?"#000":T.muted,cursor:"pointer",fontFamily:"inherit" }}>
-                {m}m
-              </button>
-            ))}
+            {[15,30,45,60].map(m=>{
+              const disabled = m > maxArrivalMins && m !== 15;
+              return (
+                <button key={m} onClick={()=>!disabled && setArrivalMinsFromNow(m)} className="tap" disabled={disabled}
+                  style={{ background:arrivalMinsFromNow===m?T.green:T.inputBg,border:`1px solid ${arrivalMinsFromNow===m?T.green:T.border}`,borderRadius:10,padding:"10px 4px",fontSize:12,fontWeight:700,color:disabled?T.muted:(arrivalMinsFromNow===m?"#000":T.muted),cursor:disabled?"not-allowed":"pointer",fontFamily:"inherit",opacity:disabled?0.4:1 }}>
+                  {m}m
+                </button>
+              );
+            })}
           </div>
-          <div style={{ fontSize:12,color:T.mutedLight }}>Arriving around <strong style={{ color:T.text }}>{fmtTime(arrivalTime)}</strong> · {GRACE_PERIOD_MIN}-minute grace period after that</div>
+          <div style={{ fontSize:12,color:T.mutedLight }}>Arriving around <strong style={{ color:T.text }}>{fmtTime(arrivalTime)}</strong> · {tier.graceMin}-minute grace period after that</div>
         </Card>
 
         <Card T={T} style={{ padding:16, marginBottom:14 }}>
@@ -454,8 +518,8 @@ function ReservationFlow({ T, go, station, charger, user, vehicles, ctx, onBack,
           <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}>Summary</div>
           {[
             { label:"Estimated cost", value:`GH₵${estimatedCost.toFixed(2)}` },
-            { label:"Refundable deposit", value:`GH₵${(depositPesewas/100).toFixed(2)}` },
-            { label:"Charged if you no-show", value:"Deposit forfeited" },
+            { label:"Grace period", value:`${tier.graceMin} minutes` },
+            { label:"If you no-show", value:`Reliability score −${Math.abs(ReliabilityService.POINTS.noShow)}` },
           ].map(r=>(
             <div key={r.label} style={{ display:"flex",justifyContent:"space-between",marginBottom:8 }}>
               <span style={{ color:T.muted,fontSize:12 }}>{r.label}</span>
@@ -466,9 +530,9 @@ function ReservationFlow({ T, go, station, charger, user, vehicles, ctx, onBack,
 
         {error && <div style={{ background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",borderRadius:10,padding:"11px 14px",marginBottom:14,color:T.red,fontSize:12 }}>{error}</div>}
 
-        <button onClick={confirm} disabled={saving} className="tap"
-          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:saving?0.7:1 }}>
-          {saving ? <><Spinner color="#000"/> Confirming…</> : <><i className="fas fa-lock"/> Confirm & Hold GH₵{(depositPesewas/100).toFixed(2)} Deposit</>}
+        <button onClick={confirm} disabled={saving||tier.restricted} className="tap"
+          style={{ width:"100%",background:tier.restricted?T.border:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,color:tier.restricted?T.muted:"#000",cursor:tier.restricted?"not-allowed":"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:saving?0.7:1 }}>
+          {saving ? <><Spinner color="#000"/> Confirming…</> : tier.restricted ? <><i className="fas fa-lock"/> Reservations Restricted</> : <><i className="fas fa-calendar-check"/> Confirm Reservation</>}
         </button>
       </div>
     </div>
@@ -510,8 +574,8 @@ function ActiveBookingDashboard({ T, go, booking, station, user, ctx, onBack, on
       expiredRef.current = true;
       (async ()=>{
         await BookingService.expire(booking.reference, ctx);
-        await DepositService.forfeit(booking.reference, user.id, DEFAULT_DEPOSIT_PESEWAS, ctx);
-        await NotificationService.send(user.id, "system", "Reservation Expired", `Your reservation at ${booking.station} expired after the grace period. Deposit forfeited.`, { reference:booking.reference }, ctx);
+        const result = await ReliabilityService.adjust(user.id, ReliabilityService.POINTS.noShow, "No-show — grace period expired", ctx);
+        await NotificationService.send(user.id, "system", "Reservation Expired", `Your reservation at ${booking.station} expired after the grace period. Reliability score ${result.delta} → ${result.score}.`, { reference:booking.reference }, ctx);
         await QueueService.advanceNext(booking.charger_id, ctx);
         onExpired();
       })();
@@ -520,16 +584,26 @@ function ActiveBookingDashboard({ T, go, booking, station, user, ctx, onBack, on
 
   const canGoInHere = distanceKm != null && distanceKm <= ARRIVAL_RADIUS_KM;
 
-  const confirmArrival = async () => {
-    await BookingService.markArrived(booking.reference, ctx);
-    await NotificationService.send(user.id, "system", "Arrival Confirmed", `You've arrived at ${booking.station}. Unlock your charger when ready.`, { reference:booking.reference }, ctx);
-    setArrived(true);
-  };
+  // GPS auto check-in — no QR, no manual "I'm here" tap. The moment the
+  // driver enters the 100m radius, we confirm arrival automatically.
+  useEffect(()=>{
+    if (!arrived && canGoInHere) {
+      (async ()=>{
+        setArrived(true); // optimistic, avoids double-fires while the request is in flight
+        await BookingService.markArrived(booking.reference, ctx);
+        const onTime = Date.now() <= arrivalTime.getTime() + 2*60000;
+        if (onTime) await ReliabilityService.adjust(user.id, ReliabilityService.POINTS.onTimeArrival, "Arrived on time", ctx);
+        await NotificationService.send(user.id, "system", "Welcome to EcoCharge", "Ready to charge — tap below to unlock your charger.", { reference:booking.reference }, ctx);
+      })();
+    }
+  }, [canGoInHere]);
 
   const cancelBooking = async () => {
     setCancelling(true);
     await BookingService.cancel(booking.reference, "Cancelled by user", ctx);
-    await DepositService.refund(booking.reference, user.id, ctx);
+    // Cancelling well before arrival is good behaviour — small score bump, no penalty.
+    const early = now < arrivalTime.getTime() - 5*60000;
+    if (early) await ReliabilityService.adjust(user.id, ReliabilityService.POINTS.earlyCancel, "Cancelled early", ctx);
     await QueueService.advanceNext(booking.charger_id, ctx);
     setCancelling(false);
     onCancelled();
@@ -566,7 +640,7 @@ function ActiveBookingDashboard({ T, go, booking, station, user, ctx, onBack, on
             {[
               { label:"Arrival Time", value:fmtTime(arrivalTime) },
               { label:"Est. Cost", value:`GH₵${booking.amount}` },
-              { label:"Deposit", value:`GH₵${(DEFAULT_DEPOSIT_PESEWAS/100).toFixed(2)} held` },
+              { label:"Grace Period", value:`${booking.grace_period_min||GRACE_PERIOD_MIN} min` },
               { label:"Distance", value: distanceKm!=null?`${distanceKm.toFixed(2)} km`:"Locating…" },
             ].map(r=>(
               <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:10,padding:"10px 12px" }}>
@@ -576,22 +650,23 @@ function ActiveBookingDashboard({ T, go, booking, station, user, ctx, onBack, on
             ))}
           </div>
 
-          {!arrived && canGoInHere && (
-            <button onClick={confirmArrival} className="tap"
-              style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",marginBottom:10 }}>
-              <i className="fas fa-map-pin" style={{ marginRight:8 }}/>I'm Here
-            </button>
-          )}
-          {!arrived && !canGoInHere && (
+          {!arrived && (
             <div style={{ fontSize:11,color:T.muted,textAlign:"center",marginBottom:10 }}>
-              "I'm Here" unlocks automatically within {ARRIVAL_RADIUS_KM*1000}m of the station.
+              <i className="fas fa-satellite-dish" style={{ marginRight:6 }}/>
+              We'll check you in automatically within {Math.round(ARRIVAL_RADIUS_KM*1000)}m of the station — no QR, no tap needed.
             </div>
           )}
           {arrived && (
-            <button onClick={onStartCharging} className="tap"
-              style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",marginBottom:10 }}>
-              <i className="fas fa-unlock" style={{ marginRight:8 }}/>Unlock Charger & Start
-            </button>
+            <div className="fade" style={{ marginBottom:12 }}>
+              <div style={{ textAlign:"center",marginBottom:12 }}>
+                <div style={{ fontWeight:800,fontSize:15,color:T.green }}>Welcome to EcoCharge</div>
+                <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>Ready to Charge</div>
+              </div>
+              <button onClick={onStartCharging} className="tap"
+                style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+                <i className="fas fa-bolt" style={{ marginRight:8 }}/>Start Charging
+              </button>
+            </div>
           )}
 
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
@@ -663,12 +738,49 @@ function ChangeTimeModal({ T, onClose, onSave }) {
 function QueuePanel({ T, chargerId, userId, ctx }) {
   const [myEntry, setMyEntry] = useState(null);
   const [queueLen, setQueueLen] = useState(0);
+  const [now, setNow] = useState(Date.now());
+  const expiredRef = useRef(false);
+
   const load = async () => {
-    setMyEntry(await QueueService.getMyPosition(chargerId, userId, ctx));
+    // getMyPosition only looks at "waiting" rows — also check for an active offer.
+    const waiting = await QueueService.getMyPosition(chargerId, userId, ctx);
+    if (waiting) { setMyEntry(waiting); setQueueLen(await QueueService.getQueueLength(chargerId, ctx)); return; }
+    const offered = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `queue?charger_id=eq.${chargerId}&user_id=eq.${userId}&status=eq.offered&select=*&order=offered_at.desc&limit=1`);
+    setMyEntry(Array.isArray(offered) && offered[0] ? offered[0] : null);
     setQueueLen(await QueueService.getQueueLength(chargerId, ctx));
   };
   useEffect(()=>{ load(); const t=setInterval(load, 15000); return ()=>clearInterval(t); }, [chargerId]);
+  useEffect(()=>{ const t=setInterval(()=>setNow(Date.now()), 1000); return ()=>clearInterval(t); }, []);
+
+  const isOffered = myEntry?.status === "offered";
+  const offerMsLeft = isOffered && myEntry.offer_expires_at ? new Date(myEntry.offer_expires_at).getTime() - now : null;
+
+  useEffect(()=>{
+    if (isOffered && offerMsLeft != null && offerMsLeft <= 0 && !expiredRef.current) {
+      expiredRef.current = true;
+      QueueService.expireOffer(myEntry, chargerId, ctx).then(load);
+    }
+  }, [offerMsLeft]);
+
   if (!myEntry) return null;
+
+  if (isOffered) {
+    return (
+      <Card T={T} style={{ padding:16, marginBottom:14, background:"rgba(34,197,94,0.08)", border:`1px solid ${T.green}55` }}>
+        <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
+          <i className="fas fa-bolt" style={{ color:T.green }}/>
+          <span style={{ fontWeight:800,fontSize:13,color:T.green }}>Your Charger Is Ready!</span>
+        </div>
+        <div style={{ fontWeight:900,fontSize:28,color:T.green,fontFamily:"monospace",marginBottom:6 }}>{fmtCountdown(offerMsLeft)}</div>
+        <div style={{ fontSize:11,color:T.muted,marginBottom:12 }}>Accept within {QUEUE_OFFER_WINDOW_MIN} minutes or it goes to the next driver in line.</div>
+        <button onClick={async()=>{ await QueueService.acceptOffer(myEntry.id, ctx); load(); }} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+          Accept & Head to Charger
+        </button>
+      </Card>
+    );
+  }
+
   const waitMin = (myEntry.position - 1) * AVG_SESSION_MIN;
   return (
     <Card T={T} style={{ padding:16, marginBottom:14 }}>
@@ -737,7 +849,7 @@ function LiveChargingSession({ T, go, booking, user, ctx, onComplete }) {
       });
     }
     await BookingService.complete(booking.reference, ctx);
-    await DepositService.refund(booking.reference, user.id, ctx);
+    await ReliabilityService.adjust(user.id, ReliabilityService.POINTS.completedSession, "Completed charging session", ctx);
     await NotificationService.send(user.id, "charging_completed", "Session Complete", `You used ${liveKwh.toFixed(2)} kWh for GH₵${costSoFar.toFixed(2)}.`, { session_id:sessionId }, ctx);
     setStopping(false);
     onComplete({ liveKwh, costSoFar, elapsed, sessionId });
