@@ -6259,8 +6259,6 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
         }
       } else {
         setLookupFailed(true);
-        // Submit unknown vehicle to admin review queue
-        submitVehicleToRegistry({ manufacturer, model, year, vehicle_type:vehicleType });
       }
     });
   }, [manufacturer, model, year]);
@@ -6277,6 +6275,16 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
     if (!year)               { setError("Please select the year"); return; }
 
     setSaving(true); setError("");
+    if (lookupFailed) {
+      submitVehicleToRegistry({
+        manufacturer, model, year,
+        vehicle_type: vehicleType,
+        battery_capacity: parseFloat(battery) || null,
+        connector_type: connector || null,
+        estimated_range: parseFloat(range) || null,
+        max_charging_power: parseFloat(maxPower) || null,
+      });
+    }
     const payload = {
       user_id: user?.id || "demo",
       nickname: nickname.trim(),
