@@ -2609,52 +2609,81 @@ function QRScreen({ go, booking, setBooking, user }) {
             <span style={{ fontWeight:800,fontSize:16,color:T.green }}>GH₵{(walletBal/100).toFixed(2)}</span>
           </div>
         )}
-        <div style={{ textAlign:"center",marginBottom:16 }}>
-          <div style={{ display:"inline-block",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,borderRadius:20,padding:"7px 24px" }}>
-            <span style={{ fontSize:12,fontWeight:800,color:"#000",letterSpacing:1 }}>READY TO CHARGE</span>
+       <div className="fade" style={{ background:T.highlightGrad2,borderRadius:20,padding:"20px",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14 }}>
+            <div>
+              <div style={{ fontWeight:800,fontSize:16,color:T.text,marginBottom:3 }}>EcoCharge Pass</div>
+              <div style={{ fontSize:11,color:T.muted }}>Tap Start to begin charging</div>
+            </div>
+            <i className="fas fa-wifi" style={{ fontSize:18,color:T.mutedLight,transform:"rotate(90deg)" }}/>
           </div>
-        </div>
-        <div className="fade" style={{ background:T.highlightGrad2,borderRadius:20,padding:"20px",textAlign:"center",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
-          <div style={{ background:"#0f1117",borderRadius:16,padding:14,display:"inline-block",border:`2px solid ${T.greenDim}`,marginBottom:12,position:"relative" }}>
-            <img src={qrUrl} alt="QR" width={190} height={190} style={{ borderRadius:8,display:"block" }}/>
-            <div style={{ position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:36,height:36,borderRadius:8,background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",border:`2px solid ${T.greenDim}` }}>
-              <i className="fas fa-bolt" style={{ fontSize:16,color:T.green }}/>
+          <div style={{ background:"rgba(0,0,0,0.25)",borderRadius:14,padding:"14px 16px",marginBottom:14 }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+              <div>
+                <div style={{ fontWeight:800,fontSize:14,color:T.green,marginBottom:10 }}><i className="fas fa-bolt" style={{marginRight:6}}/>EcoCharge</div>
+                <div style={{ width:34,height:24,borderRadius:5,background:"linear-gradient(135deg,#e8d48a,#c9a84c)" }}/>
+              </div>
+              <div style={{ textAlign:"right" }}>
+                <div style={{ fontSize:10,color:T.green,marginBottom:4 }}>Pass ID</div>
+                <div style={{ fontWeight:800,fontSize:15,color:T.green,letterSpacing:1 }}>{b.reference}</div>
+              </div>
             </div>
           </div>
-          <div style={{ fontSize:11,color:T.muted,marginBottom:6 }}>Booking Reference</div>
-          <div style={{ fontWeight:800,fontSize:18,color:T.green,letterSpacing:2,marginBottom:4 }}>{b.reference}</div>
-          <div style={{ fontSize:11,color:T.muted }}>Show to attendant or tap Start below</div>
+          <div style={{ display:"flex",gap:8,marginBottom:14,flexWrap:"wrap" }}>
+            <div style={{ display:"flex",alignItems:"center",gap:5,background:"rgba(74,222,128,0.12)",borderRadius:8,padding:"5px 10px" }}>
+              <i className="fas fa-shield-alt" style={{ fontSize:11,color:T.green }}/><span style={{ fontSize:11,fontWeight:700,color:T.text }}>Verified</span>
+            </div>
+            <div style={{ display:"flex",alignItems:"center",gap:5,background:"rgba(74,222,128,0.12)",borderRadius:8,padding:"5px 10px" }}>
+              <i className="fas fa-credit-card" style={{ fontSize:11,color:T.green }}/><span style={{ fontSize:11,fontWeight:700,color:T.text }}>Wallet Active</span>
+            </div>
+            <div style={{ display:"flex",alignItems:"center",gap:5,background:"rgba(74,222,128,0.12)",borderRadius:8,padding:"5px 10px" }}>
+              <i className="fas fa-clock" style={{ fontSize:11,color:T.green }}/><span style={{ fontSize:11,fontWeight:700,color:T.text }}>Valid Today, {new Date().toLocaleTimeString("en-GH",{hour:"2-digit",minute:"2-digit"})}</span>
+            </div>
+          </div>
+          <div style={{ display:"flex",justifyContent:"center",gap:6 }}>
+            <div style={{ width:6,height:6,borderRadius:"50%",background:T.green }}/>
+            <div style={{ width:6,height:6,borderRadius:"50%",background:T.border }}/>
+            <div style={{ width:6,height:6,borderRadius:"50%",background:T.border }}/>
+          </div>
         </div>
-        <div style={{ background:T.card,borderRadius:16,padding:"16px",marginBottom:14,border:`1px solid ${T.border}` }}>
+        <div style={{ background:T.card,borderRadius:16,padding:"4px 16px",marginBottom:14,border:`1px solid ${T.border}` }}>
           {[
             { label:"Station",  value:b.station,     icon:"fa-map-marker-alt" },
             { label:"Vehicle",  value:b.vehicle,      icon:"fa-car"            },
             ...(b.booking_mode==="now"
               ? [{ label:"Billing", value:"Metered — pay per kWh used", icon:"fa-bolt" }]
-              : [{ label:"Duration", value:`${b.duration_min} min`, icon:"fa-hourglass-half" },
-                 { label:"Amount",   value:`GH₵${b.amount}`, icon:"fa-money-bill-alt" }]),
-            { label:"Payment",  value:b.pay_method==="wallet"||b.pay_method==="now"?"Charged from wallet":"Pay on Arrival", icon:"fa-credit-card" },
-          ].map(r=>(
-            <div key={r.label} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,paddingBottom:10,borderBottom:`1px solid rgba(255,255,255,0.05)` }}>
+              : [{ label:"Duration", value:`${b.duration_min} min · Est.`, icon:"fa-hourglass-half" },
+                 { label:"Estimated Cost", value:`GH₵${b.amount}`, icon:"fa-money-bill-alt" }]),
+            { label:"Payment Method",  value:b.pay_method==="wallet"||b.pay_method==="now"?"Wallet Balance":"Pay on Arrival", icon:"fa-credit-card" },
+          ].map((r,i,arr)=>(
+            <div key={r.label} className="tap row" style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0",borderBottom:i<arr.length-1?`1px solid rgba(255,255,255,0.05)`:"none" }}>
               <div style={{ display:"flex",alignItems:"center",gap:8 }}>
                 <i className={`fas ${r.icon}`} style={{ fontSize:12,color:T.muted,width:16 }}/>
                 <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
               </div>
-              <span style={{ color:T.text,fontWeight:600,fontSize:13 }}>{r.value}</span>
+              <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                <span style={{ color:T.text,fontWeight:600,fontSize:13 }}>{r.value}</span>
+                <i className="fas fa-chevron-right" style={{ fontSize:11,color:T.muted }}/>
+              </div>
             </div>
           ))}
         </div>
-        <button onClick={()=>{ if(vehicleDetails?.battery_capacity && vehicleDetails?.estimated_range){ setShowBatteryPrompt(true); } else { startCharging(); } }} className="tap"
-          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"18px",fontSize:17,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:10,boxShadow:`0 4px 24px rgba(74,222,128,0.45)` }}>
-          <i className="fas fa-bolt"/> Start Charging
-        </button>
-        <div style={{ fontSize:11,color:T.muted,textAlign:"center",marginBottom:10 }}>
-          <i className="fas fa-shield-alt" style={{ marginRight:5,color:T.green }}/>
-          Wallet · Booking · Charger verified before starting
+        <div style={{ background:"rgba(74,222,128,0.08)",border:`1px solid rgba(74,222,128,0.2)`,borderRadius:14,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12 }}>
+          <i className="fas fa-shield-alt" style={{ fontSize:16,color:T.green }}/>
+          <div style={{ flex:1 }}>
+            <div style={{ fontWeight:700,fontSize:13,color:T.text }}>You're all set!</div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Your booking is confirmed and charger is ready.</div>
+          </div>
         </div>
+        <button onClick={()=>{ if(vehicleDetails?.battery_capacity && vehicleDetails?.estimated_range){ setShowBatteryPrompt(true); } else { startCharging(); } }} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:16,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,marginBottom:12,boxShadow:`0 4px 24px rgba(74,222,128,0.45)` }}>
+          <span><i className="fas fa-bolt" style={{marginRight:8}}/>Start Charging</span>
+          <span style={{ fontSize:11,fontWeight:600,opacity:0.7 }}>Secure · Automated · No scan needed</span>
+        </button>
         <button onClick={()=>go("map")} className="tap"
-          style={{ width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
-          <i className="fas fa-map-marker-alt"/> View Station on Map
+          style={{ width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8 }}>
+          <span><i className="fas fa-map" style={{marginRight:8}}/>View Station on Map</span>
+          <i className="fas fa-chevron-right" style={{ fontSize:12,color:T.muted }}/>
         </button>
       </div>
       {showBatteryPrompt && (
