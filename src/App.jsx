@@ -2370,19 +2370,23 @@ function QRScreen({ go, booking, setBooking, user }) {
     </div>
   );
 
- if (phase === 'charging' || phase === 'stopping') return (
+if (phase === 'charging' || phase === 'stopping') return (
     <div style={{ display:'flex',flexDirection:'column',height:'100%',background:T.bg }}>
-      <div style={{ padding:'16px 18px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${T.border}`,flexShrink:0 }}>
+      <div style={{ padding:'16px 18px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${T.border}`,flexShrink:0,gap:10 }}>
         <button onClick={()=>go("home")} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
           <i className="fas fa-chevron-left" style={{ fontSize:18,color:T.text }}/>
         </button>
-        <div style={{ textAlign:'center' }}>
-          <div style={{ fontSize:11,color:T.green,display:"flex",alignItems:"center",gap:5,justifyContent:"center" }}><span style={{width:6,height:6,borderRadius:"50%",background:T.green}}/>Session Active</div>
-          <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{phase==='stopping'?'Stopping':'Charging Now'}</div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:700,fontSize:16,color:T.text }}>{phase==='stopping'?'Stopping':'Charging Now'}</div>
+          <div style={{ fontSize:11,color:T.green,display:"flex",alignItems:"center",gap:5 }}><span style={{width:6,height:6,borderRadius:"50%",background:T.green}}/>Session Active</div>
         </div>
-        <button onClick={stopCharging} disabled={phase==='stopping'} className="tap"
-          style={{ background:"none",border:`1px solid ${T.red}`,borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,color:T.red,cursor:phase==='stopping'?'default':'pointer',fontFamily:'inherit',opacity:phase==='stopping'?0.6:1 }}>
-          Stop
+        <button onClick={()=>{ window.location.href=`mailto:${CONTACT_INFO.email}`; }} className="tap"
+          style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:"7px 12px",fontSize:12,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}>
+          <i className="fas fa-headset" style={{ fontSize:12 }}/> Help
+        </button>
+        <button onClick={()=>go("notifications")} className="tap" style={{ position:"relative",width:34,height:34,borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+          <i className="fas fa-bell" style={{ fontSize:13,color:T.text }}/>
+          {user?.id && <UnreadBadge userId={user.id}/>}
         </button>
       </div>
 
@@ -2395,129 +2399,125 @@ function QRScreen({ go, booking, setBooking, user }) {
           </div>
           <div style={{ flex:1,minWidth:0 }}>
             <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{b.station}</div>
-            <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{b.city}</div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:2 }}><i className="fas fa-map-marker-alt" style={{ marginRight:4 }}/>{b.city}</div>
             <div style={{ display:"flex",gap:8,marginTop:6,flexWrap:"wrap" }}>
-              <Badge label={b.charger_id||"Charger"} color={T.blue}/>
               <Badge label="150 kW DC Fast" color={T.yellow}/>
+              {vehicleDetails?.connector_type && <Badge label={vehicleDetails.connector_type} color={T.blue}/>}
+              <Badge label={b.charger_id||"Charger"} color={T.muted}/>
             </div>
           </div>
         </div>
 
-       {/* Vehicle identity - large interactive card */}
-        <div style={{ display:"flex",justifyContent:"center",marginBottom:14 }}>
-          <InteractiveVehicleCard
-            vehicle={{...vehicleDetails, image_url:b.vehicleImageUrl||vehicleDetails?.image_url, vehicle_type:b.vehicle}}
-            chargingActive={true} energyDeliveredKwh={liveKwh} startBatteryPct={startBatteryPct} size={320}/>
-        </div>
-        <div style={{ textAlign:"center",marginBottom:14 }}>
-          <div style={{ fontWeight:700,fontSize:16,color:T.text }}>{vehicleDetails?.nickname || b.vehicle}</div>
-          <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>{vehicleDetails ? `${vehicleDetails.year||""} ${vehicleDetails.manufacturer||""} ${vehicleDetails.model||""}`.trim() : b.vehicle}</div>
-          <div style={{ display:"flex",gap:8,marginTop:8,flexWrap:"wrap",justifyContent:"center" }}>
-            {vehicleDetails?.battery_capacity && <Badge label={`${vehicleDetails.battery_capacity} kWh battery`} color={T.green}/>}
-            {vehicleDetails?.connector_type && <Badge label={vehicleDetails.connector_type} color={T.muted}/>}
-            {startBatteryPct!=null && vehicleDetails?.battery_capacity && (()=>{
-              const pct = Math.min(100, startBatteryPct + (liveKwh/vehicleDetails.battery_capacity*100));
-              const range = vehicleDetails.estimated_range ? Math.round(vehicleDetails.estimated_range*(pct/100)) : null;
-              return (
+        {/* Charging hero card */}
+        <div style={{ background:T.card,borderRadius:18,border:`1px solid ${T.border}`,padding:"18px",marginBottom:14 }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14 }}>
+            <div>
+              <div style={{ fontWeight:800,fontSize:15,color:T.text }}><i className="fas fa-bolt" style={{ color:T.green,marginRight:6 }}/>{phase==='stopping'?'Stopping…':'Charging…'}</div>
+              <div style={{ fontSize:11,color:T.muted,marginTop:3 }}>Your vehicle is charging optimally.</div>
+            </div>
+            {estRemaining&&(
+              <div style={{ textAlign:"right" }}>
+                <div style={{ fontSize:10,color:T.muted }}>Est. time remaining</div>
+                <div style={{ fontWeight:800,fontSize:16,color:T.blue }}>{estRemaining}</div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display:"flex",alignItems:"center",gap:14,marginBottom:14 }}>
+            <div style={{ flexShrink:0 }}>
+              {startBatteryPct!=null && vehicleDetails?.battery_capacity ? (
                 <>
-                  <Badge label={`~${pct.toFixed(0)}% battery (est.)`} color={T.green}/>
-                  {range!=null && <Badge label={`~${range} km range (est.)`} color={T.blue}/>}
+                  <div style={{ fontWeight:900,fontSize:34,color:T.green,lineHeight:1 }}>
+                    {Math.min(100, startBatteryPct + (liveKwh/vehicleDetails.battery_capacity*100)).toFixed(0)}%
+                  </div>
+                  <div style={{ fontSize:10,color:T.muted,marginTop:4 }}>Battery Level</div>
                 </>
-              );
-            })()}
+              ) : (
+                <>
+                  <div style={{ fontWeight:900,fontSize:34,color:T.green,lineHeight:1 }}>{livePower.toFixed(1)}</div>
+                  <div style={{ fontSize:10,color:T.muted,marginTop:4 }}>kW now</div>
+                </>
+              )}
+            </div>
+            <div style={{ flex:1 }}>
+              <InteractiveVehicleCard
+                vehicle={{...vehicleDetails, image_url:b.vehicleImageUrl||vehicleDetails?.image_url, vehicle_type:b.vehicle}}
+                chargingActive={true} energyDeliveredKwh={liveKwh} startBatteryPct={startBatteryPct} size={190}/>
+            </div>
+          </div>
+
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8 }}>
+            <div style={{ background:T.surfaceFaint,borderRadius:12,padding:"10px 12px" }}>
+              <div style={{ fontSize:10,color:T.muted,marginBottom:3 }}>Charging Speed</div>
+              <div style={{ fontWeight:800,fontSize:15,color:T.text }}>{livePower.toFixed(0)} kW</div>
+            </div>
+            <div style={{ background:T.surfaceFaint,borderRadius:12,padding:"10px 12px" }}>
+              <div style={{ fontSize:10,color:T.muted,marginBottom:3 }}>Time Elapsed</div>
+              <div style={{ fontWeight:800,fontSize:15,color:T.text }}>{fmtElapsed(elapsed)}</div>
+            </div>
+            <div style={{ background:T.surfaceFaint,borderRadius:12,padding:"10px 12px" }}>
+              <div style={{ fontSize:10,color:T.muted,marginBottom:3 }}>Energy Delivered</div>
+              <div style={{ fontWeight:800,fontSize:15,color:T.text }}>{liveKwh.toFixed(2)} kWh</div>
+            </div>
+            <div style={{ background:T.surfaceFaint,borderRadius:12,padding:"10px 12px" }}>
+              <div style={{ fontSize:10,color:T.muted,marginBottom:3 }}>Est. Cost</div>
+              <div style={{ fontWeight:800,fontSize:15,color:T.text }}>GH₵{costSoFar.toFixed(2)}</div>
+            </div>
           </div>
         </div>
+
+        {/* Battery progress bar */}
+        {vehicleDetails?.battery_capacity && (()=>{
+          const pct = startBatteryPct!=null ? Math.min(100, startBatteryPct + (liveKwh/vehicleDetails.battery_capacity*100)) : null;
+          const target = vehicleDetails?.preferred_charge_limit || 80;
+          if (pct==null) return null;
+          return (
+            <div style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,padding:"16px",marginBottom:14 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
+                <span style={{ fontWeight:700,fontSize:13,color:T.text }}>Battery Progress</span>
+                <span style={{ fontSize:11,color:T.green,fontWeight:700,background:"rgba(74,222,128,0.12)",borderRadius:8,padding:"3px 10px" }}>{pct.toFixed(0)}%</span>
+              </div>
+              <div style={{ position:"relative",height:8,borderRadius:4,background:T.track,overflow:"hidden",marginBottom:8 }}>
+                <div style={{ position:"absolute",left:`${target}%`,top:-3,bottom:-3,width:2,background:T.yellow,zIndex:2 }}/>
+                <div style={{ height:"100%",width:`${pct}%`,background:`linear-gradient(90deg,${T.green},${T.blue})`,borderRadius:4,transition:"width 1s linear" }}/>
+              </div>
+              <div style={{ display:"flex",justifyContent:"space-between",fontSize:10,color:T.muted }}>
+                <span>20%</span><span style={{ color:T.yellow,fontWeight:700 }}>Target {target}%</span><span>100%</span>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Vehicle info row */}
+        <div style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12 }}>
+          <VehicleAvatar vehicleType={b.vehicle} imageUrl={b.vehicleImageUrl||vehicleDetails?.image_url} size={46}/>
           <div style={{ flex:1,minWidth:0 }}>
             <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{vehicleDetails?.nickname || b.vehicle}</div>
             <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{vehicleDetails ? `${vehicleDetails.year||""} ${vehicleDetails.manufacturer||""} ${vehicleDetails.model||""}`.trim() : b.vehicle}</div>
-            <div style={{ display:"flex",gap:8,marginTop:6,flexWrap:"wrap" }}>
-              {vehicleDetails?.battery_capacity && <Badge label={`${vehicleDetails.battery_capacity} kWh battery`} color={T.green}/>}
-              {vehicleDetails?.connector_type && <Badge label={vehicleDetails.connector_type} color={T.muted}/>}
-              {startBatteryPct!=null && vehicleDetails?.battery_capacity && (()=>{
-                const pct = Math.min(100, startBatteryPct + (liveKwh/vehicleDetails.battery_capacity*100));
-                const range = vehicleDetails.estimated_range ? Math.round(vehicleDetails.estimated_range*(pct/100)) : null;
-                return (
-                  <>
-                    <Badge label={`~${pct.toFixed(0)}% battery (est.)`} color={T.green}/>
-                    {range!=null && <Badge label={`~${range} km range (est.)`} color={T.blue}/>}
-                  </>
-                );
-              })()}
-            </div>
+            {vehicleDetails?.registration_number && <Badge label={vehicleDetails.registration_number} color={T.green}/>}
           </div>
-        </div>
-
-        {/* Live status */}
-        <div style={{ display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16 }}>
-          <div style={{ position:'relative',width:190,height:190 }}>
-            <svg width='190' height='190' style={{ transform:'rotate(-90deg)' }}>
-              <circle cx='95' cy='95' r='80' fill='none' stroke={T.surface} strokeWidth='13'/>
-              <circle cx='95' cy='95' r='80' fill='none' stroke={T.green} strokeWidth='13'
-                strokeDasharray={`${2*Math.PI*80}`}
-                strokeDashoffset={`${2*Math.PI*80*(1-Math.min(livePower/150,1))}`}
-                strokeLinecap='round' style={{ transition:'stroke-dashoffset 1s linear' }}/>
-            </svg>
-            <div style={{ position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center' }}>
-              <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Charging Speed</div>
-              <div style={{ fontWeight:800,fontSize:30,color:T.text,lineHeight:1 }}>{livePower.toFixed(1)}</div>
-              <div style={{ fontSize:12,color:T.muted }}>kW</div>
-            </div>
+          <div style={{ display:"flex",gap:14,flexShrink:0 }}>
+            {vehicleDetails?.estimated_range && (
+              <div style={{ textAlign:"center" }}>
+                <div style={{ fontSize:9,color:T.muted }}>Range Added</div>
+                <div style={{ fontWeight:700,fontSize:12,color:T.green,marginTop:2 }}>~{Math.round((liveKwh/(vehicleDetails.battery_capacity||1))*vehicleDetails.estimated_range)} km</div>
+              </div>
+            )}
+            {vehicleDetails?.battery_health && (
+              <div style={{ textAlign:"center" }}>
+                <div style={{ fontSize:9,color:T.muted }}>Battery Health</div>
+                <div style={{ fontWeight:700,fontSize:12,color:T.text,marginTop:2 }}><i className="fas fa-heart" style={{ color:T.red,fontSize:9,marginRight:3 }}/>{vehicleDetails.battery_health}%</div>
+              </div>
+            )}
           </div>
-        </div>
-
-        <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16 }}>
-          {[
-            { label:'Energy',   value:liveKwh.toFixed(2),           unit:'kWh' },
-            { label:'Duration', value:fmtElapsed(elapsed),          unit:null },
-            { label:'Cost',     value:`GH₵${costSoFar.toFixed(2)}`, unit:null },
-          ].map(m=>(
-            <div key={m.label} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:'14px 8px',textAlign:'center' }}>
-              <div style={{ fontWeight:700,fontSize:16,color:T.text }}>{m.value}</div>
-              <div style={{ fontSize:10,color:T.muted,marginTop:4 }}>{m.label}</div>
-              {m.unit&&<div style={{ fontSize:9,color:T.muted,marginTop:1 }}>{m.unit}</div>}
-            </div>
-          ))}
-        </div>
-
-        {/* Progress timeline */}
-        <div style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,padding:"16px",marginBottom:14 }}>
-          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:16 }}>Session Timeline</div>
-          <div style={{ display:"flex",alignItems:"center" }}>
-            {["Connected","Charging","Complete"].map((s,i)=>{
-              const stepDone = i===0 ? true : i===1 ? true : phase==="stopping"||phase==="completed";
-              return (
-                <div key={s} style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center" }}>
-                  <div style={{ display:"flex",alignItems:"center",width:"100%" }}>
-                    <div style={{ flex:i===0?0:1,height:2,background:stepDone?T.green:T.border }}/>
-                    <div style={{ width:20,height:20,borderRadius:"50%",background:stepDone?T.green:T.border,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-                      {stepDone&&<i className="fas fa-check" style={{ fontSize:9,color:"#000" }}/>}
-                    </div>
-                    <div style={{ flex:i===2?0:1,height:2,background:i<1?T.green:T.border }}/>
-                  </div>
-                  <span style={{ fontSize:9,color:T.text,marginTop:6 }}>{s}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Environmental impact */}
-        <div style={{ background:T.highlightGrad,borderRadius:16,padding:"14px 16px",marginBottom:14,border:"1px solid rgba(74,222,128,0.2)",display:"flex",justifyContent:"space-around" }}>
-          {[
-            { label:"CO₂ Avoided", value:`${(liveKwh*0.5).toFixed(2)} kg`, icon:"fa-leaf", color:T.green },
-            { label:"Water Ready", value:"20 L", icon:"fa-tint", color:T.blue },
-          ].map(s=>(
-            <div key={s.label} style={{ textAlign:"center" }}>
-              <i className={`fas ${s.icon}`} style={{ fontSize:16,color:s.color,marginBottom:6,display:"block" }}/>
-              <div style={{ fontWeight:800,fontSize:15,color:s.color }}>{s.value}</div>
-              <div style={{ fontSize:9,color:T.muted,marginTop:2 }}>{s.label}</div>
-            </div>
-          ))}
         </div>
 
         {/* Amenities */}
         <div style={{ marginBottom:14 }}>
-          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}>While You Charge</div>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10 }}>
+            <div style={{ fontWeight:700,fontSize:13,color:T.text }}>Station Amenities</div>
+            <span style={{ fontSize:12,color:T.green,fontWeight:700 }}>View All</span>
+          </div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
             {GENERIC_AMENITIES.map(a=>(
               <div key={a.label} style={{ background:T.card,borderRadius:12,border:`1px solid ${T.border}`,padding:"12px 6px",textAlign:"center" }}>
@@ -2528,11 +2528,37 @@ function QRScreen({ go, booking, setBooking, user }) {
           </div>
         </div>
 
-        <div style={{ fontSize:11,color:T.muted,textAlign:'center',lineHeight:1.7 }}>
+        {/* Session details + mini map */}
+        <div style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,padding:"16px",marginBottom:14 }}>
+          <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}>Session Details</div>
+          {[
+            { label:"Start Time",     value:new Date(Date.now()-elapsed*1000).toLocaleString("en-GH",{hour:"2-digit",minute:"2-digit",day:"numeric",month:"short"}), icon:"fa-clock" },
+            { label:"Charger",        value:`${b.charger_id||"EcoCharge"} · 150 kW`,   icon:"fa-charging-station" },
+            { label:"Session ID",     value:sessionId||"--",                            icon:"fa-hashtag" },
+            { label:"Payment Method", value:"Wallet Balance",                           icon:"fa-wallet" },
+          ].map(r=>(
+            <div key={r.label} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,paddingBottom:10,borderBottom:`1px solid rgba(255,255,255,0.05)` }}>
+              <span style={{ color:T.muted,fontSize:12 }}><i className={`fas ${r.icon}`} style={{ marginRight:8,width:14 }}/>{r.label}</span>
+              <span style={{ color:T.text,fontWeight:600,fontSize:12,fontFamily:r.label==="Session ID"?"monospace":"inherit" }}>{r.value}</span>
+            </div>
+          ))}
+          <div onClick={()=>go("map")} className="tap" style={{ height:70,borderRadius:10,background:T.surface,display:"flex",alignItems:"center",justifyContent:"center",gap:8,cursor:"pointer",marginTop:4 }}>
+            <i className="fas fa-location-arrow" style={{ fontSize:13,color:T.green }}/>
+            <span style={{ fontSize:12,fontWeight:700,color:T.green }}>Navigate to Station</span>
+          </div>
+        </div>
+
+        <div style={{ fontSize:11,color:T.muted,textAlign:'center',lineHeight:1.7,marginBottom:16 }}>
           Wallet will be debited GH₵{costSoFar.toFixed(2)} when you stop · 85% solar powered
         </div>
-      </div>
 
+        <button onClick={stopCharging} disabled={phase==='stopping'} className="tap"
+          style={{ width:"100%",background:"rgba(220,38,38,0.15)",border:`1px solid ${T.red}`,borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,color:T.red,cursor:phase==='stopping'?'default':'pointer',fontFamily:'inherit',opacity:phase==='stopping'?0.6:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+          <i className="fas fa-stop-circle"/> {phase==='stopping'?'Stopping…':'Stop Charging'}
+        </button>
+      </div>
+      <Nav active="Sessions" go={go}/>
+    </div>
   );
 
   if (phase === "completed") return (
@@ -2820,7 +2846,7 @@ function Profile({ go,user,setUser,onMenu }) {
   };
   const booking=(()=>{ try { const b=localStorage.getItem("eco_booking"); return b?JSON.parse(b):null; } catch(e){ return null; } })();
   const totalCharges=booking?1:0;
-  const totalSpent=booking?booking.amount:0;
+  const totalSpent=booking?.amount||0;
   const co2Saved=totalCharges*4;
   const waterReceived=totalCharges*20;
   const [loyaltyData,setLoyaltyData]=useState({points:0,tier:"Bronze",totalCharges:0,totalKwh:0});
@@ -2830,84 +2856,188 @@ function Profile({ go,user,setUser,onMenu }) {
       .then(r=>r.json()).then(d=>{if(d?.[0])setLoyaltyData({points:d[0].loyalty_points||0,tier:d[0].loyalty_tier||"Bronze",totalCharges:d[0].total_charges||0,totalKwh:d[0].total_kwh||0});}).catch(()=>{});
   },[user]);
   const tierColor={"Bronze":"#cd7f32","Silver":"#9ca3af","Gold":"#fbbf24","Platinum":"#38bdf8"}[loyaltyData.tier]||"#cd7f32";
+  const tierMedal={"Bronze":"🥉","Silver":"🥈","Gold":"🥇","Platinum":"💎"}[loyaltyData.tier]||"🥉";
   const tierNext={"Bronze":500,"Silver":2000,"Gold":5000,"Platinum":5000}[loyaltyData.tier]||500;
   const tierPct=Math.min(100,Math.round((loyaltyData.points/tierNext)*100));
 
-  const menuItems=[
-    { icon:"fa-car",            label:"My Vehicles",         screen:"myvehicles"    },
-    { icon:"fa-bell",           label:"Notifications",       screen:"notifications" },
-    { icon:"fa-credit-card",    label:"Payment Methods",     screen:"wallet"        },
-    { icon:"fa-cog",            label:"Settings",            screen:"settings"      },
-    { icon:"fa-leaf",           label:"Zero Emissions",      screen:"zeroemissions" },
-    { icon:"fa-info-circle",    label:"About EcoCharge",     screen:"about"         },
-    { icon:"fa-shield-alt",     label:"Privacy Policy",      screen:"privacypolicy" },
-    { icon:"fa-file-contract",  label:"Terms & Conditions",  screen:"terms"         },
-    { icon:"fa-undo",           label:"Refund Policy",       screen:"refund"        },
+  const quickAccess=[
+    { icon:"fa-car",            label:"My Vehicles",     sub:"Manage your vehicles",      screen:"myvehicles"    },
+    { icon:"fa-wallet",         label:"Wallet",           sub:"View balance & transactions", screen:"wallet"      },
+    { icon:"fa-clock",          label:"Charging History", sub:"View all your sessions",    screen:"sessions"      },
+    { icon:"fa-star",           label:"Rewards",          sub:"Check points & redeem rewards", screen:"__toast_rewards"   },
+    { icon:"fa-tag",            label:"Promotions",       sub:"View current offers",        screen:"__toast_promos"      },
+  ];
+
+  const accountItems=[
+    { icon:"fa-cog",             label:"Settings",            screen:"settings"      },
+    { icon:"fa-leaf",            label:"Zero Emissions",      screen:"zeroemissions" },
+    { icon:"fa-info-circle",     label:"About EcoCharge",     screen:"about"         },
+    { icon:"fa-shield-alt",      label:"Privacy Policy",      screen:"privacypolicy" },
+    { icon:"fa-file-contract",   label:"Terms & Conditions",  screen:"terms"         },
+    { icon:"fa-undo",            label:"Refund Policy",       screen:"refund"        },
   ];
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="My Profile" sub="Account & activity" onMenu={onMenu}/>
-      <div style={{ flex:1,overflowY:"auto",padding:"20px 14px 100px" }}>
+      <div style={{ padding:"calc(14px + env(safe-area-inset-top,34px)) 18px 14px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
+        <button onClick={onMenu} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
+          <i className="fas fa-bars" style={{ fontSize:20,color:T.mutedLight }}/>
+        </button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:800,fontSize:20,color:T.text }}>My Profile</div>
+          <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>Account & Activity</div>
+        </div>
+        <div style={{ position:"relative" }}>
+          <button onClick={()=>go("notifications")} className="tap" style={{ background:"none",border:"none",padding:6,display:"flex" }}>
+            <i className="fas fa-bell" style={{ fontSize:19,color:T.text }}/>
+          </button>
+          {user?.id && <UnreadBadge userId={user.id}/>}
+        </div>
+        <button onClick={()=>go("settings")} className="tap" style={{ background:"none",border:"none",padding:6,display:"flex" }}>
+          <i className="fas fa-cog" style={{ fontSize:19,color:T.text }}/>
+        </button>
+      </div>
+
+      <div style={{ flex:1,overflowY:"auto",padding:"18px 14px 100px" }}>
         {user ? (
           <>
-            <div className="fade" style={{ background:T.highlightGrad2,borderRadius:18,padding:"24px",marginBottom:16,border:`1px solid ${T.greenDim}`,textAlign:"center" }}>
-              <div style={{ position:"relative",display:"inline-block",marginBottom:14 }}>
-                <div style={{ width:82,height:82,borderRadius:"50%",overflow:"hidden",border:`3px solid ${T.green}`,margin:"0 auto" }}>
-                  {avatar
-                    ? <img src={avatar} alt="avatar" style={{ width:"100%",height:"100%",objectFit:"cover" }}/>
-                    : <div style={{ width:"100%",height:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center" }}><i className="fas fa-user" style={{ fontSize:34,color:"#000" }}/></div>
-                  }
+            <div className="fade" style={{ background:T.highlightGrad2,borderRadius:20,padding:"22px",marginBottom:18,border:`1px solid ${T.greenDim}` }}>
+              <div style={{ display:"flex",alignItems:"flex-start",gap:16,marginBottom:18 }}>
+                <div style={{ position:"relative",flexShrink:0 }}>
+                  <div style={{ width:78,height:78,borderRadius:"50%",overflow:"hidden",border:`2.5px solid ${T.green}` }}>
+                    {avatar
+                      ? <img src={avatar} alt="avatar" style={{ width:"100%",height:"100%",objectFit:"cover" }}/>
+                      : <div style={{ width:"100%",height:"100%",background:"rgba(34,197,94,0.12)",display:"flex",alignItems:"center",justifyContent:"center" }}><i className="fas fa-user" style={{ fontSize:32,color:T.green }}/></div>
+                    }
+                  </div>
+                  <button onClick={()=>fileRef.current?.click()} className="tap" disabled={avatarSaving}
+                    style={{ position:"absolute",bottom:-2,right:-2,width:26,height:26,borderRadius:"50%",background:T.card,border:`2px solid ${T.bg}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:avatarSaving?"default":"pointer" }}>
+                    {avatarSaving?<Spinner/>:<i className="fas fa-camera" style={{ fontSize:10,color:T.green }}/>}
+                  </button>
+                  <input ref={fileRef} type="file" accept="image/*" onChange={handlePhoto} style={{ display:"none" }}/>
                 </div>
-                <button onClick={()=>fileRef.current?.click()} className="tap" disabled={avatarSaving}
-                  style={{ position:"absolute",bottom:-2,right:-2,width:28,height:28,borderRadius:"50%",background:T.green,border:`2px solid ${T.bg}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:avatarSaving?"default":"pointer" }}>
-                  {avatarSaving?<Spinner/>:<i className="fas fa-camera" style={{ fontSize:11,color:"#000" }}/>}
-                </button>
-                <input ref={fileRef} type="file" accept="image/*" onChange={handlePhoto} style={{ display:"none" }}/>
+                <div style={{ flex:1,minWidth:0,paddingTop:2 }}>
+                  <div style={{ fontWeight:800,fontSize:19,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{(user.name||user.email?.split("@")[0]||"").replace(/\s/g,"")}</div>
+                  <div style={{ fontSize:13,color:T.muted,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user.email||user.phone}</div>
+                  <div style={{ display:"inline-flex",alignItems:"center",gap:6,background:"rgba(34,197,94,0.15)",borderRadius:8,padding:"4px 10px",marginTop:10 }}>
+                    <i className="fas fa-check-circle" style={{ fontSize:11,color:T.green }}/>
+                    <span style={{ fontSize:11,fontWeight:700,color:T.green }}>Active Member</span>
+                  </div>
+                </div>
               </div>
+              <div style={{ position:"absolute",top:22,right:22 }}>
+                <button className="tap" style={{ background:"none",border:`1px solid ${T.green}55`,borderRadius:10,padding:"8px 14px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:7 }}>
+                  <i className="fas fa-pencil-alt" style={{ fontSize:11 }}/> Edit Profile
+                </button>
+              </div>
+
               {avatarErr&&(
-                <div style={{ background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.25)",borderRadius:10,padding:"10px 14px",marginBottom:12,color:T.red,fontSize:11,lineHeight:1.6,textAlign:"left" }}>
+                <div style={{ background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.25)",borderRadius:10,padding:"10px 14px",marginBottom:14,color:T.red,fontSize:11,lineHeight:1.6 }}>
                   <i className="fas fa-exclamation-triangle" style={{ marginRight:6 }}/>{avatarErr}
                 </div>
               )}
-              <div style={{ fontWeight:800,fontSize:20,color:T.text }}>{user.name||user.email?.split("@")[0]}</div>
-              <div style={{ fontSize:12,color:T.muted,marginTop:4,marginBottom:12 }}>{user.email||user.phone}</div>
-              <Badge label="Active Member" color={T.green}/>
-              <div style={{marginTop:16,width:"100%",background:T.innerTint,borderRadius:14,padding:"14px 16px",border:`1px solid ${tierColor}33`}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:20}}>{"Bronze"===loyaltyData.tier?"🥉":"Silver"===loyaltyData.tier?"🥈":"Gold"===loyaltyData.tier?"🥇":"💎"}</span>
-                    <div><div style={{fontWeight:800,fontSize:15,color:tierColor}}>{loyaltyData.tier}</div><div style={{fontSize:11,color:T.muted}}>Loyalty Tier</div></div>
+
+              <div style={{ background:"rgba(0,0,0,0.22)",borderRadius:16,padding:"16px",display:"flex",gap:14 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}>
+                    <span style={{ fontSize:22 }}>{tierMedal}</span>
+                    <div>
+                      <div style={{ fontWeight:800,fontSize:15,color:tierColor }}>{loyaltyData.tier}</div>
+                      <div style={{ fontSize:11,color:T.muted }}>Loyalty Tier</div>
+                    </div>
+                    <div style={{ marginLeft:"auto",textAlign:"right" }}>
+                      <div style={{ fontWeight:900,fontSize:20,color:T.text }}>{loyaltyData.points.toLocaleString()}</div>
+                      <div style={{ fontSize:10,color:T.muted }}>points</div>
+                    </div>
                   </div>
-                  <div style={{textAlign:"right"}}><div style={{fontWeight:900,fontSize:22,color:tierColor}}>{loyaltyData.points.toLocaleString()}</div><div style={{fontSize:11,color:T.muted}}>points</div></div>
+                  <div style={{ height:5,borderRadius:3,background:T.track,overflow:"hidden",marginBottom:6 }}>
+                    <div style={{ height:"100%",width:`${tierPct}%`,background:tierColor,borderRadius:3,transition:"width 1s ease" }}/>
+                  </div>
+                  <div style={{ fontSize:10,color:T.muted }}>{loyaltyData.tier==="Platinum"?"Max tier reached!":`${tierNext-loyaltyData.points} points to next tier`}</div>
                 </div>
-                <div style={{height:6,borderRadius:3,background:T.track,overflow:"hidden",marginBottom:6}}>
-                  <div style={{height:"100%",width:`${tierPct}%`,background:`linear-gradient(90deg,${tierColor},${tierColor}99)`,borderRadius:3,transition:"width 1s ease"}}/>
+                <div style={{ width:1,background:T.border,alignSelf:"stretch" }}/>
+                <div style={{ flex:1,display:"flex",flexDirection:"column",gap:10,justifyContent:"center" }}>
+                  {[
+                    { icon:"fa-star", label:"Earn points", sub:"Every charge" },
+                    { icon:"fa-gift", label:"Redeem rewards", sub:"Great offers & more" },
+                  ].map(r=>(
+                    <div key={r.label} className="tap" style={{ display:"flex",alignItems:"center",gap:10,cursor:"pointer" }}>
+                      <div style={{ width:30,height:30,borderRadius:8,background:"rgba(34,197,94,0.15)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                        <i className={`fas ${r.icon}`} style={{ fontSize:12,color:T.green }}/>
+                      </div>
+                      <div style={{ flex:1,minWidth:0 }}>
+                        <div style={{ fontWeight:700,fontSize:12,color:T.text }}>{r.label}</div>
+                        <div style={{ fontSize:10,color:T.muted }}>{r.sub}</div>
+                      </div>
+                      <i className="fas fa-chevron-right" style={{ fontSize:11,color:T.muted,flexShrink:0 }}/>
+                    </div>
+                  ))}
                 </div>
-                <div style={{fontSize:11,color:T.muted,textAlign:"right"}}>{loyaltyData.tier==="Platinum"?"Max tier reached!":`${tierNext-loyaltyData.points} points to next tier`}</div>
               </div>
             </div>
-            <div className="fade1" style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16 }}>
-              {[{ label:"Total Charges",value:totalCharges,color:T.green,icon:"fa-bolt" },{ label:"CO₂ Saved",value:`${co2Saved} kg`,color:T.green,icon:"fa-leaf" },{ label:"Water Received",value:`${waterReceived} L`,color:T.blue,icon:"fa-tint" },{ label:"Total Spent",value:`GH₵${totalSpent}`,color:T.yellow,icon:"fa-money-bill-alt" }].map(s=>(
-                <div key={s.label} style={{ background:T.card,borderRadius:14,padding:"16px",border:`1px solid ${T.border}`,textAlign:"center" }}>
-                  <i className={`fas ${s.icon}`} style={{ fontSize:20,color:s.color,marginBottom:8,display:"block" }}/>
-                  <div style={{ fontSize:10,color:T.muted,marginBottom:5,textTransform:"uppercase",letterSpacing:0.5 }}>{s.label}</div>
-                  <div style={{ fontWeight:800,fontSize:22,color:s.color }}>{s.value}</div>
+
+            <div style={{ fontSize:11,color:T.muted,fontWeight:700,letterSpacing:0.6,textTransform:"uppercase",marginBottom:10 }}>Your Impact</div>
+            <div className="fade1" style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:16 }}>
+              {[
+                { label:"Total Charges", sub:"session"+(totalCharges===1?"":"s"), value:totalCharges,       color:T.green,  icon:"fa-bolt" },
+                { label:"CO₂ Saved",     sub:"emissions",  value:`${co2Saved} kg`,   color:T.green,  icon:"fa-leaf" },
+                { label:"Water Received",sub:"conserved",  value:`${waterReceived} L`,color:T.blue,   icon:"fa-tint" },
+                { label:"Total Spent",   sub:"this month", value:`GH₵${totalSpent}`, color:T.yellow, icon:"fa-money-bill-alt" },
+              ].map(s=>(
+                <div key={s.label} style={{ background:T.card,borderRadius:14,padding:"14px 6px",border:`1px solid ${T.border}`,textAlign:"center" }}>
+                  <i className={`fas ${s.icon}`} style={{ fontSize:16,color:s.color,marginBottom:8,display:"block" }}/>
+                  <div style={{ fontSize:8,color:T.muted,marginBottom:6,textTransform:"uppercase",letterSpacing:0.3,lineHeight:1.3 }}>{s.label}</div>
+                  <div style={{ fontWeight:800,fontSize:16,color:s.color }}>{s.value}</div>
+                  <div style={{ fontSize:9,color:T.muted,marginTop:4 }}>{s.sub}</div>
                 </div>
               ))}
             </div>
-            <div className="fade2" style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,marginBottom:16,overflow:"hidden" }}>
-              {menuItems.map((item,i)=>(
-                <div key={item.label} className="tap row" onClick={()=>go(item.screen)}
-                  style={{ display:"flex",alignItems:"center",gap:14,padding:"16px",borderBottom:i<menuItems.length-1?`1px solid ${T.border}20`:"none",cursor:"pointer" }}>
+
+            <div className="fade1" style={{ borderRadius:18,marginBottom:20,overflow:"hidden",position:"relative",minHeight:120,border:`1px solid ${T.greenDim}` }}>
+              <img src="/station2.jpg" alt="" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.4) saturate(1.2)" }} onError={e=>{ e.target.style.display="none"; }}/>
+              <div style={{ position:"absolute",inset:0,background:"linear-gradient(90deg,rgba(5,15,8,0.75) 0%,rgba(5,15,8,0.5) 100%)" }}/>
+              <div style={{ position:"relative",zIndex:2,padding:"18px",display:"flex",alignItems:"center",gap:14 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontWeight:800,fontSize:15,color:"#fff",marginBottom:6,lineHeight:1.3 }}>Thank you for choosing EcoCharge!</div>
+                  <div style={{ fontSize:12,color:"rgba(255,255,255,0.7)",lineHeight:1.6 }}>You're helping build a cleaner, greener Ghana.</div>
+                </div>
+                <div style={{ width:52,height:52,borderRadius:"50%",background:"rgba(34,197,94,0.15)",border:`1px solid ${T.green}55`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                  <i className="fas fa-leaf" style={{ fontSize:20,color:T.green }}/>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ fontSize:11,color:T.muted,fontWeight:700,letterSpacing:0.6,textTransform:"uppercase",marginBottom:10 }}>Quick Access</div>
+            <div className="fade2" style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,marginBottom:20,overflow:"hidden" }}>
+              {quickAccess.map((item,i)=>(
+                <div key={item.label} className="tap row" onClick={()=>item.screen.startsWith("__toast_")?setToast(item.label):go(item.screen)}
+                  style={{ display:"flex",alignItems:"center",gap:14,padding:"15px 16px",borderBottom:i<quickAccess.length-1?`1px solid ${T.border}20`:"none",cursor:"pointer" }}>
+                  <div style={{ width:38,height:38,borderRadius:10,background:"rgba(34,197,94,0.12)",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                    <i className={`fas ${item.icon}`} style={{ fontSize:15,color:T.green }}/>
+                  </div>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ color:T.text,fontSize:14,fontWeight:600 }}>{item.label}</div>
+                    <div style={{ color:T.muted,fontSize:11,marginTop:2 }}>{item.sub}</div>
+                  </div>
+                  <i className="fas fa-chevron-right" style={{ fontSize:12,color:T.muted }}/>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ fontSize:11,color:T.muted,fontWeight:700,letterSpacing:0.6,textTransform:"uppercase",marginBottom:10 }}>Account</div>
+            <div className="fade2" style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,marginBottom:20,overflow:"hidden" }}>
+              {accountItems.map((item,i)=>(
+                <div key={item.label} className="tap row" onClick={()=>item.screen.startsWith("__toast_")?setToast(item.label):go(item.screen)}
+                  style={{ display:"flex",alignItems:"center",gap:14,padding:"15px 16px",borderBottom:i<accountItems.length-1?`1px solid ${T.border}20`:"none",cursor:"pointer" }}>
                   <div style={{ width:36,height:36,borderRadius:10,background:T.surface,display:"flex",alignItems:"center",justifyContent:"center" }}>
-                    <i className={`fas ${item.icon}`} style={{ fontSize:15,color:T.mutedLight }}/>
+                    <i className={`fas ${item.icon}`} style={{ fontSize:14,color:T.mutedLight }}/>
                   </div>
                   <span style={{ color:T.text,fontSize:14,fontWeight:500,flex:1 }}>{item.label}</span>
                   <i className="fas fa-chevron-right" style={{ fontSize:12,color:T.muted }}/>
                 </div>
               ))}
             </div>
+
             <button onClick={()=>setUser(null)} className="tap"
               style={{ width:"100%",background:"rgba(248,113,113,.07)",border:"1px solid rgba(248,113,113,.2)",borderRadius:12,padding:"14px",fontSize:14,fontWeight:600,color:T.red,cursor:"pointer",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontFamily:"inherit" }}>
               <i className="fas fa-sign-out-alt"/> Sign Out
@@ -6939,24 +7069,57 @@ function VehicleDetail({ go, vehicle, user, onEdit, onDelete, onSetDefault, onSt
   );
 }
 // ── MY VEHICLES LIST SCREEN ───────────────────────────────────
+// ── PER-VEHICLE MANUAL CHARGE LEVEL (locally stored — no live telemetry exists) ──
+const VEHICLE_CHARGE_KEY = "eco_vehicle_charge_levels";
+const loadChargeLevels = () => {
+  try { return JSON.parse(localStorage.getItem(VEHICLE_CHARGE_KEY) || "{}"); } catch(e) { return {}; }
+};
+const saveChargeLevel = (vehicleId, pct) => {
+  const all = loadChargeLevels();
+  all[vehicleId] = pct;
+  try { localStorage.setItem(VEHICLE_CHARGE_KEY, JSON.stringify(all)); } catch(e) {}
+  return all;
+};
+
+function ChargeLevelModal({ T, vehicle, currentPct, onClose, onSave }) {
+  const [pct, setPct] = useState(currentPct);
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:400,display:"flex",alignItems:"flex-end",justifyContent:"center" }}>
+      <div style={{ background:T.card,borderRadius:"20px 20px 0 0",padding:"22px 20px 36px",width:"100%",maxWidth:480,border:`1px solid ${T.border}` }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6 }}>
+          <div style={{ fontWeight:800,fontSize:16,color:T.text }}>Update Charge Level</div>
+          <button onClick={onClose} className="tap" style={{ background:"none",border:"none",color:T.muted,fontSize:18,cursor:"pointer" }}><i className="fas fa-times"/></button>
+        </div>
+        <div style={{ fontSize:12,color:T.muted,marginBottom:18 }}>{vehicle.nickname} — check your dashboard and set the current level.</div>
+        <div style={{ textAlign:"center",fontWeight:900,fontSize:40,color:pct<20?T.red:pct<50?T.yellow:T.green,marginBottom:16 }}>{pct}%</div>
+        <input type="range" min={0} max={100} value={pct} onChange={e=>setPct(parseInt(e.target.value))} style={{ width:"100%",accentColor:T.green,marginBottom:20 }}/>
+        <button onClick={()=>onSave(pct)} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── MY VEHICLES LIST SCREEN ───────────────────────────────────
 function MyVehicles({ go, user }) {
   const [vehicles,     setVehicles]     = useState([]);
   const [loading,      setLoading]      = useState(true);
-  const [selectedVeh,  setSelectedVeh]  = useState(null); // for detail view
-  const [editingVeh,   setEditingVeh]   = useState(null); // for edit form
+  const [selectedVeh,  setSelectedVeh]  = useState(null);
+  const [editingVeh,   setEditingVeh]   = useState(null);
   const [showForm,     setShowForm]     = useState(false);
-  const [statsMap,     setStatsMap]     = useState({});   // vehicleId -> stats
-  const [totalStats,   setTotalStats]   = useState({ sessions:0, kwh:0, cost:0 });
+  const [chargeLevels, setChargeLevels] = useState(()=>loadChargeLevels());
+  const [chargeModalVeh, setChargeModalVeh] = useState(null);
+  const [primaryId,    setPrimaryId]    = useState(null);
+  const [menuOpenId,   setMenuOpenId]   = useState(null);
 
   const loadVehicles = async () => {
     setLoading(true);
     const data = await loadUserVehicles(user?.id);
     setVehicles(data);
-    // Load aggregate stats
-    if (user?.id) {
-      const allStats = await loadVehicleStats(user.id, null);
-      setTotalStats(allStats);
-    }
+    const def = data.find(v=>v.is_default) || data[0];
+    if (def) setPrimaryId(def.id);
     setLoading(false);
   };
 
@@ -6965,15 +7128,17 @@ function MyVehicles({ go, user }) {
   const handleDelete = async (id) => {
     await deleteVehicle(id);
     setVehicles(prev=>prev.filter(v=>v.id!==id));
+    setMenuOpenId(null);
   };
 
-  const handleSetDefault = async (vehicle) => {
-    // Clear all defaults then set new one
+  const handleSetPrimary = async (vehicle) => {
     for (const v of vehicles) {
       if (v.is_default && v.id!==vehicle.id) await updateVehicle(v.id, { is_default:false });
     }
     await updateVehicle(vehicle.id, { is_default:true });
     setVehicles(prev=>prev.map(v=>({ ...v, is_default: v.id===vehicle.id })));
+    setPrimaryId(vehicle.id);
+    setMenuOpenId(null);
   };
 
   const handleSaved = (savedVeh) => {
@@ -6986,16 +7151,20 @@ function MyVehicles({ go, user }) {
     setEditingVeh(null);
   };
 
-  const typeIcon = (type) => VEHICLE_TYPE_ICON[type] || "fa-bolt";
+  const chargePct = (v) => chargeLevels[v.id] ?? 80;
+  const rangeKm = (v, pct) => v.estimated_range ? Math.round(v.estimated_range * (pct/100)) : null;
+  const chargeColor = (pct) => pct<30?T.yellow:T.green;
 
-  const batteryColor = (pct) => (pct||0) > 60 ? T.green : (pct||0) > 30 ? T.yellow : T.red;
+  const saveCharge = (vehicleId, pct) => {
+    const updated = saveChargeLevel(vehicleId, pct);
+    setChargeLevels(updated);
+    setChargeModalVeh(null);
+  };
 
-  // Route to form screens
   if (showForm || editingVeh) {
     return <VehicleForm go={(s)=>{ setShowForm(false); setEditingVeh(null); if(s!=="myvehicles") go(s); }} user={user} editVehicle={editingVeh} onSaved={handleSaved}/>;
   }
 
-  // Route to detail screen
   if (selectedVeh) {
     return <VehicleDetail
       go={(s)=>{ if(s==="myvehicles") setSelectedVeh(null); else go(s); }}
@@ -7003,10 +7172,13 @@ function MyVehicles({ go, user }) {
       user={user}
       onEdit={(v)=>{ setEditingVeh(v); setSelectedVeh(null); }}
       onDelete={(id)=>{ handleDelete(id); setSelectedVeh(null); }}
-      onSetDefault={handleSetDefault}
+      onSetDefault={handleSetPrimary}
       onStartCharging={(v)=>{ go("detail"); }}
     />;
   }
+
+  const primary = vehicles.find(v=>v.id===primaryId) || vehicles[0];
+  const otherVehicles = vehicles.filter(v=>v.id !== primary?.id);
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
@@ -7015,22 +7187,19 @@ function MyVehicles({ go, user }) {
           <i className="fas fa-arrow-left" style={{ fontSize:20,color:T.text }}/>
         </button>
         <div style={{ flex:1 }}>
-          <div style={{ fontWeight:800,fontSize:16,color:T.text }}>My Vehicles</div>
-          <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{vehicles.length} vehicle{vehicles.length!==1?"s":""} registered</div>
+          <div style={{ fontWeight:800,fontSize:20,color:T.text }}>My Vehicles</div>
+          <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>Manage your vehicles</div>
         </div>
         <button onClick={()=>setShowForm(true)} className="tap"
-          style={{ background:`${T.green}18`,border:`1px solid ${T.green}44`,borderRadius:20,padding:"8px 16px",fontSize:13,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}>
-          <i className="fas fa-plus"/> Add
+          style={{ background:`${T.green}18`,border:`1px solid ${T.green}44`,borderRadius:12,padding:"10px 16px",fontSize:13,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:8 }}>
+          <i className="fas fa-plus"/> Add Vehicle
         </button>
       </div>
 
       <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
 
-        {loading&&(
-          <div style={{ textAlign:"center",padding:"60px 0" }}><Spinner/></div>
-        )}
+        {loading&&<div style={{ textAlign:"center",padding:"60px 0" }}><Spinner/></div>}
 
-        {/* Empty state */}
         {!loading&&vehicles.length===0&&(
           <div className="fade" style={{ textAlign:"center",padding:"60px 20px" }}>
             <div style={{ width:120,height:120,borderRadius:"50%",background:T.highlightGrad2,border:`2px solid ${T.greenDim}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px" }}>
@@ -7042,138 +7211,214 @@ function MyVehicles({ go, user }) {
               style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px 32px",fontSize:15,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:10,boxShadow:`0 4px 24px rgba(34,197,94,0.35)` }}>
               <i className="fas fa-plus"/> Add Your First Vehicle
             </button>
-            <div style={{ marginTop:28,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12 }}>
-              {[{ icon:"fa-bolt",text:"Smart charging sessions" },{ icon:"fa-tint",text:"20L clean water per charge" },{ icon:"fa-leaf",text:"Track CO₂ savings" }].map(f=>(
-                <div key={f.text} style={{ background:T.card,borderRadius:14,padding:"14px 8px",border:`1px solid ${T.border}`,textAlign:"center" }}>
-                  <i className={`fas ${f.icon}`} style={{ fontSize:20,color:T.green,marginBottom:8,display:"block" }}/>
-                  <div style={{ fontSize:10,color:T.muted,lineHeight:1.4 }}>{f.text}</div>
-                </div>
-              ))}
-            </div>
           </div>
         )}
 
-        {/* Stats banner (when vehicles exist) */}
-        {!loading&&vehicles.length>0&&(
+        {!loading&&primary&&(
           <>
-            <div className="fade" style={{ background:T.highlightGrad2,borderRadius:18,padding:"16px",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
-              <div style={{ fontWeight:700,fontSize:12,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12 }}>Fleet Overview</div>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",gap:8 }}>
+            {/* Primary vehicle hero card */}
+            <div className="fade" style={{ background:T.highlightGrad2,borderRadius:20,border:`1.5px solid ${T.green}`,padding:"18px",marginBottom:16,position:"relative" }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14 }}>
+                <div style={{ display:"inline-flex",alignItems:"center",gap:6,background:"rgba(34,197,94,0.15)",borderRadius:8,padding:"5px 10px" }}>
+                  <i className="fas fa-star" style={{ fontSize:11,color:T.green }}/>
+                  <span style={{ fontSize:11,fontWeight:700,color:T.green }}>Primary Vehicle</span>
+                </div>
+                <button onClick={()=>setMenuOpenId(menuOpenId===primary.id?null:primary.id)} className="tap"
+                  style={{ background:"none",border:"none",color:T.muted,cursor:"pointer",padding:4 }}>
+                  <i className="fas fa-ellipsis-v"/>
+                </button>
+                {menuOpenId===primary.id&&(
+                  <div style={{ position:"absolute",top:40,right:16,background:T.card,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",zIndex:20,minWidth:150,boxShadow:"0 8px 24px rgba(0,0,0,0.4)" }}>
+                    <div className="tap row" onClick={()=>{ setEditingVeh(primary); setMenuOpenId(null); }} style={{ padding:"12px 16px",fontSize:13,color:T.text,display:"flex",alignItems:"center",gap:10,cursor:"pointer" }}>
+                      <i className="fas fa-pencil-alt" style={{ width:14 }}/> Edit
+                    </div>
+                    <div className="tap row" onClick={()=>handleDelete(primary.id)} style={{ padding:"12px 16px",fontSize:13,color:T.red,display:"flex",alignItems:"center",gap:10,cursor:"pointer",borderTop:`1px solid ${T.border}` }}>
+                      <i className="fas fa-trash" style={{ width:14 }}/> Delete
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display:"flex",gap:14 }}>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ fontWeight:900,fontSize:22,color:T.text,marginBottom:2 }}>{primary.nickname}</div>
+                  <div style={{ fontSize:13,color:T.muted,marginBottom:12 }}>{primary.vehicle_type||"Electric Sedan"}</div>
+                  {primary.registration_number&&(
+                    <div style={{ display:"inline-flex",alignItems:"center",gap:6,background:"rgba(0,0,0,0.3)",borderRadius:8,padding:"6px 10px" }}>
+                      <span style={{ fontSize:14 }}>🇬🇭</span>
+                      <span style={{ fontSize:12,fontWeight:700,color:T.text,letterSpacing:0.5 }}>{primary.registration_number}</span>
+                    </div>
+                  )}
+                </div>
+                <div style={{ width:130,height:90,borderRadius:12,overflow:"hidden",flexShrink:0,background:T.surfaceFaint,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                  {primary.image_url
+                    ? <img src={primary.image_url} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} onError={e=>e.target.style.display="none"}/>
+                    : <i className={`fas ${VEHICLE_TYPE_ICON[primary.vehicle_type]||"fa-car"}`} style={{ fontSize:32,color:T.green,opacity:0.4 }}/>}
+                </div>
+              </div>
+
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,margin:"16px 0" }}>
                 {[
-                  { label:"Sessions",     value:totalStats.sessions,                          color:T.green  },
-                  { label:"kWh",          value:totalStats.kwh.toFixed(0),                    color:T.blue   },
-                  { label:"GH₵ Spent",    value:((totalStats.cost||0)/100).toFixed(0),        color:T.yellow },
-                  { label:"kg CO₂",       value:(totalStats.kwh*0.5).toFixed(1),              color:T.green  },
-                  { label:"Water (L)",    value:(totalStats.sessions*20),                      color:T.blue   },
+                  { label:"Battery Capacity", value:primary.battery_capacity?`${primary.battery_capacity} kWh`:"—", icon:"fa-briefcase" },
+                  { label:"Max Range (WLTP)", value:primary.estimated_range?`${primary.estimated_range} km`:"—", icon:"fa-road" },
+                  { label:"Vehicle Type", value:"BEV", icon:"fa-bolt" },
                 ].map(s=>(
                   <div key={s.label} style={{ textAlign:"center" }}>
-                    <div style={{ fontWeight:900,fontSize:18,color:s.color,lineHeight:1 }}>{s.value}</div>
-                    <div style={{ fontSize:9,color:T.muted,marginTop:4,textTransform:"uppercase",letterSpacing:0.3 }}>{s.label}</div>
+                    <div style={{ fontSize:10,color:T.muted,marginBottom:6 }}>{s.label}</div>
+                    <div style={{ fontWeight:800,fontSize:16,color:T.text,marginBottom:6 }}>{s.value}</div>
+                    <i className={`fas ${s.icon}`} style={{ fontSize:13,color:T.green }}/>
                   </div>
                 ))}
               </div>
-            </div>
 
-            {/* Vehicle cards */}
-            {vehicles.map((v,i)=>(
-              <div key={v.id} className="fade tap"
-                style={{ background:T.card,borderRadius:20,border:`1px solid ${v.is_default?T.green:T.border}`,marginBottom:14,overflow:"hidden",position:"relative",transition:"all .15s" }}
-                onClick={()=>setSelectedVeh(v)}>
-
-                {/* Card hero */}
-                <div style={{ height:130,position:"relative",overflow:"hidden",background:`linear-gradient(135deg,#051a0a,#0a2d12)` }}>
-                  {v.image_url ? (
-                    <img src={v.image_url} alt={v.model} style={{ width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.7)" }} onError={e=>e.target.style.display="none"}/>
-                  ) : (
-                    <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"flex-end",padding:"0 24px" }}>
-                      <i className={`fas ${typeIcon(v.vehicle_type)}`} style={{ fontSize:64,color:T.green,opacity:0.18 }}/>
-                    </div>
-                  )}
-                  <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,transparent 40%,rgba(0,0,0,0.6) 100%)" }}/>
-
-                  {/* Color dot */}
-                  {v.color&&<div style={{ position:"absolute",top:12,right:12,width:16,height:16,borderRadius:"50%",background:v.color,border:`2px solid rgba(255,255,255,0.3)` }}/>}
-
-                  {/* Default badge */}
-                  {v.is_default&&(
-                    <div style={{ position:"absolute",top:12,left:12,background:`${T.green}cc`,borderRadius:8,padding:"3px 10px",display:"flex",alignItems:"center",gap:5 }}>
-                      <i className="fas fa-star" style={{ fontSize:9,color:"#000" }}/>
-                      <span style={{ fontSize:10,fontWeight:700,color:"#000" }}>Default</span>
-                    </div>
-                  )}
-
-                  <div style={{ position:"absolute",bottom:10,left:14 }}>
-                    <div style={{ fontWeight:800,fontSize:17,color:"#fff" }}>{v.nickname}</div>
-                    <div style={{ fontSize:11,color:"rgba(255,255,255,0.7)",marginTop:2 }}>{v.year} {v.manufacturer} {v.model}</div>
-                  </div>
+              <div onClick={()=>setChargeModalVeh(primary)} className="tap"
+                style={{ background:"rgba(0,0,0,0.28)",borderRadius:14,padding:"14px 16px",display:"flex",alignItems:"center",gap:16,cursor:"pointer" }}>
+                <div style={{ position:"relative",width:60,height:60 }}>
+                  <svg width="60" height="60" style={{ transform:"rotate(-90deg)" }}>
+                    <circle cx="30" cy="30" r="26" fill="none" stroke={T.track} strokeWidth="6"/>
+                    <circle cx="30" cy="30" r="26" fill="none" stroke={chargeColor(chargePct(primary))} strokeWidth="6"
+                      strokeDasharray={`${2*Math.PI*26}`} strokeDashoffset={`${2*Math.PI*26*(1-chargePct(primary)/100)}`} strokeLinecap="round"/>
+                  </svg>
+                  <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:14,color:T.text }}>{chargePct(primary)}%</div>
                 </div>
-
-                {/* Card body */}
-                <div style={{ padding:"14px 16px" }}>
-                  <div style={{ display:"flex",gap:8,marginBottom:14,flexWrap:"wrap" }}>
-                    <Badge label={v.vehicle_type||"EV"} color={T.blue}/>
-                    {v.connector_type&&<Badge label={v.connector_type} color={T.muted}/>}
-                    {v.battery_capacity&&<Badge label={`${v.battery_capacity} kWh`} color={T.green}/>}
-                    {v.registration_number&&<Badge label={v.registration_number} color={T.mutedLight}/>}
-                  </div>
-
-                  {v.estimated_range&&(
-                    <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:14 }}>
-                      <div style={{ flex:1,height:4,background:T.track,borderRadius:2,overflow:"hidden" }}>
-                        <div style={{ height:"100%",width:`${Math.min(100,(v.estimated_range/700)*100)}%`,background:`linear-gradient(90deg,${T.green},${T.blue})`,borderRadius:2 }}/>
-                      </div>
-                      <span style={{ fontSize:11,color:T.muted,flexShrink:0 }}>~{v.estimated_range} km range</span>
-                    </div>
-                  )}
-
-                  {/* Quick action buttons */}
-                  <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
-                    <button onClick={e=>{ e.stopPropagation(); go("detail"); }} className="tap"
-                      style={{ background:`${T.green}18`,border:`1px solid ${T.green}33`,borderRadius:10,padding:"10px 6px",fontSize:11,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
-                      <i className="fas fa-bolt" style={{ fontSize:11 }}/> Charge
-                    </button>
-                    <button onClick={e=>{ e.stopPropagation(); setEditingVeh(v); }} className="tap"
-                      style={{ background:T.surfaceFaint,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 6px",fontSize:11,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
-                      <i className="fas fa-pencil-alt" style={{ fontSize:11 }}/> Edit
-                    </button>
-                    <button onClick={e=>{ e.stopPropagation(); handleDelete(v.id); }} className="tap"
-                      style={{ background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.2)",borderRadius:10,padding:"10px 6px",fontSize:11,fontWeight:600,color:T.red,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
-                      <i className="fas fa-trash" style={{ fontSize:11 }}/> Delete
-                    </button>
-                  </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:11,color:T.muted,marginBottom:2 }}>Current Charge</div>
+                  <div style={{ fontWeight:800,fontSize:18,color:T.text }}>{rangeKm(primary,chargePct(primary))??"—"} km</div>
+                  <div style={{ fontSize:10,color:T.muted,marginTop:1 }}>Estimated range</div>
+                </div>
+                <div className="tap" style={{ background:"none",border:`1px solid ${T.green}44`,borderRadius:10,padding:"8px 12px",display:"flex",alignItems:"center",gap:6 }}>
+                  <i className="fas fa-star" style={{ fontSize:11,color:T.green }}/>
+                  <span style={{ fontSize:11,fontWeight:700,color:T.green }}>Set as Primary</span>
                 </div>
               </div>
-            ))}
+            </div>
 
-            {/* Add more */}
+            {/* Quick actions row */}
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:20 }}>
+              {[
+                { label:"Charging\nHistory", icon:"fa-chart-bar", screen:"sessions" },
+                { label:"Usage\nStats",       icon:"fa-clock",     screen:"sessions" },
+                { label:"Settings",            icon:"fa-cog",       screen:"settings" },
+                { label:"Alerts",              icon:"fa-bell",      screen:"notifications" },
+              ].map(a=>(
+                <button key={a.label} onClick={()=>go(a.screen)} className="tap"
+                  style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"14px 6px",cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",alignItems:"center",gap:8 }}>
+                  <i className={`fas ${a.icon}`} style={{ fontSize:16,color:T.green }}/>
+                  <span style={{ fontSize:10,fontWeight:600,color:T.text,textAlign:"center",lineHeight:1.3,whiteSpace:"pre-line" }}>{a.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Your Vehicles list */}
+            <div style={{ fontWeight:800,fontSize:16,color:T.text,marginBottom:12 }}>Your Vehicles</div>
+            {vehicles.map(v=>{
+              const pct = chargePct(v);
+              const isPrimary = v.id===primary.id;
+              return (
+                <div key={v.id} className="tap row" onClick={()=>setSelectedVeh(v)}
+                  style={{ background:T.card,border:`1px solid ${isPrimary?T.green:T.border}`,borderRadius:16,padding:"12px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:12,cursor:"pointer" }}>
+                  <div style={{ width:52,height:52,borderRadius:10,overflow:"hidden",flexShrink:0,background:T.surfaceFaint,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                    {v.image_url
+                      ? <img src={v.image_url} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} onError={e=>e.target.style.display="none"}/>
+                      : <i className={`fas ${VEHICLE_TYPE_ICON[v.vehicle_type]||"fa-car"}`} style={{ fontSize:20,color:T.green,opacity:0.5 }}/>}
+                  </div>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{v.nickname}</div>
+                    {isPrimary&&<span style={{ display:"inline-block",background:"rgba(34,197,94,0.15)",color:T.green,fontSize:9,fontWeight:700,borderRadius:6,padding:"2px 7px",marginTop:3 }}>Primary</span>}
+                    <div style={{ fontSize:11,color:T.muted,marginTop:3 }}>{v.registration_number||`${v.year||""} ${v.manufacturer||""}`.trim()}</div>
+                  </div>
+                  <div style={{ textAlign:"right",flexShrink:0 }}>
+                    <div style={{ fontWeight:800,fontSize:15,color:chargeColor(pct) }}>{pct}%</div>
+                    <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{rangeKm(v,pct)??"—"} km</div>
+                  </div>
+                  <i className="fas fa-chevron-right" style={{ fontSize:13,color:T.muted,flexShrink:0 }}/>
+                </div>
+              );
+            })}
+
             <button onClick={()=>setShowForm(true)} className="tap"
-              style={{ width:"100%",background:"none",border:`2px dashed ${T.border}`,borderRadius:20,padding:"20px",fontSize:14,fontWeight:600,color:T.muted,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:16 }}>
+              style={{ width:"100%",background:"none",border:`2px dashed ${T.border}`,borderRadius:16,padding:"16px",fontSize:13,fontWeight:600,color:T.muted,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:6,marginBottom:16 }}>
               <i className="fas fa-plus" style={{ color:T.green }}/> Add Another Vehicle
             </button>
 
             {/* Security notice */}
-            <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px 16px",display:"flex",alignItems:"center",gap:14 }}>
-              <div style={{ width:40,height:40,borderRadius:10,background:`${T.green}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+            <div style={{ background:"linear-gradient(135deg,#051a0a,#0a2d12)",borderRadius:16,border:`1px solid ${T.greenDim}`,padding:"16px",display:"flex",alignItems:"center",gap:14,overflow:"hidden",position:"relative" }}>
+              <div style={{ width:40,height:40,borderRadius:10,background:`${T.green}22`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
                 <i className="fas fa-shield-alt" style={{ fontSize:16,color:T.green }}/>
               </div>
-              <div>
+              <div style={{ flex:1 }}>
                 <div style={{ fontWeight:700,fontSize:13,color:T.text }}>Vehicle data is secure</div>
                 <div style={{ fontSize:11,color:T.muted,marginTop:3,lineHeight:1.5 }}>Your vehicle information is encrypted and used only to improve your charging experience.</div>
               </div>
+              <i className="fas fa-lock" style={{ fontSize:24,color:"rgba(34,197,94,0.3)",flexShrink:0 }}/>
             </div>
           </>
         )}
       </div>
+
+      {chargeModalVeh&&(
+        <ChargeLevelModal T={T} vehicle={chargeModalVeh} currentPct={chargePct(chargeModalVeh)}
+          onClose={()=>setChargeModalVeh(null)} onSave={(pct)=>saveCharge(chargeModalVeh.id, pct)}/>
+      )}
+
       <Nav active="Profile" go={go}/>
     </div>
   );
 }
 
 // ── SETTINGS SCREEN ───────────────────────────────────────────
-function SettingsScreen({ go, user, setUser }) {
+function ComingSoonToast({ T, label, onClose }) {
+  useEffect(()=>{ const t=setTimeout(onClose,2200); return ()=>clearTimeout(t); },[]);
+  return (
+    <div style={{ position:"fixed",left:16,right:16,bottom:"calc(96px + env(safe-area-inset-bottom,0px))",zIndex:500,background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 8px 24px rgba(0,0,0,0.4)" }} className="fade">
+      <div style={{ width:34,height:34,borderRadius:10,background:`${T.yellow}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+        <i className="fas fa-tools" style={{ fontSize:14,color:T.yellow }}/>
+      </div>
+      <div style={{ fontSize:13,color:T.text,fontWeight:600 }}>{label} is coming soon</div>
+    </div>
+  );
+}
+
+function PickerModal({ T, title, options, value, onSelect, onClose }) {
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:400,display:"flex",alignItems:"flex-end",justifyContent:"center" }}>
+      <div style={{ background:T.card,borderRadius:"20px 20px 0 0",padding:"22px 20px 36px",width:"100%",maxWidth:480,border:`1px solid ${T.border}` }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16 }}>
+          <div style={{ fontWeight:800,fontSize:16,color:T.text }}>{title}</div>
+          <button onClick={onClose} className="tap" style={{ background:"none",border:"none",color:T.muted,fontSize:18,cursor:"pointer" }}><i className="fas fa-times"/></button>
+        </div>
+        {options.map(opt=>(
+          <div key={opt} onClick={()=>onSelect(opt)} className="tap row"
+            style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 4px",borderBottom:`1px solid ${T.border}20`,cursor:"pointer" }}>
+            <span style={{ fontSize:14,color:T.text,fontWeight:value===opt?700:500 }}>{opt}</span>
+            {value===opt&&<i className="fas fa-check" style={{ color:T.green,fontSize:14 }}/>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SettingsScreen({ go, user, setUser, onMenu }) {
   const { mode, toggleTheme } = useTheme();
   const [notifications, setNotifications] = useState(true);
   const [twoFactor, setTwoFactor] = useState(true);
+  const [avatar, setAvatar] = useState(null);
+  {toast&&<ComingSoonToast T={T} label={toast} onClose={()=>setToast(null)}/>}
+  const [picker, setPicker] = useState(null); // "language" | "units" | null
+  const [language, setLanguage] = useState(()=>{ try { return localStorage.getItem("eco_language")||"English"; } catch(e){ return "English"; } });
+  const [units, setUnits] = useState(()=>{ try { return localStorage.getItem("eco_units")||"Metric (km, kWh)"; } catch(e){ return "Metric (km, kWh)"; } });
+
+  useEffect(()=>{
+    if(!SUPABASE_URL||!user?.id)return;
+    fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}&select=avatar_url`,{headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}`}})
+      .then(r=>r.json()).then(d=>{if(d?.[0]?.avatar_url)setAvatar(d[0].avatar_url);}).catch(()=>{});
+  },[user]);
+
+  const showToast = (label) => setToast(label);
+
+  const saveLanguage = (v) => { setLanguage(v); try{ localStorage.setItem("eco_language",v); }catch(e){} setPicker(null); };
+  const saveUnits = (v) => { setUnits(v); try{ localStorage.setItem("eco_units",v); }catch(e){} setPicker(null); };
 
   const Section = ({ title, children }) => (
     <div style={{ marginBottom:20 }}>
@@ -7184,14 +7429,14 @@ function SettingsScreen({ go, user, setUser }) {
     </div>
   );
 
-  const Row = ({ icon, iconColor=T.green, label, sub, value, onPress, toggle, toggleValue, onToggle, last=false }) => (
+  const Row = ({ icon, iconColor=T.green, label, sub, value, onPress, toggle, toggleValue, onToggle, last=false, danger=false }) => (
     <div className={onPress||onToggle?"tap row":""} onClick={onPress}
       style={{ display:"flex",alignItems:"center",gap:14,padding:"15px 16px",borderBottom:last?"none":`1px solid ${T.border}20`,cursor:onPress?"pointer":"default" }}>
-      <div style={{ width:36,height:36,borderRadius:10,background:`${iconColor}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-        <i className={`fas ${icon}`} style={{ fontSize:15,color:iconColor }}/>
+      <div style={{ width:36,height:36,borderRadius:10,background:danger?"rgba(248,113,113,0.12)":`${iconColor}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+        <i className={`fas ${icon}`} style={{ fontSize:15,color:danger?T.red:iconColor }}/>
       </div>
       <div style={{ flex:1,minWidth:0 }}>
-        <div style={{ fontWeight:600,fontSize:14,color:T.text }}>{label}</div>
+        <div style={{ fontWeight:600,fontSize:14,color:danger?T.red:T.text }}>{label}</div>
         {sub&&<div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{sub}</div>}
       </div>
       {toggle ? (
@@ -7200,55 +7445,68 @@ function SettingsScreen({ go, user, setUser }) {
           <div style={{ width:18,height:18,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:toggleValue?23:3,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,0.3)" }}/>
         </div>
       ) : value ? (
-        <span style={{ fontSize:13,fontWeight:600,color:T.green }}>{value}</span>
+        <span style={{ fontSize:13,fontWeight:600,color:T.green,flexShrink:0 }}>{value}</span>
       ) : null}
-      {onPress&&<i className="fas fa-chevron-right" style={{ fontSize:12,color:T.muted,flexShrink:0 }}/>}
+      {(onPress||danger)&&<i className="fas fa-chevron-right" style={{ fontSize:12,color:T.muted,flexShrink:0 }}/>}
     </div>
   );
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Settings" sub="Customize your EcoCharge experience" onBack={()=>go("profile")}/>
+      <div style={{ padding:"calc(14px + env(safe-area-inset-top,34px)) 18px 14px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bg }}>
+        <button onClick={onMenu} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
+          <i className="fas fa-bars" style={{ fontSize:20,color:T.mutedLight }}/>
+        </button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:800,fontSize:20,color:T.text }}>Settings</div>
+          <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>Customize your EcoCharge experience</div>
+        </div>
+      </div>
+
       <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
 
-        {/* Profile mini card */}
         {user&&(
-          <div className="fade" style={{ background:T.highlightGrad2,borderRadius:16,padding:"16px",marginBottom:20,border:`1px solid ${T.greenDim}`,display:"flex",alignItems:"center",gap:14 }}>
-            <div style={{ width:52,height:52,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-              <i className="fas fa-user" style={{ fontSize:22,color:"#000" }}/>
+          <div className="tap fade" onClick={()=>go("profile")}
+            style={{ background:T.highlightGrad2,borderRadius:16,padding:"16px",marginBottom:20,border:`1px solid ${T.greenDim}`,display:"flex",alignItems:"center",gap:14,cursor:"pointer" }}>
+            <div style={{ width:52,height:52,borderRadius:"50%",overflow:"hidden",flexShrink:0,border:`2px solid ${T.green}` }}>
+              {avatar
+                ? <img src={avatar} alt="avatar" style={{ width:"100%",height:"100%",objectFit:"cover" }}/>
+                : <div style={{ width:"100%",height:"100%",background:"rgba(34,197,94,0.12)",display:"flex",alignItems:"center",justifyContent:"center" }}><i className="fas fa-user" style={{ fontSize:20,color:T.green }}/></div>
+              }
             </div>
             <div style={{ flex:1,minWidth:0 }}>
-              <div style={{ fontWeight:700,fontSize:15,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user.name||user.email?.split("@")[0]}</div>
+              <div style={{ fontWeight:700,fontSize:15,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{(user.name||user.email?.split("@")[0]||"").replace(/\s/g,"")}</div>
               <div style={{ fontSize:12,color:T.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user.email}</div>
-              <div style={{ display:"flex",alignItems:"center",gap:5,marginTop:5 }}>
-                <i className="fas fa-shield-alt" style={{ fontSize:10,color:T.green }}/>
-                <span style={{ fontSize:11,fontWeight:700,color:T.green }}>Active Member</span>
+              <div style={{ display:"inline-flex",alignItems:"center",gap:5,marginTop:8,background:"rgba(34,197,94,0.15)",borderRadius:7,padding:"3px 9px" }}>
+                <i className="fas fa-check-circle" style={{ fontSize:10,color:T.green }}/>
+                <span style={{ fontSize:10,fontWeight:700,color:T.green }}>Active Member</span>
               </div>
             </div>
-            <button onClick={()=>go("profile")} className="tap"
-              style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:10,padding:"8px 12px",fontSize:12,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}>
+            <button onClick={e=>{ e.stopPropagation(); go("profile"); }} className="tap"
+              style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:10,padding:"8px 12px",fontSize:12,fontWeight:600,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6,flexShrink:0 }}>
               <i className="fas fa-pencil-alt" style={{ fontSize:11 }}/> Edit Profile
             </button>
+            <i className="fas fa-chevron-right" style={{ fontSize:13,color:T.muted,flexShrink:0 }}/>
           </div>
         )}
 
         <Section title="Preferences">
           <Row icon="fa-sun" label="Appearance" sub="Choose your preferred theme" value={mode==="dark"?"Dark":"Light"} onPress={toggleTheme}/>
-          <Row icon="fa-globe" label="Language" sub="Select your app language" value="English" onPress={()=>{}}/>
+          <Row icon="fa-globe" label="Language" sub="Select your app language" value={language} onPress={()=>setPicker("language")}/>
           <Row icon="fa-bell" label="Notifications" sub="Manage push notifications" toggle toggleValue={notifications} onToggle={()=>setNotifications(v=>!v)} value={notifications?"Enabled":"Disabled"}/>
-          <Row icon="fa-tachometer-alt" label="Units" sub="Choose measurement units" value="Metric (km, kWh)" onPress={()=>{}} last/>
+          <Row icon="fa-tachometer-alt" label="Units" sub="Choose measurement units" value={units} onPress={()=>setPicker("units")} last/>
         </Section>
 
         <Section title="Account & Security">
-          <Row icon="fa-shield-alt" iconColor={T.blue} label="Security" sub="Change password, PIN & biometrics" onPress={()=>{}}/>
+          <Row icon="fa-shield-alt" iconColor={T.blue} label="Security" sub="Change password, PIN & biometrics" onPress={()=>showToast("Security settings")}/>
           <Row icon="fa-lock" iconColor={T.green} label="Two-Factor Authentication" sub="Add an extra layer of security" toggle toggleValue={twoFactor} onToggle={()=>setTwoFactor(v=>!v)} value={twoFactor?"Enabled":"Disabled"}/>
-          <Row icon="fa-mobile-alt" iconColor={T.yellow} label="Active Sessions" sub="Manage your active sessions" value="2 sessions" onPress={()=>{}} last/>
+          <Row icon="fa-mobile-alt" iconColor={T.yellow} label="Active Sessions" sub="Manage your active sessions" value="2 sessions" onPress={()=>showToast("Active session management")} last/>
         </Section>
 
         <Section title="App Settings">
           <Row icon="fa-credit-card" iconColor={T.green} label="Payment Methods" sub="Manage your payment options" onPress={()=>go("wallet")}/>
           <Row icon="fa-wallet" iconColor={T.yellow} label="Wallet Settings" sub="Auto top-up, low balance alerts" onPress={()=>go("wallet")}/>
-          <Row icon="fa-file-invoice" iconColor={T.blue} label="Download Invoices" sub="Download your invoices & receipts" onPress={()=>{}} last/>
+          <Row icon="fa-file-invoice" iconColor={T.blue} label="Download Invoices" sub="Download your invoices & receipts" onPress={()=>showToast("Invoice downloads")} last/>
         </Section>
 
         <Section title="Support & About">
@@ -7258,12 +7516,20 @@ function SettingsScreen({ go, user, setUser }) {
         </Section>
 
         {user&&(
-          <button onClick={()=>{ setUser(null); go("splash"); }} className="tap"
-            style={{ width:"100%",background:"rgba(248,113,113,.07)",border:"1px solid rgba(248,113,113,.2)",borderRadius:12,padding:"14px",fontSize:14,fontWeight:600,color:T.red,cursor:"pointer",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontFamily:"inherit" }}>
-            <i className="fas fa-sign-out-alt"/> Sign Out
-          </button>
+          <div style={{ background:"rgba(248,113,113,0.06)",borderRadius:16,border:"1px solid rgba(248,113,113,0.2)",overflow:"hidden" }}>
+            <Row icon="fa-sign-out-alt" label="Log Out" sub="Sign out of your account" onPress={()=>{ setUser(null); go("splash"); }} danger last/>
+          </div>
         )}
       </div>
+
+      {picker==="language"&&(
+        <PickerModal T={T} title="Select Language" options={["English","Twi","Ga","Ewe","Hausa","French"]} value={language} onSelect={saveLanguage} onClose={()=>setPicker(null)}/>
+      )}
+      {picker==="units"&&(
+        <PickerModal T={T} title="Select Units" options={["Metric (km, kWh)","Imperial (mi, kWh)"]} value={units} onSelect={saveUnits} onClose={()=>setPicker(null)}/>
+      )}
+      {toast&&<ComingSoonToast T={T} label={toast} onClose={()=>setToast(null)}/>}
+
       <Nav active="Profile" go={go}/>
     </div>
   );
@@ -7481,7 +7747,7 @@ function AppInner() {
     terms:          <TermsAndConditions go={goSecure}/>,
     refund:         <RefundPolicy go={goSecure}/>,
     myvehicles:     <MyVehicles go={goSecure} user={user}/>,
-    settings:       <SettingsScreen go={goSecure} user={user} setUser={setUser}/>,
+    settings:       <SettingsScreen go={goSecure} user={user} setUser={setUser} onMenu={()=>setDrawer(true)}/>,
     zeroemissions:  <ZeroEmissions go={goSecure}/>,
     home:           <Home {...props}/>,
     map:            <MapScreen {...props}/>,
