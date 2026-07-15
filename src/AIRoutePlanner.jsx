@@ -525,38 +525,81 @@ const RecommendationList = ({ T, items }) => (
   </>
 );
 
+// ── ANIMATION STYLES (pulsing live markers, glowing route) ───────
+let aiStylesInjected = false;
+const ensureAIStyles = () => {
+  if (aiStylesInjected || document.getElementById("ai-route-styles")) return;
+  const s = document.createElement("style");
+  s.id = "ai-route-styles";
+  s.textContent = `
+    @keyframes aiPulseRing { 0%{ transform:scale(0.8); opacity:0.9; } 70%{ transform:scale(2.2); opacity:0; } 100%{ opacity:0; } }
+    @keyframes aiDash { to { stroke-dashoffset: -24; } }
+    .ai-pulse-wrap { position:relative; width:18px; height:18px; }
+    .ai-pulse-ring { position:absolute; inset:0; border-radius:50%; background:rgba(56,189,248,0.55); animation:aiPulseRing 1.8s ease-out infinite; }
+    .ai-pulse-dot { position:absolute; inset:0; margin:auto; width:16px; height:16px; border-radius:50%; background:#38bdf8; border:3px solid #fff; box-shadow:0 0 10px rgba(56,189,248,0.9); }
+    .ai-stop-pulse { animation:aiPulseRing 2.4s ease-out infinite; }
+  `;
+  document.head.appendChild(s);
+  aiStylesInjected = true;
+};
+
 // ── LEAFLET LOADER ───────────────────────────────────────────────
 const loadLeaflet = () => new Promise((resolve) => {
-  if (window.L) { resolve(); return; }
-  if (!document.getElementById("lcss")) {
-    const l=document.createElement("link"); l.id="lcss"; l.rel="stylesheet"; l.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"; document.head.appendChild(l);
-  }
-  const s=document.createElement("script"); s.src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"; s.onload=resolve; document.head.appendChild(s);
-});
-
-function RouteMap({ T, route, stops, currentPos, destination }) {
+function RouteMap({ T, route, stops, currentPos, destination, origin }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
 
   useEffect(()=>{
+    ensureAIStyles();
     let cancelled = false;
     loadLeaflet().then(()=>{
       if (cancelled || !mapRef.current || mapInst.current) return;
       const L = window.L;
-      const map = L.map(mapRef.current, { attributionControl:false });
+      const map = L.map(mapRef.current, { attributionControl:false, zoomControl:false });
       L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{ maxZoom:18 }).addTo(map);
+      L.control.zoom({ position:"bottomright" }).addTo(map);
       mapInst.current = map;
+
       if (route?.coords?.length) {
-        const line = L.polyline(route.coords, { color:T.green, weight:4, opacity:0.85 }).addTo(map);
-        map.fitBounds(line.getBounds(), { padding:[24,24] });
+        // glow underlay + animated dashed line on top, like a "live" route
+        L.polyline(route.coords, { color:T.green, weight:9, opacity:0.18 }).addTo(map);
+        L.polyline(route.coords, { color:T.green, weight:4, opacity:0.9 }).addTo(map);
+        const dashLine = L.polyline(route.coords, { color:"#eaffef", weight:2, opacity:0.9, dashArray:"1,11", className:"ai-dash-line" }).addTo(map);
+        if (dashLine._path) { dashLine._path.style.animation = "aiDash 1s linear infinite"; }
+        map.fitBounds(L.latLngBounds(route.coords), { padding:[30,30] });
       }
-      stops?.forEach(s=>{
-        const icon = L.divIcon({ html:`<div style="width:30px;height:30px;border-radius:50%;background:${T.yellow};display:flex;align-items:center;justify-content:center;border:2px solid #000;font-size:14px;">⚡</div>`, className:"", iconSize:[30,30] });
-        L.marker([s.lat,s.lng],{ icon }).addTo(map).bindPopup(`${s.name}`);
+
+      // Origin marker
+      if (origin) {
+        const oIcon = L.divIcon({ html:`<div style="width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid ${T.green};box-shadow:0 0 8px rgba(0,0,0,0.5);"></div>`, className:"", iconSize:[16,16] });
+        L.marker([origin.lat,origin.lng],{ icon:oIcon }).addTo(map);
+      }
+
+      // Stop markers — permanent floating info card, like Image 1's bubbles
+      stops?.forEach((s,i)=>{
+        const bolt = L.divIcon({
+          html:`<div class="ai-pulse-wrap"><div class="ai-stop-pulse" style="position:absolute;inset:0;border-radius:50%;background:${T.yellow}66;"></div><div style="position:absolute;inset:0;margin:auto;width:26px;height:26px;border-radius:50%;background:${T.yellow};display:flex;align-items:center;justify-content:center;border:2px solid #000;font-size:12px;">⚡</div></div>`,
+          className:"", iconSize:[26,26], iconAnchor:[13,13],
+        });
+        L.marker([s.lat,s.lng],{ icon:bolt, zIndexOffset:500 }).addTo(map);
+
+        const card = L.divIcon({
+          html:`<div style="background:rgba(10,14,20,0.92);border:1px solid ${T.green}55;border-radius:10px;padding:8px 12px;min-width:150px;box-shadow:0 6px 18px rgba(0,0,0,0.5);font-family:inherit;">
+                  <div style="color:#fff;font-weight:700;font-size:12px;margin-bottom:4px;">${s.name}</div>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="color:${T.green};font-size:11px;font-weight:700;">⚡ ${s.powerKw||60} kW</span>
+                    <span style="color:#9ca3af;font-size:11px;">${s.open}/${s.bays}</span>
+                  </div>
+                  <div style="color:#9ca3af;font-size:10px;margin-top:3px;">~${s.chargeMinutes||15} min charge</div>
+                </div>`,
+          className:"", iconSize:[0,0], iconAnchor:[-16,40],
+        });
+        L.marker([s.lat,s.lng],{ icon:card, interactive:false, zIndexOffset:400 }).addTo(map);
       });
+
       if (destination) {
-        const dIcon = L.divIcon({ html:`<div style="width:26px;height:26px;border-radius:50%;background:${T.red};border:2px solid #fff;"></div>`, className:"", iconSize:[26,26] });
-        L.marker([destination.lat,destination.lng],{ icon:dIcon }).addTo(map);
+        const dIcon = L.divIcon({ html:`<div style="width:26px;height:26px;border-radius:50%;background:${T.red};border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:12px;">🏁</div>`, className:"", iconSize:[26,26] });
+        L.marker([destination.lat,destination.lng],{ icon:dIcon,zIndexOffset:600 }).addTo(map);
       }
     });
     return ()=>{ cancelled = true; if (mapInst.current) { mapInst.current.remove(); mapInst.current=null; } };
@@ -568,14 +611,14 @@ function RouteMap({ T, route, stops, currentPos, destination }) {
     const L = window.L;
     if (posMarker.current) posMarker.current.setLatLng([currentPos.lat,currentPos.lng]);
     else {
-      const icon = L.divIcon({ html:`<div style="width:18px;height:18px;border-radius:50%;background:${T.blue};border:3px solid #fff;box-shadow:0 0 0 4px rgba(56,189,248,0.3);"></div>`, className:"", iconSize:[18,18] });
-      posMarker.current = L.marker([currentPos.lat,currentPos.lng],{ icon }).addTo(mapInst.current);
+      const icon = L.divIcon({ html:`<div class="ai-pulse-wrap"><div class="ai-pulse-ring"></div><div class="ai-pulse-dot"></div></div>`, className:"", iconSize:[18,18], iconAnchor:[9,9] });
+      posMarker.current = L.marker([currentPos.lat,currentPos.lng],{ icon, zIndexOffset:700 }).addTo(mapInst.current);
+      mapInst.current.panTo([currentPos.lat,currentPos.lng]);
     }
   }, [currentPos]);
 
   return <div ref={mapRef} style={{ width:"100%",height:"100%" }}/>;
 }
-
 // ── SEARCH INPUT (Nominatim autocomplete) ──────────────────────
 function PlaceSearchInput({ T, label, icon, value, onSelect, placeholder }) {
   const [query, setQuery] = useState(value?.label || "");
@@ -1119,30 +1162,61 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
           ) : (
             <>
               <div style={{ height:220,borderRadius:18,overflow:"hidden",marginBottom:14,border:`1px solid ${T.border}` }}>
-                <RouteMap T={T} route={trip.route} stops={trip.stops} destination={toPlace}/>
+                <RouteMap T={T} route={trip.route} stops={trip.stops} destination={toPlace} origin={fromPlace}/>
               </div>
 
-              <GlassCard T={T} style={{ padding:18, marginBottom:14 }}>
-                <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:14 }}>Trip Summary</div>
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
-                  {[
-                    { label:"Distance", value:`${trip.distanceKm.toFixed(0)} km` },
-                    { label:"Estimated Drive", value:`${Math.floor(trip.driveDurationMin/60)}h ${Math.round(trip.driveDurationMin%60)}m` },
-                    { label:"Battery at Arrival", value:`${trip.batteryAtArrivalPct}%`, color: trip.batteryAtArrivalPct<15?T.red:T.green },
-                    { label:"Charging Stops", value: trip.stops.length },
-                    { label:"Charging Time", value: trip.totalChargingTime>0?`${trip.totalChargingTime} min`:"—" },
-                    { label:"Estimated Cost", value:`GH₵${trip.totalChargingCost.toFixed(2)}` },
-                    { label:"Wallet Balance", value: walletBal!=null?`GH₵${(walletBal/100).toFixed(2)}`:"—" },
-                    { label:"Traffic", value: trip.traffic.label },
-                  ].map(r=>(
-                    <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:10,padding:"10px 12px" }}>
-                      <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.4 }}>{r.label}</div>
-                      <div style={{ fontWeight:800,fontSize:15,color:r.color||T.text,marginTop:3 }}>{r.value}</div>
-                    </div>
-                  ))}
+             <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:14 }}>
+                {[
+                  { label:"Total Distance",   value:`${trip.distanceKm.toFixed(0)} km`, icon:"fa-road" },
+                  { label:"Total Time",       value:`${Math.floor(trip.durationMin/60)}h ${Math.round(trip.durationMin%60)}m`, icon:"fa-clock" },
+                  { label:"Total Charge Time",value: trip.totalChargingTime>0?`${trip.totalChargingTime} min`:"0 min", icon:"fa-bolt" },
+                  { label:"Est. Total Cost",  value:`GH₵${trip.totalChargingCost.toFixed(2)}`, icon:"fa-wallet" },
+                ].map(s=>(
+                  <div key={s.label} style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"12px 6px",textAlign:"center" }}>
+                    <i className={`fas ${s.icon}`} style={{ fontSize:14,color:T.green,marginBottom:6,display:"block" }}/>
+                    <div style={{ fontWeight:800,fontSize:13,color:T.text }}>{s.value}</div>
+                    <div style={{ fontSize:8,color:T.muted,marginTop:4,textTransform:"uppercase",letterSpacing:0.3,lineHeight:1.3 }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <GlassCard T={T} style={{ padding:16, marginBottom:14, display:"flex", gap:14, alignItems:"center" }}>
+                <div style={{ width:56,height:56,borderRadius:12,overflow:"hidden",flexShrink:0,background:T.surfaceFaint,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                  {selectedVehicle?.image_url
+                    ? <img src={selectedVehicle.image_url} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} onError={e=>e.target.style.display="none"}/>
+                    : <i className="fas fa-car" style={{ fontSize:22,color:T.green,opacity:0.5 }}/>}
+                </div>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:3 }}>Vehicle</div>
+                  <div style={{ fontWeight:700,fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{selectedVehicle?.nickname||"—"}</div>
+                  <div style={{ fontSize:10,color:T.muted,marginTop:1 }}>{selectedVehicle?.manufacturer} {selectedVehicle?.model}</div>
+                </div>
+                <div style={{ display:"flex",flexDirection:"column",gap:6,flexShrink:0 }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:6,justifyContent:"flex-end" }}>
+                    <i className="fas fa-battery-three-quarters" style={{ fontSize:11,color:T.green }}/>
+                    <span style={{ fontSize:11,color:T.muted }}>Start</span>
+                    <span style={{ fontSize:12,fontWeight:800,color:T.green }}>{batteryPct}%</span>
+                  </div>
+                  <div style={{ display:"flex",alignItems:"center",gap:6,justifyContent:"flex-end" }}>
+                    <i className="fas fa-battery-quarter" style={{ fontSize:11,color: trip.batteryAtArrivalPct<15?T.red:T.yellow }}/>
+                    <span style={{ fontSize:11,color:T.muted }}>Arrival</span>
+                    <span style={{ fontSize:12,fontWeight:800,color: trip.batteryAtArrivalPct<15?T.red:T.yellow }}>{trip.batteryAtArrivalPct}%</span>
+                  </div>
                 </div>
               </GlassCard>
 
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14 }}>
+                {[
+                  { label:"Charging Stops", value: trip.stops.length },
+                  { label:"Wallet Balance", value: walletBal!=null?`GH₵${(walletBal/100).toFixed(0)}`:"—" },
+                  { label:"Traffic", value: trip.traffic.label, color: trip.traffic.label==="Heavy"?T.yellow:T.green },
+                ].map(r=>(
+                  <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:10,padding:"10px 12px",textAlign:"center" }}>
+                    <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.4 }}>{r.label}</div>
+                    <div style={{ fontWeight:800,fontSize:14,color:r.color||T.text,marginTop:3 }}>{r.value}</div>
+                  </div>
+                ))}
+              </div>
               {recs.length>0 && (
                 <GlassCard T={T} style={{ padding:16, marginBottom:14, background:T.highlightGrad2 }}>
                   <div style={{ fontWeight:800,fontSize:13,color:T.green,marginBottom:10 }}><i className="fas fa-brain" style={{ marginRight:8 }}/>Smart Recommendations</div>
@@ -1197,10 +1271,16 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
                 </>
               )}
 
-              <button onClick={startTrip} className="tap"
-                style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"17px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginTop:6 }}>
-                <i className="fas fa-play"/> Start Trip
-              </button>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:6 }}>
+                <button className="tap"
+                  style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"16px",fontSize:14,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+                  <i className="fas fa-star"/> Save Route
+                </button>
+                <button onClick={startTrip} className="tap"
+                  style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+                  <i className="fas fa-paper-plane"/> Start Navigation
+                </button>
+              </div>
             </>
           )}
         </div>
