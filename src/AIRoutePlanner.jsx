@@ -545,6 +545,13 @@ const ensureAIStyles = () => {
 
 // ── LEAFLET LOADER ───────────────────────────────────────────────
 const loadLeaflet = () => new Promise((resolve) => {
+  if (window.L) { resolve(); return; }
+  if (!document.getElementById("lcss")) {
+    const l=document.createElement("link"); l.id="lcss"; l.rel="stylesheet"; l.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"; document.head.appendChild(l);
+  }
+  const s=document.createElement("script"); s.src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"; s.onload=resolve; document.head.appendChild(s);
+});
+
 function RouteMap({ T, route, stops, currentPos, destination, origin }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
