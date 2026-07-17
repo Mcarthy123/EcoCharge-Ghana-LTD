@@ -2384,7 +2384,7 @@ function QRScreen({ go, booking, setBooking, user }) {
 
 if (phase === 'charging' || phase === 'stopping') return (
     <div style={{ display:'flex',flexDirection:'column',height:'100%',background:T.bg }}>
-      <div style={{ padding:'16px 18px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${T.border}`,flexShrink:0,gap:10 }}>
+      <div style={{ padding:'calc(16px + env(safe-area-inset-top, 34px)) 18px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${T.border}`,flexShrink:0,gap:10 }}>
         <button onClick={()=>go("home")} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
           <i className="fas fa-chevron-left" style={{ fontSize:18,color:T.text }}/>
         </button>
