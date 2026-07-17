@@ -935,7 +935,7 @@ function MapScreen({ go,stations,setStation }) {
       if (mapInst.current||!mapRef.current) return;
       const L=window.L;
       const map=L.map(mapRef.current,{ center:[7.9465,-1.0232],zoom:7,attributionControl:false });
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{ maxZoom:18 }).addTo(map);
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png",{ maxZoom:20, attribution:"" }).addTo(map);
       const icon=L.divIcon({ html:`<svg width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.27 21.73 0 14 0z" fill="#4ade80"/><circle cx="14" cy="14" r="6" fill="#000"/></svg>`,className:"",iconSize:[28,36],iconAnchor:[14,36] });
       stations.forEach(s=>{ if(!s.lat||!s.lng) return; const m=L.marker([s.lat,s.lng],{ icon }).addTo(map); m.on("click",()=>{ setStation(s);go("detail"); }); });
       mapInst.current=map;
@@ -7239,21 +7239,22 @@ function MyVehicles({ go, user }) {
                 )}
               </div>
 
-              <div style={{ display:"flex",gap:14 }}>
-                <div style={{ flex:1,minWidth:0 }}>
-                  <div style={{ fontWeight:900,fontSize:22,color:T.text,marginBottom:2 }}>{primary.nickname}</div>
-                  <div style={{ fontSize:13,color:T.muted,marginBottom:12 }}>{primary.vehicle_type||"Electric Sedan"}</div>
-                  {primary.registration_number&&(
-                    <div style={{ display:"inline-flex",alignItems:"center",gap:6,background:"rgba(0,0,0,0.3)",borderRadius:8,padding:"6px 10px" }}>
-                      <span style={{ fontSize:14 }}>🇬🇭</span>
-                      <span style={{ fontSize:12,fontWeight:700,color:T.text,letterSpacing:0.5 }}>{primary.registration_number}</span>
-                    </div>
-                  )}
-                </div>
-                <div style={{ width:130,height:90,borderRadius:12,overflow:"hidden",flexShrink:0,background:T.surfaceFaint,display:"flex",alignItems:"center",justifyContent:"center" }}>
-                  {primary.image_url
-                    ? <img src={primary.image_url} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} onError={e=>e.target.style.display="none"}/>
-                    : <i className={`fas ${VEHICLE_TYPE_ICON[primary.vehicle_type]||"fa-car"}`} style={{ fontSize:32,color:T.green,opacity:0.4 }}/>}
+             <div style={{ height:200,borderRadius:16,overflow:"hidden",marginBottom:16,position:"relative",background:T.surfaceFaint }}>
+                {primary.image_url
+                  ? <img src={primary.image_url} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} onError={e=>e.target.style.display="none"}/>
+                  : <div style={{ width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center" }}><i className={`fas ${VEHICLE_TYPE_ICON[primary.vehicle_type]||"fa-car"}`} style={{ fontSize:64,color:T.green,opacity:0.35 }}/></div>}
+                <div style={{ position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,0.75) 0%,transparent 55%)" }}/>
+                <div style={{ position:"absolute",bottom:12,left:14,right:14 }}>
+                  <div style={{ fontWeight:900,fontSize:22,color:"#fff",marginBottom:2 }}>{primary.nickname}</div>
+                  <div style={{ display:"flex",alignItems:"center",gap:8,flexWrap:"wrap" }}>
+                    <span style={{ fontSize:13,color:"rgba(255,255,255,0.75)" }}>{primary.vehicle_type||"Electric Sedan"}</span>
+                    {primary.registration_number&&(
+                      <div style={{ display:"inline-flex",alignItems:"center",gap:6,background:"rgba(0,0,0,0.45)",borderRadius:8,padding:"4px 10px" }}>
+                        <span style={{ fontSize:13 }}>🇬🇭</span>
+                        <span style={{ fontSize:11,fontWeight:700,color:"#fff",letterSpacing:0.5 }}>{primary.registration_number}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -7311,31 +7312,44 @@ function MyVehicles({ go, user }) {
 
             {/* Your Vehicles list */}
             <div style={{ fontWeight:800,fontSize:16,color:T.text,marginBottom:12 }}>Your Vehicles</div>
-            {vehicles.map(v=>{
+           {vehicles.map(v=>{
               const pct = chargePct(v);
               const isPrimary = v.id===primary.id;
               return (
-                <div key={v.id} className="tap row" onClick={()=>setSelectedVeh(v)}
-                  style={{ background:T.card,border:`1px solid ${isPrimary?T.green:T.border}`,borderRadius:16,padding:"12px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:12,cursor:"pointer" }}>
-                  <div style={{ width:52,height:52,borderRadius:10,overflow:"hidden",flexShrink:0,background:T.surfaceFaint,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                <div key={v.id} className="tap" onClick={()=>setSelectedVeh(v)}
+                  style={{ background:T.card,border:`1.5px solid ${isPrimary?T.green:T.border}`,borderRadius:18,marginBottom:14,overflow:"hidden",cursor:"pointer" }}>
+                  <div style={{ height:140,position:"relative",background:T.surfaceFaint }}>
                     {v.image_url
                       ? <img src={v.image_url} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} onError={e=>e.target.style.display="none"}/>
-                      : <i className={`fas ${VEHICLE_TYPE_ICON[v.vehicle_type]||"fa-car"}`} style={{ fontSize:20,color:T.green,opacity:0.5 }}/>}
+                      : <div style={{ width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center" }}><i className={`fas ${VEHICLE_TYPE_ICON[v.vehicle_type]||"fa-car"}`} style={{ fontSize:44,color:T.green,opacity:0.35 }}/></div>}
+                    <div style={{ position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,0.7) 0%,transparent 55%)" }}/>
+                    {isPrimary&&(
+                      <div style={{ position:"absolute",top:10,left:12,background:"rgba(34,197,94,0.9)",borderRadius:7,padding:"3px 9px",display:"flex",alignItems:"center",gap:5 }}>
+                        <i className="fas fa-star" style={{ fontSize:9,color:"#000" }}/>
+                        <span style={{ fontSize:10,fontWeight:800,color:"#000" }}>Primary</span>
+                      </div>
+                    )}
+                    <div style={{ position:"absolute",bottom:10,left:14,right:14,display:"flex",justifyContent:"space-between",alignItems:"flex-end" }}>
+                      <div>
+                        <div style={{ fontWeight:800,fontSize:17,color:"#fff" }}>{v.nickname}</div>
+                        <div style={{ fontSize:11,color:"rgba(255,255,255,0.7)",marginTop:2 }}>{v.registration_number||`${v.year||""} ${v.manufacturer||""}`.trim()}</div>
+                      </div>
+                      <div style={{ textAlign:"right" }}>
+                        <div style={{ fontWeight:800,fontSize:16,color:chargeColor(pct) }}>{pct}%</div>
+                        <div style={{ fontSize:10,color:"rgba(255,255,255,0.7)" }}>{rangeKm(v,pct)??"—"} km</div>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ flex:1,minWidth:0 }}>
-                    <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{v.nickname}</div>
-                    {isPrimary&&<span style={{ display:"inline-block",background:"rgba(34,197,94,0.15)",color:T.green,fontSize:9,fontWeight:700,borderRadius:6,padding:"2px 7px",marginTop:3 }}>Primary</span>}
-                    <div style={{ fontSize:11,color:T.muted,marginTop:3 }}>{v.registration_number||`${v.year||""} ${v.manufacturer||""}`.trim()}</div>
-                  </div>
-                  <div style={{ textAlign:"right",flexShrink:0 }}>
-                    <div style={{ fontWeight:800,fontSize:15,color:chargeColor(pct) }}>{pct}%</div>
-                    <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{rangeKm(v,pct)??"—"} km</div>
-                  </div>
-                  <i className="fas fa-chevron-right" style={{ fontSize:13,color:T.muted,flexShrink:0 }}/>
+                  {!isPrimary&&(
+                    <div onClick={e=>{ e.stopPropagation(); handleSetPrimary(v); }} className="tap"
+                      style={{ padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:6,borderTop:`1px solid ${T.border}` }}>
+                      <i className="fas fa-star" style={{ fontSize:11,color:T.green }}/>
+                      <span style={{ fontSize:12,fontWeight:700,color:T.green }}>Set as Primary</span>
+                    </div>
+                  )}
                 </div>
               );
             })}
-
             <button onClick={()=>setShowForm(true)} className="tap"
               style={{ width:"100%",background:"none",border:`2px dashed ${T.border}`,borderRadius:16,padding:"16px",fontSize:13,fontWeight:600,color:T.muted,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:6,marginBottom:16 }}>
               <i className="fas fa-plus" style={{ color:T.green }}/> Add Another Vehicle
@@ -7404,7 +7418,7 @@ function SettingsScreen({ go, user, setUser, onMenu }) {
   const [notifications, setNotifications] = useState(true);
   const [twoFactor, setTwoFactor] = useState(true);
   const [avatar, setAvatar] = useState(null);
-  {toast&&<ComingSoonToast T={T} label={toast} onClose={()=>setToast(null)}/>}
+  const [toast, setToast] = useState(null);
   const [picker, setPicker] = useState(null); // "language" | "units" | null
   const [language, setLanguage] = useState(()=>{ try { return localStorage.getItem("eco_language")||"English"; } catch(e){ return "English"; } });
   const [units, setUnits] = useState(()=>{ try { return localStorage.getItem("eco_units")||"Metric (km, kWh)"; } catch(e){ return "Metric (km, kWh)"; } });
