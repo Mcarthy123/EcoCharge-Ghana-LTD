@@ -2253,7 +2253,7 @@ function QRScreen({ go, booking, setBooking, user }) {
         } catch(e) { console.error("Session update error:", e); }
       }
 
-      if (SUPABASE_URL && user?.id && finalCostPs > 0) {
+     if (SUPABASE_URL && user?.id && finalCostPs > 0) {
         try {
           await fetch(`${SUPABASE_URL}/rest/v1/rpc/wallet_debit`, {
             method: "POST",
@@ -2266,6 +2266,18 @@ function QRScreen({ go, booking, setBooking, user }) {
             body: JSON.stringify({ locked_pesewas: 0 })
           });
         } catch(e) { console.error("Wallet debit error:", e); }
+
+        // 10 loyalty points per GH₵1 spent (finalCostPs is in pesewas, 100 = GH₵1)
+        try {
+          const pointsEarned = Math.round(finalCostPs / 500);
+          if (pointsEarned > 0) {
+            await fetch(`${SUPABASE_URL}/rest/v1/rpc/loyalty_credit`, {
+              method: "POST",
+              headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ p_auth_id: user.id, p_points: pointsEarned, p_kwh: finalKwh })
+            });
+          }
+        } catch(e) { console.error("Loyalty credit error:", e); }
       }
 
       if (SUPABASE_URL && b?.reference) {
