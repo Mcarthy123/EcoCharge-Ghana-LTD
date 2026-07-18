@@ -173,7 +173,7 @@ const useSolarData = (lat=7.9465, lng=-1.0232) => {
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-  html,body,#root{height:100%;-webkit-text-size-adjust:100%}
+  html,body,#root{height:100%;height:100dvh;-webkit-text-size-adjust:100%}
   html,body{touch-action:manipulation;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;}
   body{font-family:'Inter',sans-serif;background:#0a0d10;color:#fff;-webkit-font-smoothing:antialiased;}
   @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
@@ -2435,27 +2435,25 @@ if (phase === 'charging' || phase === 'stopping') return (
             )}
           </div>
 
-          <div style={{ display:"flex",alignItems:"center",gap:14,marginBottom:14 }}>
-            <div style={{ flexShrink:0 }}>
-              {startBatteryPct!=null && vehicleDetails?.battery_capacity ? (
-                <>
-                  <div style={{ fontWeight:900,fontSize:34,color:T.green,lineHeight:1 }}>
-                    {Math.min(100, startBatteryPct + (liveKwh/vehicleDetails.battery_capacity*100)).toFixed(0)}%
-                  </div>
-                  <div style={{ fontSize:10,color:T.muted,marginTop:4 }}>Battery Level</div>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontWeight:900,fontSize:34,color:T.green,lineHeight:1 }}>{livePower.toFixed(1)}</div>
-                  <div style={{ fontSize:10,color:T.muted,marginTop:4 }}>kW now</div>
-                </>
-              )}
-            </div>
-            <div style={{ flex:1 }}>
-              <InteractiveVehicleCard
-                vehicle={{...vehicleDetails, image_url:b.vehicleImageUrl||vehicleDetails?.image_url, vehicle_type:b.vehicle}}
-                chargingActive={true} energyDeliveredKwh={liveKwh} startBatteryPct={startBatteryPct} size={190}/>
-            </div>
+         <div style={{ display:"flex",justifyContent:"center",marginBottom:12 }}>
+            <InteractiveVehicleCard
+              vehicle={{...vehicleDetails, image_url:b.vehicleImageUrl||vehicleDetails?.image_url, vehicle_type:b.vehicle}}
+              chargingActive={true} energyDeliveredKwh={liveKwh} startBatteryPct={startBatteryPct} size={320}/>
+          </div>
+          <div style={{ textAlign:"center",marginBottom:14 }}>
+            {startBatteryPct!=null && vehicleDetails?.battery_capacity ? (
+              <>
+                <div style={{ fontWeight:900,fontSize:40,color:T.green,lineHeight:1 }}>
+                  {Math.min(100, startBatteryPct + (liveKwh/vehicleDetails.battery_capacity*100)).toFixed(0)}%
+                </div>
+                <div style={{ fontSize:11,color:T.muted,marginTop:5 }}>Battery Level</div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontWeight:900,fontSize:40,color:T.green,lineHeight:1 }}>{livePower.toFixed(1)} kW</div>
+                <div style={{ fontSize:11,color:T.muted,marginTop:5 }}>Charging Speed</div>
+              </>
+            )}
           </div>
 
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8 }}>
@@ -3602,7 +3600,7 @@ function Bookings({ go, user, setSelectedBooking }) {
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="My Bookings" sub="Manage all your charger reservations" onBack={()=>go("home")}/>
-      <div style={{ display:"flex",padding:"12px 14px 0",gap:6 }}>
+     <div style={{ display:"flex",padding:"12px 14px 0",gap:6 }}>
         {TABS.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)} className="tap"
             style={{ flex:1,background:"none",border:"none",borderBottom:`2px solid ${tab===t.id?t.color:"transparent"}`,padding:"0 0 10px",cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",alignItems:"center",gap:4 }}>
@@ -3617,31 +3615,6 @@ function Bookings({ go, user, setSelectedBooking }) {
       <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
         {loading && <div style={{ textAlign:"center",padding:"40px 0" }}><Spinner/></div>}
 
-        {!loading && tab==="active" && list.map(b=>{
-          const cd=getCountdown(b);
-          return (
-            <div key={b.reference} className="fade" style={{ background:T.highlightGrad2,borderRadius:18,padding:"18px",marginBottom:16,border:`1px solid ${T.greenDim}` }}>
-              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14 }}>
-                <Badge label={b.status==="charging"?"Charging":"Reserved"} color={T.green}/>
-                <span style={{ fontSize:10,color:T.muted,fontFamily:"monospace" }}>{b.reference}</span>
-              </div>
-              <div style={{ fontWeight:800,fontSize:18,color:T.text,marginBottom:2 }}>{b.station}</div>
-              <div style={{ fontSize:12,color:T.muted,marginBottom:14 }}>{b.city} · {b.vehicle}</div>
-              {cd&&!cd.done&&(
-                <div style={{ textAlign:"center",background:T.innerTint,borderRadius:12,padding:"14px",marginBottom:14 }}>
-                  <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>{cd.waiting?"Reservation expires in":"Time remaining"}</div>
-                  <div style={{ fontWeight:900,fontSize:28,color:T.green,fontFamily:"monospace" }}>{cd.label}</div>
-                </div>
-              )}
-             <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
-                <button onClick={()=>openDetail(b)} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 4px",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>View Details</button>
-                <button onClick={()=>window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.station+" "+b.city)}`,"_blank")} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 4px",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}><i className="fas fa-directions" style={{marginRight:5}}/>Navigate</button>
-                <button onClick={async()=>{ if(SUPABASE_URL) await sb(`bookings?reference=eq.${b.reference}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({status:"cancelled"})}); load(); }} className="tap" style={{ background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.25)",borderRadius:12,padding:"12px 4px",fontSize:12,fontWeight:700,color:T.red,cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>
-              </div>
-            </div>
-          );
-        })}
-
         {!loading && list.length===0 && (
           <div style={{ textAlign:"center",padding:"50px 20px" }}>
             <i className="fas fa-calendar-times" style={{ fontSize:56,color:T.muted,marginBottom:16,display:"block" }}/>
@@ -3651,15 +3624,18 @@ function Bookings({ go, user, setSelectedBooking }) {
           </div>
         )}
 
-       {!loading && tab==="active" && list.map((b,idx)=>{
-          const cd=getCountdown(b);
+        {!loading && list.map((b,idx)=>{
+          const cd = tab==="active" ? getCountdown(b) : null;
           const stationImgs=["/station1.jpg","/station2.jpg","/station3.jpg"];
+          const statusLabel = b.status==="charging" ? "Charging" : b.status==="completed" ? "Completed" : b.status==="cancelled" ? "Cancelled" : "Reserved";
+          const statusColor = b.status==="charging" ? T.blue : b.status==="completed" ? T.green : b.status==="cancelled" ? T.red : T.green;
+          const canCancel = tab==="active" || tab==="upcoming";
           return (
-            <div key={b.reference} className="fade" style={{ background:T.card,borderRadius:18,marginBottom:16,border:`1px solid ${T.greenDim}`,overflow:"hidden" }}>
+            <div key={b.reference} className="fade" style={{ background:T.card,borderRadius:18,marginBottom:16,border:`1px solid ${T.border}`,overflow:"hidden" }}>
               <div style={{ height:130,position:"relative" }}>
                 <img src={stationImgs[idx%3]} alt="" style={{ width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.7)" }} onError={e=>{ e.target.style.display="none"; }}/>
                 <div style={{ position:"absolute",inset:0,background:"linear-gradient(to bottom,rgba(0,0,0,0.1),rgba(0,0,0,0.6))" }}/>
-                <div style={{ position:"absolute",top:12,left:12 }}><Badge label={b.status==="charging"?"Charging":"Reserved"} color={T.green}/></div>
+                <div style={{ position:"absolute",top:12,left:12 }}><Badge label={statusLabel} color={statusColor}/></div>
                 <div style={{ position:"absolute",top:12,right:12,fontSize:10,color:"rgba(255,255,255,0.7)",fontFamily:"monospace" }}>{b.reference}</div>
                 <div style={{ position:"absolute",bottom:10,left:14 }}>
                   <div style={{ fontWeight:800,fontSize:17,color:"#fff" }}>{b.station}</div>
@@ -3683,10 +3659,12 @@ function Bookings({ go, user, setSelectedBooking }) {
                     <div style={{ fontWeight:900,fontSize:28,color:T.green,fontFamily:"monospace" }}>{cd.label}</div>
                   </div>
                 )}
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
+                <div style={{ display:"grid",gridTemplateColumns:canCancel?"1fr 1fr 1fr":"1fr 1fr",gap:8 }}>
                   <button onClick={()=>openDetail(b)} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 4px",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>Details</button>
                   <button onClick={()=>window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.station+" "+b.city)}`,"_blank")} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 4px",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}><i className="fas fa-directions" style={{marginRight:5}}/>Navigate</button>
-                  <button onClick={async()=>{ if(SUPABASE_URL) await sb(`bookings?reference=eq.${b.reference}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({status:"cancelled"})}); load(); }} className="tap" style={{ background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.25)",borderRadius:12,padding:"12px 4px",fontSize:12,fontWeight:700,color:T.red,cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>
+                  {canCancel&&(
+                    <button onClick={async()=>{ if(SUPABASE_URL) await sb(`bookings?reference=eq.${b.reference}`,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({status:"cancelled"})}); load(); }} className="tap" style={{ background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.25)",borderRadius:12,padding:"12px 4px",fontSize:12,fontWeight:700,color:T.red,cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>
+                  )}
                 </div>
               </div>
             </div>
