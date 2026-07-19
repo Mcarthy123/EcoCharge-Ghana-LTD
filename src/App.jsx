@@ -25,7 +25,33 @@ const getToken = () => {
   } catch(e) {}
   return SUPABASE_ANON;
 };
- 
+
+// Uses the stored refresh_token to get a new access token before the old one expires.
+const refreshSession = async () => {
+  if (!SUPABASE_URL) return null;
+  try {
+    const raw = localStorage.getItem("eco_user");
+    if (!raw) return null;
+    const u = JSON.parse(raw);
+    if (!u?.refreshToken) return null;
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_ANON, "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: u.refreshToken }),
+    });
+    if (!res.ok) return null;
+    const d = await res.json();
+    if (!d.access_token) return null;
+    const updated = {
+      ...u,
+      token: d.access_token,
+      refreshToken: d.refresh_token || u.refreshToken,
+      expiresAt: d.expires_in ? Date.now() + d.expires_in * 1000 : null,
+    };
+    localStorage.setItem("eco_user", JSON.stringify(updated));
+    return updated;
+  } catch(e) { return null; }
+};
 
 const sb = async (path, opts = {}) => {
   if (!SUPABASE_URL) return null;
@@ -39,9 +65,10 @@ const sb = async (path, opts = {}) => {
         ...opts.headers
       },
     });
-   if (!res.ok) return null;
-const text = await res.text();
-return text ? JSON.parse(text) : true;
+    if (res.status === 401) { window.dispatchEvent(new Event("eco:auth-expired")); return null; }
+    if (!res.ok) return null;
+    const text = await res.text();
+    return text ? JSON.parse(text) : true;
   } catch(e) { return null; }
 };
 
@@ -599,28 +626,28 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => {
             <div style={{ width:18,height:18,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:mode==="dark"?3:23,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,0.3)" }}/>
           </div>
         </div>
-        {[
+       {[
           { icon:"fa-home",             label:"Find Stations",   screen:"home"          },
           { icon:"fa-plug",             label:"All Stations",    screen:"detail"        },
           { icon:"fa-user",             label:"My Profile",      screen:"profile"       },
           { icon:"fa-bell",             label:"Notifications",   screen:"notifications" },
-    
-    { icon:"fa-route",            label:"AI Route Planner", screen:"routeplanner", color:T.green },
-    { icon:"fa-calendar-check", label:"Reserve a Charger", screen:"reservations", color:T.green },
-    { icon:"fa-info-circle",      label:"About EcoCharge", screen:"about"         },
-          
-          { icon:"fa-bolt",             label:"Verify Booking",  screen:"verify",       color:T.yellow },
-          { icon:"fa-charging-station", label:"Charger Admin",   screen:"chargers",     color:T.blue   },
-          { icon:"fa-list-alt",         label:"Session Manager", screen:"sessions",     color:T.green  },
+          { icon:"fa-route",            label:"AI Route Planner", screen:"routeplanner", color:T.green },
+          { icon:"fa-calendar-check",   label:"Reserve a Charger", screen:"reservations", color:T.green },
+          { icon:"fa-info-circle",      label:"About EcoCharge", screen:"about"         },
+          { icon:"fa-list-alt",         label:"Charging History", screen:"sessions",    color:T.green  },
           { icon:"fa-wallet",           label:"My Wallet",       screen:"wallet",       color:T.yellow },
-          { icon:"fa-tags",             label:"Pricing Engine",  screen:"pricing",      color:"#a78bfa" },
-          { icon:"fa-shield-alt",       label:"Admin Dashboard", screen:"admin",        color:"#f87171" },
-    { icon:"fa-car",              label:"Vehicle Registry", screen:"vehicleregistry", color:T.blue },
-        ].map(item=>(
+
+          { icon:"fa-bolt",             label:"Verify Booking",  screen:"verify",       color:T.yellow, adminOnly:true },
+          { icon:"fa-charging-station", label:"Charger Admin",   screen:"chargers",     color:T.blue,   adminOnly:true },
+          { icon:"fa-tags",             label:"Pricing Engine",  screen:"pricing",      color:"#a78bfa", adminOnly:true },
+          { icon:"fa-shield-alt",       label:"Admin Dashboard", screen:"admin",        color:"#f87171", adminOnly:true },
+          { icon:"fa-car",              label:"Vehicle Registry", screen:"vehicleregistry", color:T.blue, adminOnly:true },
+        ].filter(item=>!item.adminOnly || user?.is_admin).map(item=>(
           <div key={item.label} className="tap row" onClick={()=>{ go(item.screen);onClose(); }}
             style={{ display:"flex",alignItems:"center",gap:14,padding:"16px 20px",borderBottom:`1px solid ${T.border}20` }}>
             <i className={`fas ${item.icon}`} style={{ fontSize:16,color:item.color||T.mutedLight,width:20,textAlign:"center" }}/>
             <span style={{ color:T.text,fontSize:14,fontWeight:500,flex:1 }}>{item.label}</span>
+            {item.adminOnly&&<Badge label="Admin" color="#f87171"/>}
             <i className="fas fa-chevron-right" style={{ fontSize:12,color:T.muted }}/>
           </div>
         ))}
@@ -693,7 +720,7 @@ function Auth({ mode, onBack, onSuccess }) {
       ? await call("token?grant_type=password",{ email,password })
       : await call("signup",{ email,password,data:{ full_name:name } });
     if (d.access_token||d.id||d.user) {
-      onSuccess({ email,name:name||email.split("@")[0],token:d.access_token||"demo",id:d.user?.id||"demo" });
+      onSuccess({ email,name:name||email.split("@")[0],token:d.access_token||"demo",refreshToken:d.refresh_token||null,expiresAt:d.expires_in?Date.now()+d.expires_in*1000:null,id:d.user?.id||"demo" });
     } else { setErr(d.error_description||d.msg||"Something went wrong. Try again."); }
     setLoad(false);
   };
@@ -713,7 +740,7 @@ function Auth({ mode, onBack, onSuccess }) {
     setLoad(true); setErr("");
     const intl = phone.startsWith("+")?phone:`+233${phone.replace(/^0/,"")}`;
     const d = await call("verify",{ phone:intl,token:otp,type:"sms" });
-    if (d.access_token||d.user) { onSuccess({ phone:intl,name:intl,token:d.access_token||"demo",id:d.user?.id||"demo" }); }
+    if (d.access_token||d.user) { onSuccess({ phone:intl,name:intl,token:d.access_token||"demo",refreshToken:d.refresh_token||null,expiresAt:d.expires_in?Date.now()+d.expires_in*1000:null,id:d.user?.id||"demo" }); }
     else { setErr(d.error_description||"Invalid OTP. Try again."); }
     setLoad(false);
   };
@@ -4081,6 +4108,7 @@ function SessionManager({ go, user }) {
     if (!SUPABASE_URL) { setLoading(false); return; }
     try {
       let url = `${SUPABASE_URL}/rest/v1/charging_sessions?select=*&order=created_at.desc&limit=50`;
+      if (!user?.is_admin && user?.id) url += `&user_id=eq.${user.id}`;
       if (filter !== "All") url += `&status=eq.${filter}`;
       const res = await fetch(url, {
         headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` }
@@ -4090,7 +4118,6 @@ function SessionManager({ go, user }) {
     } catch(e) {}
     setLoading(false);
   };
-
   const loadEvents = async (sessionId) => {
     if (!SUPABASE_URL) return;
     try {
@@ -4346,7 +4373,7 @@ function SessionManager({ go, user }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Charging History" sub="Your charging sessions" onBack={()=>go("home")}/>
+      <Header title="Charging History" sub={user?.is_admin?"All charging sessions":"Your charging sessions"} onBack={()=>go("home")}/>
       <div style={{ flex:1,overflowY:"auto",padding:"12px 14px 100px" }}>
 
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14 }}>
@@ -7409,6 +7436,8 @@ function SettingsScreen({ go, user, setUser, onMenu }) {
   const [twoFactor, setTwoFactor] = useState(true);
   const [avatar, setAvatar] = useState(null);
   const [toast, setToast] = useState(null);
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [picker, setPicker] = useState(null); // "language" | "units" | null
   const [language, setLanguage] = useState(()=>{ try { return localStorage.getItem("eco_language")||"English"; } catch(e){ return "English"; } });
   const [units, setUnits] = useState(()=>{ try { return localStorage.getItem("eco_units")||"Metric (km, kWh)"; } catch(e){ return "Metric (km, kWh)"; } });
@@ -7519,9 +7548,43 @@ function SettingsScreen({ go, user, setUser, onMenu }) {
           <Row icon="fa-info-circle" iconColor={T.mutedLight} label="About EcoCharge" sub={`Version ${APP_VERSION} · Build 100`} onPress={()=>go("about")} last/>
         </Section>
 
+       {user&&(
+          <div style={{ background:"rgba(248,113,113,0.06)",borderRadius:16,border:"1px solid rgba(248,113,113,0.2)",overflow:"hidden",marginBottom:12 }}>
+            <Row icon="fa-sign-out-alt" label="Log Out" sub="Sign out of your account" onPress={()=>{ setUser(null); go("splash"); }} danger last/>
+          </div>
+        )}
         {user&&(
           <div style={{ background:"rgba(248,113,113,0.06)",borderRadius:16,border:"1px solid rgba(248,113,113,0.2)",overflow:"hidden" }}>
-            <Row icon="fa-sign-out-alt" label="Log Out" sub="Sign out of your account" onPress={()=>{ setUser(null); go("splash"); }} danger last/>
+            <Row icon="fa-user-slash" label="Delete Account" sub="Permanently remove your data" onPress={()=>setShowDelete(true)} danger last/>
+          </div>
+        )}
+        {showDelete&&(
+          <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:400,display:"flex",alignItems:"flex-end",justifyContent:"center" }}>
+            <div style={{ background:T.card,borderRadius:"20px 20px 0 0",padding:"24px 20px 40px",width:"100%",maxWidth:480,border:`1px solid ${T.border}` }}>
+              <div style={{ width:56,height:56,borderRadius:"50%",background:"rgba(248,113,113,0.12)",border:"2px solid rgba(248,113,113,0.3)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}>
+                <i className="fas fa-exclamation-triangle" style={{ fontSize:22,color:T.red }}/>
+              </div>
+              <div style={{ fontWeight:800,fontSize:17,color:T.text,textAlign:"center",marginBottom:8 }}>Delete Your Account?</div>
+              <div style={{ fontSize:13,color:T.muted,lineHeight:1.7,marginBottom:20,textAlign:"center" }}>
+                This removes your vehicles and profile info from EcoCharge and signs you out. Your booking/payment history is kept for accounting records, as required by Ghanaian financial regulations. To fully close your login, contact support at ecochargeghanaltd@gmail.com.
+              </div>
+              {deleting&&<div style={{ textAlign:"center",marginBottom:16 }}><Spinner/></div>}
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+                <button onClick={()=>setShowDelete(false)} disabled={deleting} className="tap"
+                  style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px",fontSize:14,fontWeight:600,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>
+                <button onClick={async()=>{
+                  setDeleting(true);
+                  try {
+                    if (SUPABASE_URL && user?.id) {
+                      await fetch(`${SUPABASE_URL}/rest/v1/user_vehicles?user_id=eq.${user.id}`, { method:"DELETE", headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` }});
+                      await fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}`, { method:"PATCH", headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json", Prefer:"return=minimal" }, body: JSON.stringify({ avatar_url:null, full_name:"Deleted User" }) });
+                    }
+                  } catch(e) {}
+                  setDeleting(false); setShowDelete(false); setUser(null); go("splash");
+                }} disabled={deleting} className="tap"
+                  style={{ background:T.red,border:"none",borderRadius:12,padding:"14px",fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit" }}>Delete</button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -7676,20 +7739,64 @@ function AppInner() {
   const [drawer,setDrawer]    = useState(false);
   const [selectedBooking,setSelectedBooking]= useState(null);
 
-  const setUser=(u)=>{ setUserRaw(u); try { u?localStorage.setItem("eco_user",JSON.stringify(u)):localStorage.removeItem("eco_user"); } catch(e){} };
+ const setUser=(u)=>{ setUserRaw(u); try { u?localStorage.setItem("eco_user",JSON.stringify(u)):localStorage.removeItem("eco_user"); } catch(e){} };
   const go=(s)=>{ setScreen(s);setDrawer(false); };
-  const goSecure=(s)=>{ const open=["splash","auth","about","home","detail","verify","map","privacypolicy","terms","refund","zeroemissions"]; if(!user&&!open.includes(s)){ setAuthMode("login");go("auth");return; } go(s); };
+
+  // Proactively refresh the session ~5 min before it expires, so the app never silently goes stale.
+  useEffect(()=>{
+    if (!user?.expiresAt) return;
+    const msUntilRefresh = Math.max(5000, user.expiresAt - Date.now() - 5*60*1000);
+    const t = setTimeout(async ()=>{
+      const updated = await refreshSession();
+      if (updated) setUserRaw(updated);
+      else { setUser(null); go("splash"); }
+    }, msUntilRefresh);
+    return ()=>clearTimeout(t);
+  },[user?.expiresAt]);
+
+  // If any request comes back 401 (token already expired), try one refresh; otherwise sign out cleanly.
+  useEffect(()=>{
+    const handler = async () => {
+      const updated = await refreshSession();
+      if (updated) setUserRaw(updated);
+      else { setUser(null); go("splash"); }
+    };
+    window.addEventListener("eco:auth-expired", handler);
+    return ()=>window.removeEventListener("eco:auth-expired", handler);
+  },[]);
+  const ADMIN_SCREENS = ["admin","chargers","pricing","vehicleregistry","verify"];
+  const goSecure=(s)=>{
+    const open=["splash","auth","about","home","detail","map","privacypolicy","terms","refund","zeroemissions"];
+    if(!user&&!open.includes(s)){ setAuthMode("login");go("auth");return; }
+    if(ADMIN_SCREENS.includes(s) && !user?.is_admin){ go("home"); return; }
+    go(s);
+  };
+useEffect(()=>{
+    if (!user?.id || !SUPABASE_URL || user.is_admin !== undefined) return;
+    (async()=>{
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}&select=is_admin`,
+          { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` }});
+        const data = await res.json();
+        setUser({ ...user, is_admin: !!data?.[0]?.is_admin });
+      } catch(e) { setUser({ ...user, is_admin:false }); }
+    })();
+  },[user?.id]);
 
   useEffect(()=>{
     if (SUPABASE_URL) sb("stations?select=*&order=id").then(d=>{ if(d?.length) setStations(d); });
-    const hash=window.location.hash;
+  useEffect(()=>{
+    if (SUPABASE_URL) sb("stations?select=*&order=id").then(d=>{ if(d?.length) setStations(d); });
+   const hash=window.location.hash;
     if (hash&&hash.includes("access_token")) {
       const hp=new URLSearchParams(hash.replace("#",""));
       const token=hp.get("access_token");
+      const refreshToken=hp.get("refresh_token");
+      const expiresIn=hp.get("expires_in");
       if (token&&SUPABASE_URL) {
         fetch(`${SUPABASE_URL}/auth/v1/user`,{ headers:{ apikey:SUPABASE_ANON,Authorization:`Bearer ${token}` } })
           .then(r=>r.json())
-          .then(u=>{ if(u?.email){ const usr={ email:u.email,name:u.user_metadata?.full_name||u.email.split("@")[0],token,id:u.id }; setUser(usr); window.history.replaceState({},"",window.location.pathname); setScreen("home"); } }).catch(()=>{});
+          .then(u=>{ if(u?.email){ const usr={ email:u.email,name:u.user_metadata?.full_name||u.email.split("@")[0],token,refreshToken,expiresAt:expiresIn?Date.now()+parseInt(expiresIn)*1000:null,id:u.id }; setUser(usr); window.history.replaceState({},"",window.location.pathname); setScreen("home"); } }).catch(()=>{});
       }
     }
     const params=new URLSearchParams(window.location.search);
