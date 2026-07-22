@@ -27,6 +27,7 @@ const DEFAULT_DEPOSIT_PESEWAS = 1000; // legacy — kept for existing forfeited 
 const QUEUE_OFFER_WINDOW_MIN = 2; // minutes a queued driver has to accept an offered charger
 const DEFAULT_CHARGER_KW = 60;
 const DEFAULT_PRICE_PER_KWH = 0.85;
+const FALLBACK_ESTIMATED_RANGE_KM = 250; // used only if the vehicle has no saved range
 const CO2_PER_KWH = 0.5;
 const WATER_LITRES_PER_SESSION = 20;
 
@@ -693,6 +694,10 @@ function ActiveBookingDashboard({ T, go, booking, station, user, ctx, stations, 
   useEffect(()=>{ const t=setInterval(()=>setNow(Date.now()), 1000); return ()=>clearInterval(t); }, []);
 
   useEffect(()=>{
+    GeoService.getCurrentPosition().then(pos=>{
+      setCurrentPos(pos);
+      if (station?.lat && station?.lng) setDistanceKm(haversine(pos.lat, pos.lng, station.lat, station.lng));
+    }).catch(()=>{});
     if (station?.lat && station?.lng) {
       watchRef.current = GeoService.watchPosition(pos=>{
         setCurrentPos(pos);
@@ -827,7 +832,8 @@ function ActiveBookingDashboard({ T, go, booking, station, user, ctx, stations, 
   };
 
   // ── AI Assistant: low battery reroute ──
-  const ratedRangeKm = bookedVehicle?.estimated_range || null;
+  const usingFallbackRange = !bookedVehicle?.estimated_range;
+const ratedRangeKm = bookedVehicle?.estimated_range || FALLBACK_ESTIMATED_RANGE_KM;
   const batteryRisk = AIAssistantService.isBatteryRisk(batteryPct, ratedRangeKm, distanceKm);
   const alternative = (batteryRisk && currentPos && stations) ? AIAssistantService.nearestAlternative(currentPos, stations, station.id) : null;
 
@@ -877,13 +883,17 @@ function ActiveBookingDashboard({ T, go, booking, station, user, ctx, stations, 
           </Card>
         )}
 
-        {!arrived && bookedVehicle?.estimated_range && distanceKm != null && distanceKm > 3 && !batteryPromptShown && (
+        {!arrived && !batteryPromptShown && (
           <Card T={T} style={{ padding:16, marginBottom:14, background:"rgba(56,189,248,0.06)", border:`1px solid ${T.border}` }}>
             <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}>
               <i className="fas fa-robot" style={{ color:T.blue }}/>
               <span style={{ fontWeight:800,fontSize:13,color:T.blue }}>AI Assistant · Battery Check</span>
             </div>
-            <div style={{ fontSize:12,color:T.muted,marginBottom:10 }}>What's your current battery %? We'll flag it if this station is out of comfortable range.</div>
+            <div style={{ fontSize:12,color:T.muted,marginBottom:10 }}>
+  What's your current battery %? We'll flag it if this station is out of comfortable range.
+  {usingFallbackRange && " (Using a typical EV range estimate since this vehicle doesn't have one saved yet.)"}
+</div>
+{distanceKm == null && <div style={{ fontSize:11,color:T.blue,marginBottom:10 }}><i className="fas fa-location-crosshairs" style={{ marginRight:6 }}/>Locating you to check range…</div>}
             <div style={{ display:"flex",gap:8 }}>
               <input type="number" min="0" max="100" placeholder="e.g. 35" value={batteryInput} onChange={e=>setBatteryInput(e.target.value)}
                 style={{ flex:1,background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 12px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
