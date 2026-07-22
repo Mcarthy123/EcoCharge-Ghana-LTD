@@ -7785,9 +7785,7 @@ useEffect(()=>{
 
   useEffect(()=>{
     if (SUPABASE_URL) sb("stations?select=*&order=id").then(d=>{ if(d?.length) setStations(d); });
-  useEffect(()=>{
-    if (SUPABASE_URL) sb("stations?select=*&order=id").then(d=>{ if(d?.length) setStations(d); });
-   const hash=window.location.hash;
+    const hash=window.location.hash;
     if (hash&&hash.includes("access_token")) {
       const hp=new URLSearchParams(hash.replace("#",""));
       const token=hp.get("access_token");
