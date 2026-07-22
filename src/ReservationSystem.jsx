@@ -674,6 +674,7 @@ function ActiveBookingDashboard({ T, go, booking, station, user, ctx, stations, 
   const [now, setNow] = useState(Date.now());
   const [currentPos, setCurrentPos] = useState(null);
   const [distanceKm, setDistanceKm] = useState(null);
+  const [locStatus, setLocStatus] = useState("locating"); // locating | ok | error
   const [arrived, setArrived] = useState(!!booking.arrival_confirmed_at);
   const [cancelling, setCancelling] = useState(false);
   const [showQR, setShowQR] = useState(false);
@@ -696,8 +697,9 @@ function ActiveBookingDashboard({ T, go, booking, station, user, ctx, stations, 
   useEffect(()=>{
     GeoService.getCurrentPosition().then(pos=>{
       setCurrentPos(pos);
+      setLocStatus("ok");
       if (station?.lat && station?.lng) setDistanceKm(haversine(pos.lat, pos.lng, station.lat, station.lng));
-    }).catch(()=>{});
+    }).catch(()=>{ setLocStatus("error"); });
     if (station?.lat && station?.lng) {
       watchRef.current = GeoService.watchPosition(pos=>{
         setCurrentPos(pos);
@@ -893,7 +895,8 @@ const ratedRangeKm = bookedVehicle?.estimated_range || FALLBACK_ESTIMATED_RANGE_
   What's your current battery %? We'll flag it if this station is out of comfortable range.
   {usingFallbackRange && " (Using a typical EV range estimate since this vehicle doesn't have one saved yet.)"}
 </div>
-{distanceKm == null && <div style={{ fontSize:11,color:T.blue,marginBottom:10 }}><i className="fas fa-location-crosshairs" style={{ marginRight:6 }}/>Locating you to check range…</div>}
+{locStatus === "locating" && distanceKm == null && <div style={{ fontSize:11,color:T.blue,marginBottom:10 }}><i className="fas fa-location-crosshairs" style={{ marginRight:6 }}/>Locating you to check range…</div>}
+{locStatus === "error" && distanceKm == null && <div style={{ fontSize:11,color:T.red,marginBottom:10 }}><i className="fas fa-exclamation-triangle" style={{ marginRight:6 }}/>Location access is off or unavailable — enable location for this site/app so the range check can work.</div>}
             <div style={{ display:"flex",gap:8 }}>
               <input type="number" min="0" max="100" placeholder="e.g. 35" value={batteryInput} onChange={e=>setBatteryInput(e.target.value)}
                 style={{ flex:1,background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 12px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
@@ -950,7 +953,7 @@ const ratedRangeKm = bookedVehicle?.estimated_range || FALLBACK_ESTIMATED_RANGE_
               { label:"Arrival Time", value:fmtTime(arrivalTime) },
               { label:"Est. Cost", value:`GH₵${booking.amount}` },
               { label:"Grace Period", value:`${booking.grace_period_min||GRACE_PERIOD_MIN} min` },
-              { label:"Distance", value: distanceKm!=null?`${distanceKm.toFixed(2)} km`:"Locating…" },
+              { label:"Distance", value: distanceKm!=null?`${distanceKm.toFixed(2)} km`:(locStatus==="error"?"Unavailable":"Locating…") },
             ].map(r=>(
               <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:10,padding:"10px 12px" }}>
                 <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase" }}>{r.label}</div>
