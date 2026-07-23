@@ -1419,7 +1419,7 @@ function Detail({ go,station,stations,setStation,setBookingMode,user,setSelected
             Charge Now
             <span style={{ fontSize:10,fontWeight:500,opacity:0.75 }}>I'm at the station</span>
           </button>
-          <button onClick={()=>{ setBookingMode?.("later");go("vehicles"); }} className="tap"
+          <button onClick={()=>go("reservations")} className="tap"
             style={{ flex:1,background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"15px 10px",fontSize:14,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4 }}>
             <i className="fas fa-clock" style={{ fontSize:18,color:T.green }}/>
             Reserve for Later
@@ -1748,7 +1748,22 @@ function Vehicles({ go,setVehicle,bookingMode,user }) {
 
 function Booking({ go,station,vehicle,user,setBooking }) {
   const s=station||STATIONS[0];
-  const slots=(()=>{ const arr=[],t=new Date(); t.setMinutes(Math.ceil(t.getMinutes()/30)*30,0,0); const end=new Date(); end.setHours(22,0,0,0); while(t<=end){ arr.push(new Date(t));t.setMinutes(t.getMinutes()+30); } return arr; })();
+ const slots=(()=>{
+    const genSlotsForDay = (baseDate, startHour, endHour, floorToNow) => {
+      const arr=[]; const t=new Date(baseDate);
+      if (floorToNow) { t.setMinutes(Math.ceil(t.getMinutes()/30)*30,0,0); }
+      else { t.setHours(startHour,0,0,0); }
+      const end=new Date(baseDate); end.setHours(endHour,0,0,0);
+      while(t<=end){ arr.push(new Date(t)); t.setMinutes(t.getMinutes()+30); }
+      return arr;
+    };
+    let arr = genSlotsForDay(new Date(), 6, 22, true);
+    if (arr.length===0) {
+      const tomorrow=new Date(); tomorrow.setDate(tomorrow.getDate()+1);
+      arr = genSlotsForDay(tomorrow, 6, 22, false);
+    }
+    return arr;
+  })();
   const [slotIdx,setSlotIdx]=useState(0);
   const [durIdx,setDurIdx]=useState(1);
   const payHow="now";
