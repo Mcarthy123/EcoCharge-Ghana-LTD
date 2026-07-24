@@ -428,6 +428,15 @@ function ReservationFlow({ T, go, station, charger, user, vehicles, ctx, onBack,
   const [reliability, setReliability] = useState(100);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [currentPos, setCurrentPos] = useState(null);
+  const [distanceKm, setDistanceKm] = useState(null);
+
+  useEffect(()=>{
+    GeoService.getCurrentPosition().then(pos=>{
+      setCurrentPos(pos);
+      if (station?.lat && station?.lng) setDistanceKm(haversine(pos.lat, pos.lng, station.lat, station.lng));
+    }).catch(()=>{});
+  }, [station]);
 
   const price = charger.price_per_kwh || charger.rate_per_kwh || DEFAULT_PRICE_PER_KWH;
   const power = charger.power_kw || charger.max_power_kw || DEFAULT_CHARGER_KW;
@@ -445,10 +454,13 @@ function ReservationFlow({ T, go, station, charger, user, vehicles, ctx, onBack,
     ReliabilityService.getScore(user.id, ctx).then(setReliability);
   }, [user]);
 
-  const arrivalTime = new Date(Date.now() + arrivalMinsFromNow*60000);
+ const arrivalTime = new Date(Date.now() + arrivalMinsFromNow*60000);
+  const reachableKm = (arrivalMinsFromNow/60) * 70; // conservative driving speed assumption
+  const isTripMismatch = distanceKm != null && distanceKm > reachableKm + 10;
 
   const confirm = async () => {
     if (!selectedVehicle) { setError("Please select a vehicle."); return; }
+    if (isTripMismatch) { setError("This station is too far to reach within your selected arrival window."); return; }
     if (tier.restricted) {
       setError("Your reliability score is too low for new reservations right now. Complete a few Charge Now sessions on time to rebuild it.");
       return;
@@ -468,6 +480,22 @@ function ReservationFlow({ T, go, station, charger, user, vehicles, ctx, onBack,
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header T={T} title="Reserve Charger" sub={`${station.name} · ${charger.label||charger.id}`} onBack={onBack}/>
       <div style={{ flex:1,overflowY:"auto",padding:"14px 16px 120px" }}>
+
+        {isTripMismatch && (
+          <Card T={T} style={{ padding:"14px 16px", marginBottom:14, background:"rgba(56,189,248,0.08)", border:`1px solid ${T.blue}44` }}>
+            <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}>
+              <i className="fas fa-route" style={{ color:T.blue }}/>
+              <span style={{ fontWeight:800,fontSize:13,color:T.blue }}>This looks like a long-distance trip</span>
+            </div>
+            <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.6,marginBottom:12 }}>
+              {station.name} is about {distanceKm.toFixed(0)}km from your current location — too far to arrive within {arrivalMinsFromNow} minutes. This quick-reservation flow is for nearby stations. For a trip like this, the AI Trip Planner calculates your real travel time, battery use, and any charging stops you'll need along the way.
+            </div>
+            <button onClick={()=>go("routeplanner")} className="tap"
+              style={{ width:"100%",background:`linear-gradient(135deg,${T.blue},#0284c7)`,border:"none",borderRadius:10,padding:"12px",fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit" }}>
+              <i className="fas fa-route" style={{ marginRight:8 }}/>Open AI Trip Planner
+            </button>
+          </Card>
+        )}
 
         <Card T={T} style={{ padding:"12px 16px", marginBottom:14, background:`${tier.color}12`, border:`1px solid ${tier.color}44`, display:"flex", alignItems:"center", gap:12 }}>
           <div style={{ width:40,height:40,borderRadius:"50%",background:`${tier.color}22`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
@@ -549,9 +577,9 @@ function ReservationFlow({ T, go, station, charger, user, vehicles, ctx, onBack,
 
         {error && <div style={{ background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",borderRadius:10,padding:"11px 14px",marginBottom:14,color:T.red,fontSize:12 }}>{error}</div>}
 
-        <button onClick={confirm} disabled={saving||tier.restricted} className="tap"
-          style={{ width:"100%",background:tier.restricted?T.border:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,color:tier.restricted?T.muted:"#000",cursor:tier.restricted?"not-allowed":"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:saving?0.7:1 }}>
-          {saving ? <><Spinner color="#000"/> Confirming…</> : tier.restricted ? <><i className="fas fa-lock"/> Reservations Restricted</> : <><i className="fas fa-calendar-check"/> Confirm Reservation</>}
+        <button onClick={isTripMismatch ? ()=>go("routeplanner") : confirm} disabled={saving||tier.restricted} className="tap"
+          style={{ width:"100%",background:tier.restricted?T.border:isTripMismatch?`linear-gradient(135deg,${T.blue},#0284c7)`:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,color:tier.restricted?T.muted:"#000",cursor:tier.restricted?"not-allowed":"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,opacity:saving?0.7:1 }}>
+          {saving ? <><Spinner color="#000"/> Confirming…</> : tier.restricted ? <><i className="fas fa-lock"/> Reservations Restricted</> : isTripMismatch ? <><i className="fas fa-route"/> Use Trip Planner Instead</> : <><i className="fas fa-calendar-check"/> Confirm Reservation</>}
         </button>
       </div>
     </div>
@@ -907,7 +935,48 @@ const ratedRangeKm = bookedVehicle?.estimated_range || FALLBACK_ESTIMATED_RANGE_
           </Card>
         )}
 
-        {batteryRisk && alternative && !rerouteDismissed && (
+       {batteryPromptShown && batteryPct!=null && !batteryRisk && (
+  <Card T={T} style={{ padding:16, marginBottom:14, background:"rgba(34,197,94,0.08)", border:`1px solid ${T.green}44` }}>
+    <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}>
+      <i className="fas fa-robot" style={{ color:T.green }}/>
+      <span style={{ fontWeight:800,fontSize:13,color:T.green }}>AI Assistant · Battery Check</span>
+    </div>
+    <div style={{ fontSize:13,color:T.text,lineHeight:1.6 }}>
+      At {batteryPct}% battery, you have enough range to comfortably reach {station.name}{distanceKm!=null?` (${distanceKm.toFixed(1)}km away)`:""}. Safe to drive.
+    </div>
+  </Card>
+)}
+
+{batteryRisk && !rerouteDismissed && (alternative ? (
+  <Card T={T} style={{ padding:16, marginBottom:14, background:"rgba(251,191,36,0.08)", border:"1px solid rgba(251,191,36,0.35)" }}>
+    <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}>
+      <i className="fas fa-robot" style={{ color:T.yellow }}/>
+      <span style={{ fontWeight:800,fontSize:13,color:T.yellow }}>AI Assistant · Low Battery</span>
+    </div>
+    <div style={{ fontSize:13,color:T.text,marginBottom:12,lineHeight:1.6 }}>
+      At {batteryPct}% battery your estimated range may not comfortably cover the {distanceKm.toFixed(1)}km to {station.name}.
+      <strong> {alternative.name}</strong> is only {alternative.distKm.toFixed(1)}km away and has open bays.
+    </div>
+    <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+      <button onClick={()=>setRerouteDismissed(true)} className="tap"
+        style={{ background:T.surfaceFaint,border:`1px solid ${T.border}`,borderRadius:10,padding:"11px",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>Keep This Station</button>
+      <button onClick={()=>switchToStation(alternative)} className="tap"
+        style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:10,padding:"11px",fontSize:12,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>Switch Station</button>
+    </div>
+  </Card>
+) : (
+  <Card T={T} style={{ padding:16, marginBottom:14, background:"rgba(251,191,36,0.08)", border:"1px solid rgba(251,191,36,0.35)" }}>
+    <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}>
+      <i className="fas fa-robot" style={{ color:T.yellow }}/>
+      <span style={{ fontWeight:800,fontSize:13,color:T.yellow }}>AI Assistant · Low Battery</span>
+    </div>
+    <div style={{ fontSize:13,color:T.text,marginBottom:12,lineHeight:1.6 }}>
+      At {batteryPct}% battery, your estimated range may not comfortably cover the {distanceKm.toFixed(1)}km to {station.name}. No closer open station was found nearby.
+    </div>
+    <button onClick={()=>setRerouteDismissed(true)} className="tap"
+      style={{ width:"100%",background:T.surfaceFaint,border:`1px solid ${T.border}`,borderRadius:10,padding:"11px",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>Dismiss</button>
+  </Card>
+))}
           <Card T={T} style={{ padding:16, marginBottom:14, background:"rgba(251,191,36,0.08)", border:"1px solid rgba(251,191,36,0.35)" }}>
             <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}>
               <i className="fas fa-robot" style={{ color:T.yellow }}/>
