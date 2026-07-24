@@ -434,6 +434,13 @@ const TripPlannerService = {
     let totalChargingTime = 0;
     let totalChargingCost = 0;
 
+    // Real-world ETA tracking — converts route distance into actual clock times,
+    // not just km. avgSpeedKmh comes from OSRM's own distance/duration for this
+    // route, so it reflects real road conditions, not a guessed constant.
+    const startedAt = new Date();
+    const avgSpeedKmh = route.distanceKm / (route.durationMin / 60);
+    let elapsedMin = 0;
+
     const scoreStation = async (s) => {
       const info = await ChargingStationService.chargerInfo(s.id, SUPABASE_URL, SUPABASE_ANON, getToken);
       let score = 0;
@@ -481,8 +488,16 @@ const TripPlannerService = {
       const chargeMinutes = Math.round((energyAdded / chosen.powerKw) * 60);
       const cost = +(energyAdded * chosen.pricePerKwh).toFixed(2);
 
-      stops.push({ ...chosen, arrivalBatteryPct: arrivalPct, chargeToPct: targetPct, energyAddedKWh: +energyAdded.toFixed(2), chargeMinutes, cost, waitMinutes: 0 });
+      // Real ETA for this stop — drive time for this leg only, layered on top
+      // of everything driven/charged so far, so each stop's clock time reflects
+      // actual cumulative travel, not a flat guess.
+      const legDriveMin = (legKm / avgSpeedKmh) * 60 * traffic.multiplier;
+      elapsedMin += legDriveMin;
+      const arrivalClockTime = new Date(startedAt.getTime() + elapsedMin*60000);
 
+      stops.push({ ...chosen, arrivalBatteryPct: arrivalPct, chargeToPct: targetPct, energyAddedKWh: +energyAdded.toFixed(2), chargeMinutes, cost, waitMinutes: 0, arrivalClockTime, driveMinToReach: Math.round(legDriveMin) });
+
+      elapsedMin += chargeMinutes;
       totalChargingTime += chargeMinutes;
       totalChargingCost += cost;
       remainingKWh = targetKWh;
@@ -490,15 +505,19 @@ const TripPlannerService = {
       unvisited = unvisited.filter(s => s.id !== chosen.id);
     }
 
-    const finalLegKm = route.distanceKm - lastKm;
+   const finalLegKm = route.distanceKm - lastKm;
     const finalEnergy = BatteryPredictionService.energyForLegKWh(finalLegKm, consumptionPerKm, traffic.multiplier);
     remainingKWh -= finalEnergy;
     const batteryAtArrivalPct = Math.max(0, Math.round((remainingKWh/capacityKWh)*100));
+
+    const finalLegDriveMin = (finalLegKm / avgSpeedKmh) * 60 * traffic.multiplier;
+    const estimatedArrivalTime = new Date(startedAt.getTime() + elapsedMin*60000 + finalLegDriveMin*60000);
 
     return {
       feasible: true, route, distanceKm: route.distanceKm, durationMin: route.durationMin + totalChargingTime,
       driveDurationMin: route.durationMin, traffic, stops, totalChargingTime,
       totalChargingCost: +totalChargingCost.toFixed(2), batteryAtArrivalPct, consumptionPerKm, capacityKWh,
+      startedAt, estimatedArrivalTime,
     };
   },
 };
