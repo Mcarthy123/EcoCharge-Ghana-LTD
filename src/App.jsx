@@ -2057,6 +2057,9 @@ function QRScreen({ go, booking, setBooking, user }) {
   let b = booking;
   if (!b) { try { const s=localStorage.getItem("eco_booking"); if(s) b=JSON.parse(s); } catch(e){} }
 
+  const isFutureReservation = b?.slot_time && b?.booking_mode !== "now"
+    && (new Date(b.slot_time).getTime() - Date.now() > 5*60000);
+
   useEffect(()=>{
     if (phase !== 'charging') return;
     const tick = setInterval(()=>{
@@ -2340,7 +2343,50 @@ function QRScreen({ go, booking, setBooking, user }) {
       setPhase("completed");
     }
   };
+if (isFutureReservation) return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Reservation Confirmed" sub={fmtTime(b.slot_time)} onBack={()=>go("home")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 100px" }}>
+        <div className="fade" style={{ textAlign:"center",marginBottom:24 }}>
+          <div style={{ width:80,height:80,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",boxShadow:`0 4px 24px rgba(74,222,128,0.4)` }}>
+            <i className="fas fa-calendar-check" style={{ fontSize:36,color:"#000" }}/>
+          </div>
+          <div style={{ fontWeight:900,fontSize:22,color:T.green,marginBottom:6 }}>You're Booked!</div>
+          <div style={{ fontSize:13,color:T.muted }}>{b.station} · {fmtTime(b.slot_time)}</div>
+        </div>
+        <div style={{ background:T.card,borderRadius:16,padding:"16px 18px",marginBottom:16,border:`1px solid ${T.border}` }}>
+          {[
+            { label:"Station", value:b.station },
+            { label:"Vehicle", value:b.vehicle },
+            { label:"Time", value:fmtTime(b.slot_time) },
+            { label:"Duration", value:b.duration_min?`${b.duration_min} min`:"—" },
+            { label:"Estimated Cost", value:`GH₵${b.amount||"—"}` },
+          ].map(r=>(
+            <div key={r.label} style={{ display:"flex",justifyContent:"space-between",marginBottom:10 }}>
+              <span style={{ color:T.muted,fontSize:13 }}>{r.label}</span>
+              <span style={{ color:T.text,fontWeight:600,fontSize:13 }}>{r.value}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ background:"rgba(56,189,248,0.08)",border:`1px solid rgba(56,189,248,0.2)`,borderRadius:14,padding:"14px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:12 }}>
+          <i className="fas fa-info-circle" style={{ fontSize:16,color:T.blue }}/>
+          <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.6 }}>You won't be charged until you arrive and start your session. Come back to this booking from "My Bookings" when you're at the station.</div>
+        </div>
+        <button onClick={()=>go("bookings")} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",marginBottom:10 }}>
+          <i className="fas fa-calendar-alt" style={{ marginRight:8 }}/>View My Bookings
+        </button>
+        <button onClick={()=>go("home")} className="tap"
+          style={{ width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:"14px",fontSize:14,fontWeight:600,color:T.mutedLight,cursor:"pointer",fontFamily:"inherit" }}>
+          Back to Home
+        </button>
+      </div>
+    </div>
+  );
 
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Charging Pass" sub="Ready to charge" onBack={()=>go("home")}/>
   if (!b) return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Charging Pass" onBack={()=>go("home")}/>
