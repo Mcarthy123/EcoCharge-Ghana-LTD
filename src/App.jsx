@@ -2384,9 +2384,7 @@ if (isFutureReservation) return (
     </div>
   );
 
-  return (
-    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <Header title="Charging Pass" sub="Ready to charge" onBack={()=>go("home")}/>
+ 
   if (!b) return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header title="Charging Pass" onBack={()=>go("home")}/>
