@@ -1792,10 +1792,15 @@ function FleetReserve({ T, stations, drivers, fleet, user, ctx, onDone }) {
         <div style={{ fontSize:12,color:T.green,textAlign:"center",marginBottom:10 }}><i className="fas fa-check-circle" style={{ marginRight:6 }}/>{result} reservation{result!==1?"s":""} created.</div>
       )}
 
-      <button onClick={submit} disabled={saving || !Object.values(assignments).some(Boolean)} className="tap"
-        style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",opacity:saving?0.7:1 }}>
-        {saving ? "Reserving…" : "Reserve for Assigned Drivers"}
-      </button>
+      {(() => {
+        const hasAssignment = Object.values(assignments).some(Boolean);
+        return (
+          <button onClick={submit} disabled={saving || !hasAssignment} className="tap"
+            style={{ width:"100%",background:hasAssignment?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.border,border:"none",borderRadius:14,padding:"15px",fontSize:14,fontWeight:800,color:hasAssignment?"#000":T.muted,cursor:hasAssignment?"pointer":"not-allowed",fontFamily:"inherit",opacity:saving?0.7:1 }}>
+            {saving ? "Reserving…" : hasAssignment ? "Reserve for Assigned Drivers" : "Tap a driver above to assign them first"}
+          </button>
+        );
+      })()}
     </>
   );
 }
