@@ -706,7 +706,7 @@ function BatteryUpdateModal({ T, currentPct, onClose, onSave }) {
 }
 
 // ── MODE 2 — SMART DRIVER ASSISTANT HUB (default landing) ─────────
-function DriverAssistantHub({ go, user, stations, T, getToken, SUPABASE_URL, SUPABASE_ANON, vehicles, selectedVehicle, setSelectedVehicle, onPlanTrip }) {
+function DriverAssistantHub({ go, user, stations, T, getToken, SUPABASE_URL, SUPABASE_ANON, vehicles, selectedVehicle, setSelectedVehicle, onPlanTrip, onReserve }) {
   const [battery, setBattery] = useState(DriverAssistantService.loadBatteryState());
   const [showBatteryModal, setShowBatteryModal] = useState(false);
   const [currentPos, setCurrentPos] = useState(null);
@@ -917,7 +917,7 @@ function DriverAssistantHub({ go, user, stations, T, getToken, SUPABASE_URL, SUP
                     <button onClick={()=>go("map")} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:"9px",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>
                       <i className="fas fa-directions" style={{ marginRight:6 }}/>Navigate
                     </button>
-                    <button onClick={()=>go("booking")} className="tap" style={{ background:`${T.green}18`,border:`1px solid ${T.green}44`,borderRadius:10,padding:"9px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
+                    <button onClick={()=>onReserve?.({ station: s, vehicle: selectedVehicle })} className="tap" style={{ background:`${T.green}18`,border:`1px solid ${T.green}44`,borderRadius:10,padding:"9px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
                       <i className="fas fa-calendar-check" style={{ marginRight:6 }}/>Reserve
                     </button>
                   </div>
