@@ -7797,7 +7797,7 @@ function AppInner() {
   const [user,setUserRaw]     = useState(()=>{ try { const u=localStorage.getItem("eco_user"); return u?JSON.parse(u):null; } catch(e){ return null; } });
   const [drawer,setDrawer]    = useState(false);
   const [selectedBooking,setSelectedBooking]= useState(null);
-  const [selectedBooking,setSelectedBooking]= useState(null);
+ 
   const [pendingReservation,setPendingReservation]= useState(null);
 
  const setUser=(u)=>{ setUserRaw(u); try { u?localStorage.setItem("eco_user",JSON.stringify(u)):localStorage.removeItem("eco_user"); } catch(e){} };
