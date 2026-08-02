@@ -419,10 +419,19 @@ function StationDetailPro({ T, go, station, onChargeNow, onReserve, ctx, onBack,
 }
 
 // ── RESERVATION FORM ───────────────────────────────────────────
-function ReservationFlow({ T, go, station, charger, user, vehicles, ctx, onBack, onConfirmed }) {
-  const [selectedVehicle, setSelectedVehicle] = useState(vehicles?.[0] || null);
-  const [arrivalMinsFromNow, setArrivalMinsFromNow] = useState(15);
-  const [durationMin, setDurationMin] = useState(60);
+function ReservationFlow({ T, go, station, charger, user, vehicles, ctx, onBack, onConfirmed, prefill }) {
+  const [selectedVehicle, setSelectedVehicle] = useState(prefill?.vehicle || vehicles?.[0] || null);
+  const [arrivalMinsFromNow, setArrivalMinsFromNow] = useState(()=>{
+    if (!prefill?.arrivalTime) return 15;
+    const diffMin = Math.round((new Date(prefill.arrivalTime).getTime() - Date.now()) / 60000);
+    const options = [15,30,45,60];
+    return options.reduce((closest,opt)=> Math.abs(opt-diffMin) < Math.abs(closest-diffMin) ? opt : closest, options[0]);
+  });
+  const [durationMin, setDurationMin] = useState(()=> {
+    if (!prefill?.durationMin) return 60;
+    const options = [30,60,120];
+    return options.reduce((closest,opt)=> Math.abs(opt-prefill.durationMin) < Math.abs(closest-prefill.durationMin) ? opt : closest, options[0]);
+  });
   const [payMethod, setPayMethod] = useState("wallet");
   const [walletBal, setWalletBal] = useState(null);
   const [reliability, setReliability] = useState(100);
@@ -1841,13 +1850,14 @@ function FleetReports({ T, fleetId, ctx }) {
   );
 }
 
-export default function ReservationSystem({ go, user, stations, T, getToken, SUPABASE_URL, SUPABASE_ANON }) {
+export default function ReservationSystem({ go, user, stations, T, getToken, SUPABASE_URL, SUPABASE_ANON, pendingReservation, onPendingConsumed }) {
   const [step, setStep] = useState("list"); // list | detail | reserve | dashboard | charging | receipt | history
   const [station, setStation] = useState(null);
   const [charger, setCharger] = useState(null);
   const [booking, setBooking] = useState(null);
   const [chargingResult, setChargingResult] = useState(null);
   const [vehicles, setVehicles] = useState([]);
+  const [reservePrefill, setReservePrefill] = useState(null);
 
   const ctx = { SUPABASE_URL, SUPABASE_ANON, getToken };
 
@@ -1856,6 +1866,25 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
     sbGet(SUPABASE_URL, SUPABASE_ANON, getToken, `user_vehicles?user_id=eq.${user.id}&order=created_at.asc`).then(v=>setVehicles(Array.isArray(v)?v:[]));
   }, [user]);
 
+  // Handoff from the AI Route Planner / Driver Assistant "Reserve" buttons —
+  // jumps straight into the reservation form instead of the station list.
+  useEffect(()=>{
+    if (!pendingReservation?.station) return;
+    (async()=>{
+      const stationChargers = await StationService.loadChargers(pendingReservation.station.id, ctx);
+      const available = stationChargers.find(c => StationService.chargerStatus(c) === "Available");
+      const chosenCharger = available || stationChargers[0] || { id: "auto", price_per_kwh: DEFAULT_PRICE_PER_KWH, power_kw: DEFAULT_CHARGER_KW };
+      setStation(pendingReservation.station);
+      setCharger(chosenCharger);
+      setReservePrefill({
+        vehicle: pendingReservation.vehicle || null,
+        arrivalTime: pendingReservation.suggestedArrivalTime || null,
+        durationMin: pendingReservation.suggestedDurationMin || null,
+      });
+      setStep("reserve");
+      onPendingConsumed?.();
+    })();
+  }, [pendingReservation]);
   if (!user) return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,alignItems:"center",justifyContent:"center",padding:24,textAlign:"center" }}>
       <i className="fas fa-calendar-times" style={{ fontSize:48,color:T.muted,marginBottom:16 }}/>
@@ -1881,8 +1910,9 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
 
   if (step==="reserve" && station && charger) return (
     <ReservationFlow T={T} go={go} station={station} charger={charger} user={user} vehicles={vehicles} ctx={ctx}
-      onBack={()=>setStep("detail")}
-      onConfirmed={(b)=>{ setBooking(b); setStep("dashboard"); }}
+      onBack={()=>{ const cameFromHandoff = !!reservePrefill; setReservePrefill(null); setStep(cameFromHandoff?"list":"detail"); }}
+      onConfirmed={(b)=>{ setReservePrefill(null); setBooking(b); setStep("dashboard"); }}
+      prefill={reservePrefill}
     />
   );
 
