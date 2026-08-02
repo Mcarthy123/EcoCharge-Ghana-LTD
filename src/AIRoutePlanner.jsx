@@ -1000,7 +1000,7 @@ function DriverAssistantHub({ go, user, stations, T, getToken, SUPABASE_URL, SUP
 }
 
 // ── MODE 1 — TRIP PLANNER FLOW (unchanged behaviour from previous version) ──
-function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL, SUPABASE_ANON, vehicles, initialVehicle }) {
+function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL, SUPABASE_ANON, vehicles, initialVehicle, onReserve }) {
   const [step, setStep] = useState("input");
   const [fromPlace, setFromPlace] = useState(null);
   const [toPlace, setToPlace] = useState(null);
@@ -1288,7 +1288,7 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
                         <button onClick={()=>go("map")} className="tap" style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>
                           <i className="fas fa-directions" style={{ marginRight:6 }}/>Navigate
                         </button>
-                        <button onClick={()=>go("booking")} className="tap" style={{ background:`${T.green}18`,border:`1px solid ${T.green}44`,borderRadius:10,padding:"10px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
+                       <button onClick={()=>onReserve?.({ station: s, vehicle: selectedVehicle, suggestedArrivalTime: s.arrivalClockTime, suggestedDurationMin: s.chargeMinutes })} className="tap" style={{ background:`${T.green}18`,border:`1px solid ${T.green}44`,borderRadius:10,padding:"10px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
                           <i className="fas fa-calendar-check" style={{ marginRight:6 }}/>Reserve
                         </button>
                       </div>
