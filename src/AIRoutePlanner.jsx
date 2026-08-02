@@ -1408,7 +1408,7 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
 }
 
 // ── TOP-LEVEL ENTRY — routes between Mode 2 (default) and Mode 1 ─────
-export default function AIRoutePlanner({ go, user, stations, T, getToken, SUPABASE_URL, SUPABASE_ANON }) {
+export default function AIRoutePlanner({ go, user, stations, T, getToken, SUPABASE_URL, SUPABASE_ANON, onReserve }) {
   const [mode, setMode] = useState("assistant"); // assistant | planner
   const [vehicles, setVehicles] = useState([]);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
@@ -1427,7 +1427,7 @@ export default function AIRoutePlanner({ go, user, stations, T, getToken, SUPABA
       <TripPlannerFlow
         go={go} onBack={()=>setMode("assistant")} user={user} stations={stations}
         T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}
-        vehicles={vehicles} initialVehicle={selectedVehicle}
+        vehicles={vehicles} initialVehicle={selectedVehicle} onReserve={onReserve}
       />
     );
   }
@@ -1437,7 +1437,7 @@ export default function AIRoutePlanner({ go, user, stations, T, getToken, SUPABA
       go={go} user={user} stations={stations} T={T} getToken={getToken}
       SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}
       vehicles={vehicles} selectedVehicle={selectedVehicle} setSelectedVehicle={setSelectedVehicle}
-      onPlanTrip={()=>setMode("planner")}
+      onPlanTrip={()=>setMode("planner")} onReserve={onReserve}
     />
   );
 }
