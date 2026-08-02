@@ -7797,6 +7797,8 @@ function AppInner() {
   const [user,setUserRaw]     = useState(()=>{ try { const u=localStorage.getItem("eco_user"); return u?JSON.parse(u):null; } catch(e){ return null; } });
   const [drawer,setDrawer]    = useState(false);
   const [selectedBooking,setSelectedBooking]= useState(null);
+  const [selectedBooking,setSelectedBooking]= useState(null);
+  const [pendingReservation,setPendingReservation]= useState(null);
 
  const setUser=(u)=>{ setUserRaw(u); try { u?localStorage.setItem("eco_user",JSON.stringify(u)):localStorage.removeItem("eco_user"); } catch(e){} };
   const go=(s)=>{ setScreen(s);setDrawer(false); };
@@ -7931,9 +7933,9 @@ useEffect(()=>{
       verify:         <Verify {...props}/>,
       profile:        <Profile {...props}/>,
       about:          <About {...props}/>,
-      routeplanner:   <AIRoutePlanner go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
+      routeplanner:   <AIRoutePlanner go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON} onReserve={(intent)=>{ setPendingReservation(intent); goSecure("reservations"); }}/>,
     
- reservations: <ReservationSystem go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
+ reservations: <ReservationSystem go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON} pendingReservation={pendingReservation} onPendingConsumed={()=>setPendingReservation(null)}/>,
     };
 
       return (
