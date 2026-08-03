@@ -105,6 +105,19 @@ const StationService = {
     const data = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `chargers?station_id=eq.${stationId}&select=*`);
     return Array.isArray(data) ? data : [];
   },
+  // Real average session length at this specific charger, from your own completed
+  // sessions — not a guess. Returns null if there isn't enough history yet, so
+  // callers know to fall back to the generic AVG_SESSION_MIN constant.
+  async avgSessionMinutes(chargerId, ctx) {
+    const data = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `charging_sessions?charger_id=eq.${chargerId}&status=eq.Completed&select=started_at,completed_at&order=completed_at.desc&limit=20`);
+    const sessions = Array.isArray(data) ? data : [];
+    const durations = sessions
+      .filter(s => s.started_at && s.completed_at)
+      .map(s => (new Date(s.completed_at).getTime() - new Date(s.started_at).getTime()) / 60000)
+      .filter(d => d > 0 && d < 600); // sanity bounds — throws out bad/corrupt timestamps
+    if (!durations.length) return null;
+    return Math.round(durations.reduce((a,v)=>a+v,0) / durations.length);
+  },
   chargerStatus(c) {
     if (c.has_fault) return "Offline";
     if (c.status === "Charging") return "Charging";
@@ -352,14 +365,20 @@ function StationDetailPro({ T, go, station, onChargeNow, onReserve, ctx, onBack,
   const [chargers, setChargers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [queueLengths, setQueueLengths] = useState({});
+  const [avgSessionMins, setAvgSessionMins] = useState({});
 
   const load = async () => {
     setLoading(true);
     const data = await StationService.loadChargers(station.id, ctx);
     setChargers(data);
     const lengths = {};
-    for (const c of data) lengths[c.id] = await QueueService.getQueueLength(c.id, ctx);
+    const avgMins = {};
+    for (const c of data) {
+      lengths[c.id] = await QueueService.getQueueLength(c.id, ctx);
+      avgMins[c.id] = await StationService.avgSessionMinutes(c.id, ctx);
+    }
     setQueueLengths(lengths);
+    setAvgSessionMins(avgMins);
     setLoading(false);
   };
   useEffect(()=>{ load(); const t=setInterval(load, 15000); return ()=>clearInterval(t); }, [station.id]);
@@ -379,7 +398,8 @@ function StationDetailPro({ T, go, station, onChargeNow, onReserve, ctx, onBack,
           const price = c.price_per_kwh || c.rate_per_kwh || DEFAULT_PRICE_PER_KWH;
           const power = c.power_kw || c.max_power_kw || DEFAULT_CHARGER_KW;
           const qLen = queueLengths[c.id] || 0;
-          const waitMin = status==="Available" ? 0 : qLen>0 ? qLen*AVG_SESSION_MIN : AVG_SESSION_MIN;
+          const avgMin = avgSessionMins[c.id] || AVG_SESSION_MIN; // real historical average if we have it, generic estimate otherwise
+          const waitMin = status==="Available" ? 0 : qLen>0 ? qLen*avgMin : avgMin;
           return (
             <Card key={c.id} T={T} style={{ padding:16, marginBottom:12 }}>
               <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
@@ -876,8 +896,10 @@ function ActiveBookingDashboard({ T, go, booking, station, user, ctx, stations, 
   const usingFallbackRange = !bookedVehicle?.estimated_range;
 const ratedRangeKm = bookedVehicle?.estimated_range || FALLBACK_ESTIMATED_RANGE_KM;
   const batteryRisk = AIAssistantService.isBatteryRisk(batteryPct, ratedRangeKm, distanceKm);
-  const alternative = (batteryRisk && currentPos && stations) ? AIAssistantService.nearestAlternative(currentPos, stations, station.id) : null;
-
+  const nearestOther = (batteryRisk && currentPos && stations) ? AIAssistantService.nearestAlternative(currentPos, stations, station.id) : null;
+  // Only treat it as a real alternative if it's actually closer than where we're already headed —
+  // "nearest of the rest" can still be hundreds of km away and isn't a useful suggestion.
+  const alternative = (nearestOther && distanceKm != null && nearestOther.distKm < distanceKm) ? nearestOther : null;
   const switchToStation = async (alt) => {
     await BookingService.cancel(booking.reference, `Rerouted for low battery to ${alt.name}`, ctx);
     await QueueService.advanceNext(booking.charger_id, ctx);
@@ -1124,16 +1146,25 @@ function ChangeTimeModal({ T, onClose, onSave }) {
 function QueuePanel({ T, chargerId, userId, ctx }) {
   const [myEntry, setMyEntry] = useState(null);
   const [queueLen, setQueueLen] = useState(0);
+  const [avgMin, setAvgMin] = useState(AVG_SESSION_MIN);
   const [now, setNow] = useState(Date.now());
   const expiredRef = useRef(false);
 
   const load = async () => {
     // getMyPosition only looks at "waiting" rows — also check for an active offer.
     const waiting = await QueueService.getMyPosition(chargerId, userId, ctx);
-    if (waiting) { setMyEntry(waiting); setQueueLen(await QueueService.getQueueLength(chargerId, ctx)); return; }
+    if (waiting) {
+      setMyEntry(waiting);
+      setQueueLen(await QueueService.getQueueLength(chargerId, ctx));
+      const real = await StationService.avgSessionMinutes(chargerId, ctx);
+      if (real) setAvgMin(real);
+      return;
+    }
     const offered = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `queue?charger_id=eq.${chargerId}&user_id=eq.${userId}&status=eq.offered&select=*&order=offered_at.desc&limit=1`);
     setMyEntry(Array.isArray(offered) && offered[0] ? offered[0] : null);
     setQueueLen(await QueueService.getQueueLength(chargerId, ctx));
+    const real = await StationService.avgSessionMinutes(chargerId, ctx);
+    if (real) setAvgMin(real);
   };
   useEffect(()=>{ load(); const t=setInterval(load, 15000); return ()=>clearInterval(t); }, [chargerId]);
   useEffect(()=>{ const t=setInterval(()=>setNow(Date.now()), 1000); return ()=>clearInterval(t); }, []);
@@ -1167,7 +1198,7 @@ function QueuePanel({ T, chargerId, userId, ctx }) {
     );
   }
 
-  const waitMin = (myEntry.position - 1) * AVG_SESSION_MIN;
+  const waitMin = (myEntry.position - 1) * avgMin;
   return (
     <Card T={T} style={{ padding:16, marginBottom:14 }}>
       <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:10 }}><i className="fas fa-users" style={{ marginRight:8,color:T.blue }}/>Live Queue</div>
