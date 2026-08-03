@@ -986,23 +986,6 @@ const ratedRangeKm = bookedVehicle?.estimated_range || FALLBACK_ESTIMATED_RANGE_
       style={{ width:"100%",background:T.surfaceFaint,border:`1px solid ${T.border}`,borderRadius:10,padding:"11px",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>Dismiss</button>
   </Card>
 ))}
-          <Card T={T} style={{ padding:16, marginBottom:14, background:"rgba(251,191,36,0.08)", border:"1px solid rgba(251,191,36,0.35)" }}>
-            <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}>
-              <i className="fas fa-robot" style={{ color:T.yellow }}/>
-              <span style={{ fontWeight:800,fontSize:13,color:T.yellow }}>AI Assistant · Low Battery</span>
-            </div>
-            <div style={{ fontSize:13,color:T.text,marginBottom:12,lineHeight:1.6 }}>
-              At {batteryPct}% battery your estimated range may not comfortably cover the {distanceKm.toFixed(1)}km to {station.name}.
-              <strong> {alternative.name}</strong> is only {alternative.distKm.toFixed(1)}km away and has open bays.
-            </div>
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
-              <button onClick={()=>setRerouteDismissed(true)} className="tap"
-                style={{ background:T.surfaceFaint,border:`1px solid ${T.border}`,borderRadius:10,padding:"11px",fontSize:12,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>Keep This Station</button>
-              <button onClick={()=>switchToStation(alternative)} className="tap"
-                style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:10,padding:"11px",fontSize:12,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>Switch Station</button>
-            </div>
-          </Card>
-        )}
 
         {isGracePeriod && (
           <Card T={T} style={{ padding:16, marginBottom:14, background:"rgba(251,191,36,0.08)", border:"1px solid rgba(251,191,36,0.3)" }}>
