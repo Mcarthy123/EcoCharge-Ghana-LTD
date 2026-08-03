@@ -694,7 +694,9 @@ const AIAssistantService = {
   // Given a self-reported battery % and the vehicle's rated range, how far can it go
   // before the remaining distance becomes risky (15% safety margin)?
   isBatteryRisk(batteryPct, ratedRangeKm, remainingDistanceKm) {
-    if (batteryPct == null || !ratedRangeKm || remainingDistanceKm == null) return false;
+    if (batteryPct == null) return false;
+    if (batteryPct <= 15) return true; // critically low — flag regardless of distance data
+    if (!ratedRangeKm || remainingDistanceKm == null) return false; // can't verify range yet — handled separately, never reported as "safe"
     const remainingRangeKm = ratedRangeKm * (batteryPct / 100);
     return remainingRangeKm < remainingDistanceKm * 1.15;
   },
@@ -944,14 +946,25 @@ const ratedRangeKm = bookedVehicle?.estimated_range || FALLBACK_ESTIMATED_RANGE_
           </Card>
         )}
 
-       {batteryPromptShown && batteryPct!=null && !batteryRisk && (
+      {batteryPromptShown && batteryPct!=null && !batteryRisk && distanceKm!=null && (
   <Card T={T} style={{ padding:16, marginBottom:14, background:"rgba(34,197,94,0.08)", border:`1px solid ${T.green}44` }}>
     <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}>
       <i className="fas fa-robot" style={{ color:T.green }}/>
       <span style={{ fontWeight:800,fontSize:13,color:T.green }}>AI Assistant · Battery Check</span>
     </div>
     <div style={{ fontSize:13,color:T.text,lineHeight:1.6 }}>
-      At {batteryPct}% battery, you have enough range to comfortably reach {station.name}{distanceKm!=null?` (${distanceKm.toFixed(1)}km away)`:""}. Safe to drive.
+      At {batteryPct}% battery, you have enough range to comfortably reach {station.name} ({distanceKm.toFixed(1)}km away). Safe to drive.
+    </div>
+  </Card>
+)}
+{batteryPromptShown && batteryPct!=null && !batteryRisk && distanceKm==null && (
+  <Card T={T} style={{ padding:16, marginBottom:14, background:"rgba(56,189,248,0.06)", border:`1px solid ${T.border}` }}>
+    <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}>
+      <i className="fas fa-robot" style={{ color:T.blue }}/>
+      <span style={{ fontWeight:800,fontSize:13,color:T.blue }}>AI Assistant · Battery Check</span>
+    </div>
+    <div style={{ fontSize:13,color:T.text,lineHeight:1.6 }}>
+      Still locating you to check your range to {station.name} — we won't confirm it's safe to drive until we can verify the distance.
     </div>
   </Card>
 )}
