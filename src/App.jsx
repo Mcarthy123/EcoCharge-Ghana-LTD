@@ -7938,7 +7938,7 @@ useEffect(()=>{
       routeplanner:   <AIRoutePlanner go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON} onReserve={(intent)=>{ setPendingReservation(intent); goSecure("reservations"); }}/>,
     
  reservations: <ReservationSystem go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON} pendingReservation={pendingReservation} onPendingConsumed={()=>setPendingReservation(null)}/>,
-   
+   homeplus: <HomePlusDashboard go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,,
     };
 
       return (
