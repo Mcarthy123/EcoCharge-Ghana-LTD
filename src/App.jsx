@@ -7,6 +7,7 @@
 import { useState, useEffect, useRef, useContext, createContext } from "react";
 import AIRoutePlanner from "./AIRoutePlanner";
 import ReservationSystem from "./ReservationSystem";
+import HomePlusDashboard from "./HomePlusDashboard";
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL        || "";
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY   || "";
