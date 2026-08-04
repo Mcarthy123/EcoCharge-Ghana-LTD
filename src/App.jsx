@@ -634,6 +634,7 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => {
           { icon:"fa-bell",             label:"Notifications",   screen:"notifications" },
           { icon:"fa-route",            label:"AI Route Planner", screen:"routeplanner", color:T.green },
           { icon:"fa-calendar-check",   label:"Reserve a Charger", screen:"reservations", color:T.green },
+    { icon:"fa-charging-station", label:"EcoCharge Home+", screen:"homeplus", color:T.green },
           { icon:"fa-info-circle",      label:"About EcoCharge", screen:"about"         },
           { icon:"fa-list-alt",         label:"Charging History", screen:"sessions",    color:T.green  },
           { icon:"fa-wallet",           label:"My Wallet",       screen:"wallet",       color:T.yellow },
@@ -7937,6 +7938,7 @@ useEffect(()=>{
       routeplanner:   <AIRoutePlanner go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON} onReserve={(intent)=>{ setPendingReservation(intent); goSecure("reservations"); }}/>,
     
  reservations: <ReservationSystem go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON} pendingReservation={pendingReservation} onPendingConsumed={()=>setPendingReservation(null)}/>,
+    import HomePlusDashboard from "./HomePlusDashboard";
     };
 
       return (
