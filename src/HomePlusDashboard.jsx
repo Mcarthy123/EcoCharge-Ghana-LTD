@@ -2,13 +2,24 @@
 // EcoCharge Ghana — Home+ Dashboard
 // Phase 1: Shell & UI (sample data)
 // Phase 2: Smart Charging controls + real scheduling
+// Phase 3: Battery Protection + Battery Tips
+// Phase 4: AI Assistant (rule-based — no LLM key configured yet)
 //
 // HONESTY NOTES:
 // - Start/Stop/Pause/Resume charger actions are SIMULATED. No home
 //   charger hardware is connected yet (that's Phase 5 — Charger
 //   Management + real OCPP telemetry).
-// - Schedules ARE real — saved to Supabase (charging_schedules table)
-//   and will be ready to drive real hardware once Phase 5 lands.
+// - Schedules ARE real — saved to Supabase (charging_schedules table).
+// - Charge limit (80/90/100%) is REAL — reads/writes the vehicle's
+//   own preferred_charge_limit field in user_vehicles.
+// - The "AI Assistant" below is RULE-BASED off real wallet balance,
+//   vehicle range, and time-of-day — same honest pattern as the AI
+//   Route Planner. It is NOT a real conversational LLM. That would
+//   need an API key (OpenAI or similar) which isn't configured yet.
+// - Battery health is only shown if the user self-reported it when
+//   adding their vehicle. Charging speed and "battery stress" are
+//   not available from any connected source yet — shown honestly
+//   as "Not available" rather than fabricated.
 // - Dashboard stats (battery %, kWh, cost) remain sample data until
 //   a real charger is connected.
 // ============================================================
@@ -29,16 +40,16 @@ const MOCK_SESSION_BASE = {
   monthlyCostGHS: 156.57,
 };
 
-const MOCK_VEHICLE = {
-  nickname: "My EV",
-  manufacturer: "Hyundai",
-  model: "Kona Electric",
-};
-
 const DAYS = [
   { key:"MO", label:"M" }, { key:"TU", label:"T" }, { key:"WE", label:"W" },
   { key:"TH", label:"T" }, { key:"FR", label:"F" }, { key:"SA", label:"S" }, { key:"SU", label:"S" },
 ];
+
+const CHARGE_LIMIT_EXPLANATIONS = {
+  80: "Charging to 80% daily may help reduce long-term battery wear. Reserve full charges for long trips.",
+  90: "90% is a middle ground — a bit more range each day with only a small extra impact on long-term battery health.",
+  100: "Charging to 100% gives maximum range but doing this daily may accelerate battery wear over time.",
+};
 
 // ── SUPABASE REST HELPERS ─────────────────────────────────────
 const sbGet = async (SUPABASE_URL, SUPABASE_ANON, getToken, path) => {
@@ -99,6 +110,103 @@ const ScheduleService = {
   },
 };
 
+// ── VEHICLE SERVICE (reuses the real user_vehicles table) ──────
+const HomeVehicleService = {
+  async loadPrimary(userId, ctx) {
+    const data = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `user_vehicles?user_id=eq.${userId}&order=is_default.desc,created_at.asc&limit=1`);
+    return Array.isArray(data) && data[0] ? data[0] : null;
+  },
+  async setChargeLimit(vehicleId, limit, ctx) {
+    return sbPatch(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `user_vehicles?id=eq.${vehicleId}`, { preferred_charge_limit: limit, updated_at: new Date().toISOString() });
+  },
+};
+
+// ── WALLET SERVICE ───────────────────────────────────────────────
+const HomeWalletService = {
+  async getBalance(userId, ctx) {
+    const data = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `wallets?user_id=eq.${userId}&select=balance_pesewas`);
+    return Array.isArray(data) && data[0] ? data[0].balance_pesewas : null;
+  },
+};
+
+// ── RULE-BASED AI ASSISTANT ────────────────────────────────────
+// Every line here is derived from real data already in the app
+// (time of day, real wallet balance, the vehicle's own saved range
+// and daily-distance habit, and real saved schedules). There is no
+// LLM call — this is deterministic logic, same pattern used by
+// AIEngine in AIRoutePlanner.jsx. Labeled honestly in the UI.
+const HomeAIService = {
+  isOffPeakNow() {
+    const h = new Date().getHours();
+    return h >= 23 || h < 5;
+  },
+  nextOffPeakLabel() {
+    const h = new Date().getHours();
+    if (h >= 23 || h < 5) return "now";
+    return "at 11:00 PM tonight";
+  },
+  recommendations({ vehicle, chargeLimit, schedules, walletBalancePesewas, sessionBatteryPct }) {
+    const notes = [];
+    const hasActiveSchedule = schedules.some(s => s.active);
+
+    if (!hasActiveSchedule) {
+      notes.push({ tone:"info", text:`Electricity is typically cheaper overnight. You don't have an active schedule — want to charge ${this.nextOffPeakLabel()}?` });
+    } else {
+      notes.push({ tone:"good", text:"You have an active charging schedule set up." });
+    }
+
+    if (vehicle?.estimated_range && vehicle?.daily_distance_km) {
+      const projectedRangeKm = vehicle.estimated_range * (chargeLimit/100);
+      const covers = projectedRangeKm >= vehicle.daily_distance_km * 1.3; // comfortable margin
+      if (covers) {
+        notes.push({ tone:"good", text:`Charging to ${chargeLimit}% gives about ${Math.round(projectedRangeKm)} km — comfortably covers your typical ${vehicle.daily_distance_km} km/day.` });
+      } else {
+        notes.push({ tone:"caution", text:`Your typical ${vehicle.daily_distance_km} km/day is close to what ${chargeLimit}% provides (~${Math.round(projectedRangeKm)} km). Consider a higher limit before a busy day.` });
+      }
+    }
+
+    if (walletBalancePesewas != null && walletBalancePesewas < 500) {
+      notes.push({ tone:"caution", text:`Wallet balance is low (GH₵${(walletBalancePesewas/100).toFixed(2)}) — top up before your next charge.` });
+    }
+
+    if (this.isOffPeakNow() && sessionBatteryPct < chargeLimit) {
+      notes.push({ tone:"good", text:"It's currently off-peak — a good time to charge if you're plugged in." });
+    }
+
+    return notes;
+  },
+  // Preset Q&A — canned but grounded in the same real inputs above.
+  answer(key, { vehicle, chargeLimit, schedules, walletBalancePesewas }) {
+    if (key === "charge_tonight") {
+      const hasActiveSchedule = schedules.some(s => s.active);
+      if (hasActiveSchedule) return "You already have an active schedule set up — it'll handle tonight's charging automatically.";
+      return `Electricity is typically cheaper overnight. You don't have a schedule yet — tap "New" under Charging Schedules to set one for tonight.`;
+    }
+    if (key === "range_tomorrow") {
+      if (!vehicle?.estimated_range) return "Add your vehicle's estimated range in My Vehicles so I can answer this accurately.";
+      const projectedRangeKm = Math.round(vehicle.estimated_range * (chargeLimit/100));
+      if (vehicle.daily_distance_km) {
+        return projectedRangeKm >= vehicle.daily_distance_km * 1.3
+          ? `Yes — charging to ${chargeLimit}% gives about ${projectedRangeKm} km, well above your typical ${vehicle.daily_distance_km} km/day.`
+          : `It'll be close — ${chargeLimit}% gives about ${projectedRangeKm} km against your typical ${vehicle.daily_distance_km} km/day. Consider raising your limit for tomorrow.`;
+      }
+      return `Charging to ${chargeLimit}% gives you about ${projectedRangeKm} km of range.`;
+    }
+    if (key === "good_time_now") {
+      return this.isOffPeakNow()
+        ? "Yes — it's currently off-peak, typically the cheaper time to charge."
+        : `Not the cheapest window right now. Off-peak pricing typically starts ${this.nextOffPeakLabel()}.`;
+    }
+    if (key === "wallet_check") {
+      if (walletBalancePesewas == null) return "Sign in to check your wallet balance.";
+      return walletBalancePesewas < 500
+        ? `Your wallet balance is GH₵${(walletBalancePesewas/100).toFixed(2)} — you may want to top up before your next charge.`
+        : `Your wallet balance is GH₵${(walletBalancePesewas/100).toFixed(2)} — should be enough for a typical home charge.`;
+    }
+    return "I don't have enough real data yet to answer that.";
+  },
+};
+
 // ── UI PRIMITIVES ───────────────────────────────────────────────
 const Card = ({ T, children, style }) => (
   <div className="fade" style={{
@@ -126,14 +234,22 @@ const Header = ({ T, title, sub, onBack, right }) => (
 
 const STATUS_COLOR = { Charging:"#38bdf8", Scheduled:"#fbbf24", Completed:"#4ade80", Paused:"#f97316", Idle:"#9ca3af" };
 const STATUS_ICON  = { Charging:"fa-bolt", Scheduled:"fa-clock", Completed:"fa-check-circle", Paused:"fa-pause-circle", Idle:"fa-power-off" };
+const TONE_COLOR = (T, tone) => tone==="caution" ? T.yellow : tone==="good" ? T.green : T.blue;
 
 const fmtTime = (d) => new Date(d).toLocaleTimeString("en-GH",{ hour:"2-digit",minute:"2-digit" });
 
+const PRESET_QUESTIONS = [
+  { key:"charge_tonight", label:"Should I charge tonight?" },
+  { key:"range_tomorrow", label:"Enough range tomorrow?" },
+  { key:"good_time_now", label:"Is now a good time?" },
+  { key:"wallet_check", label:"Check my wallet balance" },
+];
+
 // ── NEW SCHEDULE MODAL ──────────────────────────────────────────
-function ScheduleModal({ T, onClose, onSave, saving }) {
-  const [startTime, setStartTime] = useState("23:00");
-  const [stopTime, setStopTime] = useState("06:00");
-  const [offPeakOnly, setOffPeakOnly] = useState(false);
+function ScheduleModal({ T, onClose, onSave, saving, initial }) {
+  const [startTime, setStartTime] = useState(initial?.startTime || "23:00");
+  const [stopTime, setStopTime] = useState(initial?.stopTime || "06:00");
+  const [offPeakOnly, setOffPeakOnly] = useState(initial?.offPeakOnly || false);
   const [repeatDays, setRepeatDays] = useState(["MO","TU","WE","TH","FR","SA","SU"]);
 
   const toggleDay = (key) => setRepeatDays(prev => prev.includes(key) ? prev.filter(d=>d!==key) : [...prev, key]);
@@ -194,15 +310,32 @@ function ScheduleModal({ T, onClose, onSave, saving }) {
 export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL, SUPABASE_ANON }) {
   const ctx = { SUPABASE_URL, SUPABASE_ANON, getToken };
   const [session, setSession] = useState({ ...MOCK_SESSION_BASE, status:"Idle" });
-  const [vehicle] = useState(MOCK_VEHICLE);
+  const [vehicle, setVehicle] = useState(null);
+  const [loadingVehicle, setLoadingVehicle] = useState(true);
+  const [chargeLimit, setChargeLimit] = useState(80);
+  const [savingLimit, setSavingLimit] = useState(false);
   const [schedules, setSchedules] = useState([]);
   const [loadingSchedules, setLoadingSchedules] = useState(true);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleModalPrefill, setScheduleModalPrefill] = useState(null);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [estCompletion, setEstCompletion] = useState(null);
+  const [walletBalance, setWalletBalance] = useState(null);
+  const [activeQuestion, setActiveQuestion] = useState(null);
+  const [answerText, setAnswerText] = useState("");
 
   const statusColor = STATUS_COLOR[session.status] || T.muted;
   const statusIcon = STATUS_ICON[session.status] || "fa-bolt";
+
+  const loadVehicle = async () => {
+    if (!user?.id || !SUPABASE_URL) { setLoadingVehicle(false); return; }
+    setLoadingVehicle(true);
+    const v = await HomeVehicleService.loadPrimary(user.id, ctx);
+    setVehicle(v);
+    setChargeLimit(v?.preferred_charge_limit || 80);
+    setLoadingVehicle(false);
+  };
+  useEffect(()=>{ loadVehicle(); }, [user?.id]);
 
   const loadSchedules = async () => {
     if (!user?.id || !SUPABASE_URL) { setLoadingSchedules(false); return; }
@@ -212,6 +345,11 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
     setLoadingSchedules(false);
   };
   useEffect(()=>{ loadSchedules(); }, [user?.id]);
+
+  useEffect(()=>{
+    if (!user?.id || !SUPABASE_URL) return;
+    HomeWalletService.getBalance(user.id, ctx).then(setWalletBalance);
+  }, [user?.id]);
 
   // ── Simulated charger controls (no real hardware connected yet) ──
   const startCharging = () => {
@@ -229,6 +367,7 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
     if (saved) setSchedules(prev => [saved, ...prev]);
     setSavingSchedule(false);
     setShowScheduleModal(false);
+    setScheduleModalPrefill(null);
     if (saved) setSession(s => (s.status==="Idle" ? { ...s, status:"Scheduled" } : s));
   };
 
@@ -243,6 +382,20 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
     await ScheduleService.remove(id, ctx);
   };
 
+  const changeChargeLimit = async (limit) => {
+    setChargeLimit(limit);
+    if (!vehicle?.id) return;
+    setSavingLimit(true);
+    await HomeVehicleService.setChargeLimit(vehicle.id, limit, ctx);
+    setVehicle(v => v ? { ...v, preferred_charge_limit: limit } : v);
+    setSavingLimit(false);
+  };
+
+  const askQuestion = (key) => {
+    setActiveQuestion(key);
+    setAnswerText(HomeAIService.answer(key, { vehicle, chargeLimit, schedules, walletBalancePesewas: walletBalance }));
+  };
+
   const fmtRepeat = (days) => {
     if (!days || days.length === 0) return "One-time";
     if (days.length === 7) return "Every day";
@@ -250,6 +403,23 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
     if (days.length===5 && weekday.every(d=>days.includes(d))) return "Weekdays";
     return days.join(", ");
   };
+
+  const tips = [
+    "Use scheduled overnight charging where possible.",
+    "Charge to 100% only before long trips — daily 80% charging is gentler on the battery.",
+    "Avoid repeatedly letting your battery drop below 10%.",
+  ];
+  if (vehicle?.dc_fast_charge_frequency === "Frequently") {
+    tips.unshift("You've noted frequent DC fast charging — where possible, mix in slower AC charging to ease long-term battery wear.");
+  }
+  if (vehicle?.charge_above_90_frequency === "Frequently") {
+    tips.unshift("You've noted charging above 90% often — consider lowering your daily charge limit below for typical driving.");
+  }
+
+  const hasBatteryHealth = vehicle?.battery_health_pct != null;
+  const aiRecommendations = !loadingVehicle && !loadingSchedules
+    ? HomeAIService.recommendations({ vehicle, chargeLimit, schedules, walletBalancePesewas: walletBalance, sessionBatteryPct: session.batteryPct })
+    : [];
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
@@ -262,7 +432,7 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
         <div style={{ background:"rgba(56,189,248,0.08)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:14,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:10 }}>
           <i className="fas fa-flask" style={{ color:T.blue,fontSize:14 }}/>
           <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.6 }}>
-            Charger controls are simulated — no home charger is connected yet. Schedules you save here are real.
+            Charger controls and dashboard stats are simulated. Schedules, charge limit, and the AI Assistant use real data.
           </div>
         </div>
 
@@ -270,8 +440,8 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
         <Card T={T} style={{ padding:22, marginBottom:16, background:T.highlightGrad2 || "linear-gradient(135deg,#0a1f12,#0d2d1a)" }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18 }}>
             <div>
-              <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4 }}>{vehicle.nickname}</div>
-              <div style={{ fontSize:13,color:T.mutedLight }}>{vehicle.manufacturer} {vehicle.model}</div>
+              <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4 }}>{vehicle?.nickname || "No vehicle on file"}</div>
+              <div style={{ fontSize:13,color:T.mutedLight }}>{vehicle ? `${vehicle.manufacturer||""} ${vehicle.model||""}`.trim() : "Add a vehicle for personalized charging"}</div>
             </div>
             <Badge label={session.status} color={statusColor}/>
           </div>
@@ -286,7 +456,7 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
               </svg>
               <div style={{ position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center" }}>
                 <div style={{ fontWeight:900,fontSize:24,color:T.text,lineHeight:1 }}>{session.batteryPct}%</div>
-                <div style={{ fontSize:9,color:T.muted,marginTop:2 }}>→ {session.targetPct}%</div>
+                <div style={{ fontSize:9,color:T.muted,marginTop:2 }}>→ {chargeLimit}%</div>
               </div>
             </div>
             <div style={{ flex:1 }}>
@@ -316,7 +486,6 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
             ))}
           </div>
 
-          {/* Charging controls */}
           <div style={{ display:"grid",gridTemplateColumns: session.status==="Idle"||session.status==="Scheduled" ? "1fr" : "1fr 1fr", gap:8 }}>
             {(session.status==="Idle" || session.status==="Scheduled") && (
               <button onClick={startCharging} className="tap"
@@ -351,10 +520,94 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
           </div>
         </Card>
 
+        {/* AI Assistant */}
+        <Card T={T} style={{ padding:18, marginBottom:16 }}>
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4 }}>
+            <div style={{ fontWeight:800,fontSize:14,color:T.text }}><i className="fas fa-robot" style={{ marginRight:8,color:T.blue }}/>AI Assistant</div>
+            <Badge label="Rule-based" color={T.blue}/>
+          </div>
+          <div style={{ fontSize:11,color:T.muted,marginBottom:14,lineHeight:1.6 }}>Answers use your real wallet, vehicle, and schedule data — not a live conversational AI yet.</div>
+
+          {(loadingVehicle || loadingSchedules) ? (
+            <div style={{ textAlign:"center",padding:"14px 0",color:T.muted,fontSize:12 }}>Loading…</div>
+          ) : (
+            <>
+              {aiRecommendations.map((r,i)=>(
+                <div key={i} style={{ display:"flex",gap:10,alignItems:"flex-start",marginBottom:i<aiRecommendations.length-1?10:14 }}>
+                  <div style={{ width:6,height:6,borderRadius:"50%",background:TONE_COLOR(T,r.tone),marginTop:6,flexShrink:0 }}/>
+                  <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.7 }}>{r.text}</div>
+                </div>
+              ))}
+
+              <div style={{ height:1,background:T.surfaceBorder,margin:"4px 0 14px" }}/>
+
+              <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,marginBottom:10 }}>Ask a question</div>
+              <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:activeQuestion?14:0 }}>
+                {PRESET_QUESTIONS.map(q=>(
+                  <button key={q.key} onClick={()=>askQuestion(q.key)} className="tap"
+                    style={{ background:activeQuestion===q.key?`${T.blue}22`:T.inputBg,border:`1px solid ${activeQuestion===q.key?T.blue:T.border}`,borderRadius:20,padding:"8px 14px",fontSize:11,fontWeight:700,color:activeQuestion===q.key?T.blue:T.mutedLight,cursor:"pointer",fontFamily:"inherit" }}>
+                    {q.label}
+                  </button>
+                ))}
+              </div>
+
+              {activeQuestion && (
+                <div className="fade" style={{ background:"rgba(56,189,248,0.06)",border:`1px solid ${T.blue}33`,borderRadius:12,padding:"12px 14px" }}>
+                  <div style={{ fontSize:12,color:T.text,lineHeight:1.7 }}>{answerText}</div>
+                </div>
+              )}
+            </>
+          )}
+        </Card>
+
+        {/* Battery Protection */}
+        <Card T={T} style={{ padding:18, marginBottom:16 }}>
+          <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:4 }}><i className="fas fa-shield-alt" style={{ marginRight:8,color:T.green }}/>Battery Protection</div>
+          {!vehicle && !loadingVehicle && (
+            <div style={{ fontSize:12,color:T.muted,marginBottom:14 }}>Add a vehicle to save a personal charge limit. Using 80% as a default for now.</div>
+          )}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:12,marginBottom:12 }}>
+            {[80,90,100].map(p=>(
+              <button key={p} onClick={()=>changeChargeLimit(p)} disabled={savingLimit} className="tap"
+                style={{ background:chargeLimit===p?T.green:T.inputBg,border:`1px solid ${chargeLimit===p?T.green:T.border}`,borderRadius:12,padding:"14px 4px",fontSize:15,fontWeight:800,color:chargeLimit===p?"#000":T.muted,cursor:"pointer",fontFamily:"inherit" }}>
+                {p}%
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.7,marginBottom:16 }}>{CHARGE_LIMIT_EXPLANATIONS[chargeLimit]}</div>
+
+          <div style={{ height:1,background:T.surfaceBorder,marginBottom:16 }}/>
+
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+            <div style={{ background:T.surfaceFaint,borderRadius:12,padding:"12px 14px" }}>
+              <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:5 }}>Battery Health</div>
+              <div style={{ fontWeight:700,fontSize:14,color:hasBatteryHealth?T.text:T.muted }}>
+                {hasBatteryHealth ? `${vehicle.battery_health_pct}%` : "Not available from your vehicle"}
+              </div>
+              {hasBatteryHealth && <div style={{ fontSize:9,color:T.muted,marginTop:3 }}>Self-reported</div>}
+            </div>
+            <div style={{ background:T.surfaceFaint,borderRadius:12,padding:"12px 14px" }}>
+              <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:5 }}>Battery Stress</div>
+              <div style={{ fontWeight:700,fontSize:14,color:T.muted }}>Not available</div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Battery Tips */}
+        <Card T={T} style={{ padding:18, marginBottom:16 }}>
+          <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:12 }}><i className="fas fa-lightbulb" style={{ marginRight:8,color:T.yellow }}/>Battery Tips</div>
+          {tips.map((tip,i)=>(
+            <div key={i} style={{ display:"flex",gap:10,alignItems:"flex-start",marginBottom:i<tips.length-1?10:0 }}>
+              <div style={{ width:6,height:6,borderRadius:"50%",background:T.green,marginTop:6,flexShrink:0 }}/>
+              <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.7 }}>{tip}</div>
+            </div>
+          ))}
+        </Card>
+
         {/* Schedules */}
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10 }}>
           <div style={{ fontWeight:800,fontSize:14,color:T.text }}>Charging Schedules</div>
-          <button onClick={()=>setShowScheduleModal(true)} className="tap"
+          <button onClick={()=>{ setScheduleModalPrefill(null); setShowScheduleModal(true); }} className="tap"
             style={{ background:`${T.green}18`,border:`1px solid ${T.green}44`,borderRadius:10,padding:"7px 14px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
             <i className="fas fa-plus" style={{ marginRight:6 }}/>New
           </button>
@@ -406,10 +659,10 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
         <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10 }}>Coming Soon</div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
           {[
-            { label:"Battery Protection", icon:"fa-shield-alt" },
-            { label:"AI Assistant", icon:"fa-robot" },
             { label:"Charger Management", icon:"fa-charging-station" },
             { label:"Family Sharing", icon:"fa-users" },
+            { label:"Subscription", icon:"fa-star" },
+            { label:"Compatible Chargers", icon:"fa-plug" },
           ].map(f=>(
             <Card key={f.label} T={T} style={{ padding:14,display:"flex",alignItems:"center",gap:10,opacity:0.6 }}>
               <i className={`fas ${f.icon}`} style={{ fontSize:14,color:T.muted }}/>
@@ -420,7 +673,7 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
       </div>
 
       {showScheduleModal && (
-        <ScheduleModal T={T} saving={savingSchedule} onClose={()=>setShowScheduleModal(false)} onSave={saveSchedule}/>
+        <ScheduleModal T={T} saving={savingSchedule} initial={scheduleModalPrefill} onClose={()=>{ setShowScheduleModal(false); setScheduleModalPrefill(null); }} onSave={saveSchedule}/>
       )}
     </div>
   );
