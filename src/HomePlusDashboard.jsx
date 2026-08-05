@@ -4,28 +4,46 @@
 // Phase 2: Smart Charging controls + real scheduling
 // Phase 3: Battery Protection + Battery Tips
 // Phase 4: AI Assistant (rule-based — no LLM key configured yet)
+// Phase 5: Charger Management + real OCPP telemetry
 //
 // HONESTY NOTES:
-// - Start/Stop/Pause/Resume charger actions are SIMULATED. No home
-//   charger hardware is connected yet (that's Phase 5 — Charger
-//   Management + real OCPP telemetry).
+// - If you LINK a real charger (via your existing OCPP simulator/
+//   Railway setup), Start/Stop send REAL OCPP RemoteStart/RemoteStop
+//   commands, and online/offline + firmware/serial are REAL data
+//   pulled from that charger's OCPP boot info.
+// - If no charger is linked, the dashboard falls back to the same
+//   simulated hero card as Phases 1–4, clearly labeled as such.
+// - Live kWh/power *during* a session is still sample data — it
+//   depends on your OCPP server forwarding meter values, which
+//   isn't guaranteed with every simulator. This will read real once
+//   confirmed.
+// - Wi-Fi signal strength is NOT part of standard OCPP 1.6J boot
+//   data, so it's honestly shown as "Not available" rather than
+//   invented.
 // - Schedules ARE real — saved to Supabase (charging_schedules table).
 // - Charge limit (80/90/100%) is REAL — reads/writes the vehicle's
 //   own preferred_charge_limit field in user_vehicles.
-// - The "AI Assistant" below is RULE-BASED off real wallet balance,
-//   vehicle range, and time-of-day — same honest pattern as the AI
-//   Route Planner. It is NOT a real conversational LLM. That would
-//   need an API key (OpenAI or similar) which isn't configured yet.
-// - Battery health is only shown if the user self-reported it when
-//   adding their vehicle. Charging speed and "battery stress" are
-//   not available from any connected source yet — shown honestly
-//   as "Not available" rather than fabricated.
-// - Dashboard stats (battery %, kWh, cost) remain sample data until
-//   a real charger is connected.
+// - The "AI Assistant" is RULE-BASED off real data, not a live LLM.
+// - Battery health is only shown if self-reported when adding the
+//   vehicle. Battery Stress is not available from any source yet.
 // ============================================================
 import { useState, useEffect } from "react";
 
-// ── MOCK SESSION DATA (replaced by real telemetry in Phase 5) ──
+const OCPP_URL = import.meta.env.VITE_OCPP_SERVER_URL || "";
+const OCPP_KEY = import.meta.env.VITE_OCPP_API_KEY    || "";
+
+const ocppApi = async (path, method="GET", body=null) => {
+  if (!OCPP_URL) return null;
+  try {
+    const res = await fetch(`${OCPP_URL}${path}`, {
+      method, headers:{ "x-api-key":OCPP_KEY, "Content-Type":"application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return res.ok ? res.json() : null;
+  } catch(e) { return null; }
+};
+
+// ── MOCK SESSION DATA (fallback when no home charger is linked) ──
 const MOCK_SESSION_BASE = {
   batteryPct: 62,
   targetPct: 80,
@@ -35,7 +53,6 @@ const MOCK_SESSION_BASE = {
   remainingMin: 48,
   rangeKm: 312,
   batteryTempC: null,
-  chargerOnline: true,
   monthlyKwh: 184.2,
   monthlyCostGHS: 156.57,
 };
@@ -89,7 +106,6 @@ const sbDelete = async (SUPABASE_URL, SUPABASE_ANON, getToken, path) => {
   } catch(e) { return false; }
 };
 
-// ── SCHEDULE SERVICE (real Supabase-backed data) ───────────────
 const ScheduleService = {
   async list(userId, ctx) {
     const data = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `charging_schedules?user_id=eq.${userId}&order=created_at.desc`);
@@ -110,7 +126,6 @@ const ScheduleService = {
   },
 };
 
-// ── VEHICLE SERVICE (reuses the real user_vehicles table) ──────
 const HomeVehicleService = {
   async loadPrimary(userId, ctx) {
     const data = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `user_vehicles?user_id=eq.${userId}&order=is_default.desc,created_at.asc&limit=1`);
@@ -121,7 +136,6 @@ const HomeVehicleService = {
   },
 };
 
-// ── WALLET SERVICE ───────────────────────────────────────────────
 const HomeWalletService = {
   async getBalance(userId, ctx) {
     const data = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `wallets?user_id=eq.${userId}&select=balance_pesewas`);
@@ -129,12 +143,26 @@ const HomeWalletService = {
   },
 };
 
-// ── RULE-BASED AI ASSISTANT ────────────────────────────────────
-// Every line here is derived from real data already in the app
-// (time of day, real wallet balance, the vehicle's own saved range
-// and daily-distance habit, and real saved schedules). There is no
-// LLM call — this is deterministic logic, same pattern used by
-// AIEngine in AIRoutePlanner.jsx. Labeled honestly in the UI.
+// ── HOME CHARGER SERVICE (links a real OCPP charger to this user) ──
+const HomeChargerService = {
+  async loadMine(userId, ctx) {
+    const data = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `home_chargers?user_id=eq.${userId}&order=created_at.asc`);
+    return Array.isArray(data) ? data : [];
+  },
+  async link(userId, chargerOcppId, nickname, ctx) {
+    const saved = await sbPost(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, "home_chargers", {
+      user_id: userId, charger_ocpp_id: chargerOcppId, nickname: nickname || "Home Charger", status:"Idle",
+    });
+    return saved?.[0] || null;
+  },
+  async rename(id, nickname, ctx) {
+    return sbPatch(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `home_chargers?id=eq.${id}`, { nickname });
+  },
+  async unlink(id, ctx) {
+    return sbDelete(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `home_chargers?id=eq.${id}`);
+  },
+};
+
 const HomeAIService = {
   isOffPeakNow() {
     const h = new Date().getHours();
@@ -148,34 +176,26 @@ const HomeAIService = {
   recommendations({ vehicle, chargeLimit, schedules, walletBalancePesewas, sessionBatteryPct }) {
     const notes = [];
     const hasActiveSchedule = schedules.some(s => s.active);
-
     if (!hasActiveSchedule) {
       notes.push({ tone:"info", text:`Electricity is typically cheaper overnight. You don't have an active schedule — want to charge ${this.nextOffPeakLabel()}?` });
     } else {
       notes.push({ tone:"good", text:"You have an active charging schedule set up." });
     }
-
     if (vehicle?.estimated_range && vehicle?.daily_distance_km) {
       const projectedRangeKm = vehicle.estimated_range * (chargeLimit/100);
-      const covers = projectedRangeKm >= vehicle.daily_distance_km * 1.3; // comfortable margin
-      if (covers) {
-        notes.push({ tone:"good", text:`Charging to ${chargeLimit}% gives about ${Math.round(projectedRangeKm)} km — comfortably covers your typical ${vehicle.daily_distance_km} km/day.` });
-      } else {
-        notes.push({ tone:"caution", text:`Your typical ${vehicle.daily_distance_km} km/day is close to what ${chargeLimit}% provides (~${Math.round(projectedRangeKm)} km). Consider a higher limit before a busy day.` });
-      }
+      const covers = projectedRangeKm >= vehicle.daily_distance_km * 1.3;
+      notes.push(covers
+        ? { tone:"good", text:`Charging to ${chargeLimit}% gives about ${Math.round(projectedRangeKm)} km — comfortably covers your typical ${vehicle.daily_distance_km} km/day.` }
+        : { tone:"caution", text:`Your typical ${vehicle.daily_distance_km} km/day is close to what ${chargeLimit}% provides (~${Math.round(projectedRangeKm)} km). Consider a higher limit before a busy day.` });
     }
-
     if (walletBalancePesewas != null && walletBalancePesewas < 500) {
       notes.push({ tone:"caution", text:`Wallet balance is low (GH₵${(walletBalancePesewas/100).toFixed(2)}) — top up before your next charge.` });
     }
-
     if (this.isOffPeakNow() && sessionBatteryPct < chargeLimit) {
       notes.push({ tone:"good", text:"It's currently off-peak — a good time to charge if you're plugged in." });
     }
-
     return notes;
   },
-  // Preset Q&A — canned but grounded in the same real inputs above.
   answer(key, { vehicle, chargeLimit, schedules, walletBalancePesewas }) {
     if (key === "charge_tonight") {
       const hasActiveSchedule = schedules.some(s => s.active);
@@ -245,13 +265,11 @@ const PRESET_QUESTIONS = [
   { key:"wallet_check", label:"Check my wallet balance" },
 ];
 
-// ── NEW SCHEDULE MODAL ──────────────────────────────────────────
-function ScheduleModal({ T, onClose, onSave, saving, initial }) {
-  const [startTime, setStartTime] = useState(initial?.startTime || "23:00");
-  const [stopTime, setStopTime] = useState(initial?.stopTime || "06:00");
-  const [offPeakOnly, setOffPeakOnly] = useState(initial?.offPeakOnly || false);
+function ScheduleModal({ T, onClose, onSave, saving }) {
+  const [startTime, setStartTime] = useState("23:00");
+  const [stopTime, setStopTime] = useState("06:00");
+  const [offPeakOnly, setOffPeakOnly] = useState(false);
   const [repeatDays, setRepeatDays] = useState(["MO","TU","WE","TH","FR","SA","SU"]);
-
   const toggleDay = (key) => setRepeatDays(prev => prev.includes(key) ? prev.filter(d=>d!==key) : [...prev, key]);
 
   return (
@@ -261,7 +279,6 @@ function ScheduleModal({ T, onClose, onSave, saving, initial }) {
           <div style={{ fontWeight:800,fontSize:16,color:T.text }}>New Charging Schedule</div>
           <button onClick={onClose} className="tap" style={{ background:"none",border:"none",color:T.muted,fontSize:18,cursor:"pointer" }}><i className="fas fa-times"/></button>
         </div>
-
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16 }}>
           <div>
             <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",marginBottom:6 }}>Start</div>
@@ -274,7 +291,6 @@ function ScheduleModal({ T, onClose, onSave, saving, initial }) {
               style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"11px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
           </div>
         </div>
-
         <div style={{ display:"flex",alignItems:"center",gap:12,padding:"14px 16px",background:T.surfaceFaint,borderRadius:14,marginBottom:16 }}>
           <div style={{ flex:1 }}>
             <div style={{ fontWeight:600,fontSize:13,color:T.text }}>Off-Peak Hours Only</div>
@@ -285,7 +301,6 @@ function ScheduleModal({ T, onClose, onSave, saving, initial }) {
             <div style={{ width:18,height:18,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:offPeakOnly?23:3,transition:"left .2s" }}/>
           </div>
         </div>
-
         <div style={{ marginBottom:20 }}>
           <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",marginBottom:8 }}>Repeat</div>
           <div style={{ display:"flex",gap:6 }}>
@@ -297,7 +312,6 @@ function ScheduleModal({ T, onClose, onSave, saving, initial }) {
             ))}
           </div>
         </div>
-
         <button onClick={()=>onSave({ startTime, stopTime, offPeakOnly, repeatDays, label:`${startTime} – ${stopTime}` })} disabled={saving} className="tap"
           style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",opacity:saving?0.7:1 }}>
           {saving ? "Saving…" : "Save Schedule"}
@@ -307,8 +321,153 @@ function ScheduleModal({ T, onClose, onSave, saving, initial }) {
   );
 }
 
-export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL, SUPABASE_ANON }) {
+// ── CHARGER MANAGEMENT SCREEN ────────────────────────────────────
+function ChargerManagement({ T, go, user, ctx, onBack, linkedChargers, onLinkedChanged }) {
+  const [ocppChargers, setOcppChargers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [cmdLoading, setCmdLoading] = useState("");
+  const [cmdMsg, setCmdMsg] = useState("");
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  const loadOcpp = async () => {
+    setLoading(true);
+    const data = await ocppApi("/api/chargers");
+    setOcppChargers(Array.isArray(data?.chargers) ? data.chargers : []);
+    setLoading(false);
+  };
+  useEffect(()=>{ loadOcpp(); const t=setInterval(loadOcpp,10000); return ()=>clearInterval(t); }, []);
+
+  const linkedIds = new Set(linkedChargers.map(c=>c.charger_ocpp_id));
+  const isLinked = (id) => linkedIds.has(id);
+  const linkedRecord = (id) => linkedChargers.find(c=>c.charger_ocpp_id===id);
+
+  const linkCharger = async (c) => {
+    const rec = await HomeChargerService.link(user.id, c.id, c.id, ctx);
+    if (rec) onLinkedChanged();
+  };
+  const unlinkCharger = async (id) => {
+    const rec = linkedRecord(id);
+    if (!rec) return;
+    await HomeChargerService.unlink(rec.id, ctx);
+    onLinkedChanged();
+  };
+  const saveRename = async (rec) => {
+    await HomeChargerService.rename(rec.id, renameValue || rec.nickname, ctx);
+    setRenamingId(null);
+    onLinkedChanged();
+  };
+
+  const sendCmd = async (chargerId, action, body={}) => {
+    setCmdLoading(chargerId+action);
+    const pathMap = {
+      Reset: `/api/chargers/${chargerId}/reset`,
+      Unlock: `/api/chargers/${chargerId}/unlock`,
+    };
+    const result = await ocppApi(pathMap[action], "POST", body);
+    setCmdMsg(result?.success ? "Command sent ✅" : "Command failed — charger may be offline");
+    setCmdLoading("");
+    setTimeout(()=>setCmdMsg(""), 3000);
+    loadOcpp();
+  };
+
+  if (!OCPP_URL) return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header T={T} title="Charger Management" onBack={onBack}/>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:24,textAlign:"center" }}>
+        <div>
+          <i className="fas fa-server" style={{ fontSize:48,color:T.muted,marginBottom:14,display:"block" }}/>
+          <div style={{ fontWeight:700,fontSize:15,color:T.text,marginBottom:8 }}>No OCPP server configured</div>
+          <div style={{ fontSize:12,color:T.muted,lineHeight:1.7 }}>Set VITE_OCPP_SERVER_URL and VITE_OCPP_API_KEY to connect real or simulated chargers.</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header T={T} title="Charger Management" sub="Real OCPP connection" onBack={onBack}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"14px 16px 100px" }}>
+        {cmdMsg && (
+          <div style={{ background:"rgba(74,222,128,0.08)",border:`1px solid ${T.greenDim||T.green}44`,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:T.green }}>{cmdMsg}</div>
+        )}
+        {loading && <div style={{ textAlign:"center",padding:"30px 0",color:T.muted,fontSize:12 }}>Connecting to OCPP server…</div>}
+        {!loading && ocppChargers.length===0 && (
+          <div style={{ textAlign:"center",padding:"30px 0",color:T.muted,fontSize:12 }}>No chargers found on your OCPP server yet.</div>
+        )}
+        {ocppChargers.map(c=>{
+          const linked = isLinked(c.id);
+          const rec = linkedRecord(c.id);
+          return (
+            <Card key={c.id} T={T} style={{ padding:16, marginBottom:12, border:linked?`1px solid ${T.green}66`:undefined }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
+                <div style={{ flex:1,minWidth:0 }}>
+                  {renamingId===rec?.id ? (
+                    <div style={{ display:"flex",gap:6 }}>
+                      <input value={renameValue} onChange={e=>setRenameValue(e.target.value)} autoFocus
+                        style={{ flex:1,background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:8,padding:"7px 10px",color:T.text,fontSize:13,fontFamily:"inherit" }}/>
+                      <button onClick={()=>saveRename(rec)} className="tap" style={{ background:T.green,border:"none",borderRadius:8,padding:"7px 12px",fontSize:12,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>Save</button>
+                    </div>
+                  ) : (
+                    <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{linked ? rec.nickname : c.id}</div>
+                  )}
+                  <div style={{ fontSize:11,color:T.muted,marginTop:3 }}>{c.info?.chargePointModel||"Unknown model"} · {c.info?.chargePointVendor||""}</div>
+                </div>
+                <div style={{ display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0,marginLeft:10 }}>
+                  <Badge label={c.connected?"Online":"Offline"} color={c.connected?T.green:T.red}/>
+                  {linked && <Badge label="Linked" color={T.blue}/>}
+                </div>
+              </div>
+
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12 }}>
+                {[
+                  { label:"Firmware", value:c.info?.firmwareVersion || "Not available" },
+                  { label:"Serial", value:c.info?.chargePointSerialNumber || "Not available" },
+                  { label:"Wi-Fi Signal", value:"Not available" },
+                  { label:"Last Heartbeat", value:c.lastHeartbeat ? new Date(c.lastHeartbeat).toLocaleTimeString("en-GH",{hour:"2-digit",minute:"2-digit"}) : "—" },
+                ].map(r=>(
+                  <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"8px 10px" }}>
+                    <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.4 }}>{r.label}</div>
+                    <div style={{ fontWeight:600,fontSize:12,color:T.text,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{r.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display:"grid",gridTemplateColumns:linked?"1fr 1fr 1fr":"1fr",gap:8 }}>
+                {!linked && (
+                  <button onClick={()=>linkCharger(c)} className="tap"
+                    style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:10,padding:"10px",fontSize:12,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+                    <i className="fas fa-link" style={{ marginRight:6 }}/>Link as My Home Charger
+                  </button>
+                )}
+                {linked && (
+                  <>
+                    <button onClick={()=>{ setRenamingId(rec.id); setRenameValue(rec.nickname); }} className="tap"
+                      style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 4px",fontSize:11,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>
+                      <i className="fas fa-pencil-alt"/>
+                    </button>
+                    <button onClick={()=>sendCmd(c.id,"Reset",{type:"Soft"})} disabled={!!cmdLoading} className="tap"
+                      style={{ background:"rgba(251,191,36,0.12)",border:`1px solid ${T.yellow}44`,borderRadius:10,padding:"10px 4px",fontSize:11,fontWeight:700,color:T.yellow,cursor:"pointer",fontFamily:"inherit" }}>
+                      {cmdLoading===c.id+"Reset" ? "…" : <><i className="fas fa-redo"/> Restart</>}
+                    </button>
+                    <button onClick={()=>unlinkCharger(c.id)} className="tap"
+                      style={{ background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:10,padding:"10px 4px",fontSize:11,fontWeight:700,color:T.red,cursor:"pointer",fontFamily:"inherit" }}>
+                      <i className="fas fa-unlink"/>
+                    </button>
+                  </>
+                )}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export default function HomePlusDashboard({ go: goApp, user, T, getToken, SUPABASE_URL, SUPABASE_ANON }) {
   const ctx = { SUPABASE_URL, SUPABASE_ANON, getToken };
+  const [screen, setScreen] = useState("dashboard"); // dashboard | chargers
   const [session, setSession] = useState({ ...MOCK_SESSION_BASE, status:"Idle" });
   const [vehicle, setVehicle] = useState(null);
   const [loadingVehicle, setLoadingVehicle] = useState(true);
@@ -317,15 +476,19 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
   const [schedules, setSchedules] = useState([]);
   const [loadingSchedules, setLoadingSchedules] = useState(true);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [scheduleModalPrefill, setScheduleModalPrefill] = useState(null);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [estCompletion, setEstCompletion] = useState(null);
   const [walletBalance, setWalletBalance] = useState(null);
   const [activeQuestion, setActiveQuestion] = useState(null);
   const [answerText, setAnswerText] = useState("");
+  const [linkedChargers, setLinkedChargers] = useState([]);
+  const [loadingLinked, setLoadingLinked] = useState(true);
+  const [liveCharger, setLiveCharger] = useState(null); // real OCPP state for the linked charger, if any
+  const [sendingCmd, setSendingCmd] = useState(false);
 
   const statusColor = STATUS_COLOR[session.status] || T.muted;
   const statusIcon = STATUS_ICON[session.status] || "fa-bolt";
+  const primaryLinked = linkedChargers[0] || null;
 
   const loadVehicle = async () => {
     if (!user?.id || !SUPABASE_URL) { setLoadingVehicle(false); return; }
@@ -351,15 +514,54 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
     HomeWalletService.getBalance(user.id, ctx).then(setWalletBalance);
   }, [user?.id]);
 
-  // ── Simulated charger controls (no real hardware connected yet) ──
-  const startCharging = () => {
+  const loadLinked = async () => {
+    if (!user?.id || !SUPABASE_URL) { setLoadingLinked(false); return; }
+    setLoadingLinked(true);
+    const data = await HomeChargerService.loadMine(user.id, ctx);
+    setLinkedChargers(data);
+    setLoadingLinked(false);
+  };
+  useEffect(()=>{ loadLinked(); }, [user?.id]);
+
+  // Poll real OCPP status for the linked charger, if one exists
+  useEffect(()=>{
+    if (!primaryLinked || !OCPP_URL) { setLiveCharger(null); return; }
+    let cancelled = false;
+    const poll = async () => {
+      const data = await ocppApi("/api/chargers");
+      const found = (data?.chargers || []).find(c => c.id === primaryLinked.charger_ocpp_id);
+      if (!cancelled) setLiveCharger(found || null);
+    };
+    poll();
+    const t = setInterval(poll, 8000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [primaryLinked?.id]);
+
+  // ── Charging controls: real OCPP if a charger is linked, simulated otherwise ──
+  const startCharging = async () => {
+    if (primaryLinked && OCPP_URL) {
+      setSendingCmd(true);
+      const result = await ocppApi(`/api/chargers/${primaryLinked.charger_ocpp_id}/remote-start`, "POST", { idTag: user?.id || "eco-home", connectorId: 1 });
+      setSendingCmd(false);
+      if (result?.success) setSession(s => ({ ...s, status:"Charging" }));
+      return;
+    }
     const d = new Date(); d.setMinutes(d.getMinutes()+48);
     setEstCompletion(d);
     setSession(s => ({ ...s, status:"Charging" }));
   };
+  const stopCharging = async () => {
+    if (primaryLinked && OCPP_URL) {
+      setSendingCmd(true);
+      await ocppApi(`/api/chargers/${primaryLinked.charger_ocpp_id}/remote-stop`, "POST", {});
+      setSendingCmd(false);
+      setSession(s => ({ ...s, status:"Idle" }));
+      return;
+    }
+    setSession(s => ({ ...s, status:"Idle" }));
+  };
   const pauseCharging = () => setSession(s => ({ ...s, status:"Paused" }));
   const resumeCharging = () => setSession(s => ({ ...s, status:"Charging" }));
-  const stopCharging = () => setSession(s => ({ ...s, status:"Idle" }));
 
   const saveSchedule = async (schedule) => {
     setSavingSchedule(true);
@@ -367,21 +569,17 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
     if (saved) setSchedules(prev => [saved, ...prev]);
     setSavingSchedule(false);
     setShowScheduleModal(false);
-    setScheduleModalPrefill(null);
     if (saved) setSession(s => (s.status==="Idle" ? { ...s, status:"Scheduled" } : s));
   };
-
   const toggleSchedule = async (sch) => {
     const next = !sch.active;
     setSchedules(prev => prev.map(s => s.id===sch.id ? { ...s, active:next } : s));
     await ScheduleService.toggle(sch.id, next, ctx);
   };
-
   const deleteSchedule = async (id) => {
     setSchedules(prev => prev.filter(s => s.id !== id));
     await ScheduleService.remove(id, ctx);
   };
-
   const changeChargeLimit = async (limit) => {
     setChargeLimit(limit);
     if (!vehicle?.id) return;
@@ -390,7 +588,6 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
     setVehicle(v => v ? { ...v, preferred_charge_limit: limit } : v);
     setSavingLimit(false);
   };
-
   const askQuestion = (key) => {
     setActiveQuestion(key);
     setAnswerText(HomeAIService.answer(key, { vehicle, chargeLimit, schedules, walletBalancePesewas: walletBalance }));
@@ -409,22 +606,28 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
     "Charge to 100% only before long trips — daily 80% charging is gentler on the battery.",
     "Avoid repeatedly letting your battery drop below 10%.",
   ];
-  if (vehicle?.dc_fast_charge_frequency === "Frequently") {
-    tips.unshift("You've noted frequent DC fast charging — where possible, mix in slower AC charging to ease long-term battery wear.");
-  }
-  if (vehicle?.charge_above_90_frequency === "Frequently") {
-    tips.unshift("You've noted charging above 90% often — consider lowering your daily charge limit below for typical driving.");
-  }
+  if (vehicle?.dc_fast_charge_frequency === "Frequently") tips.unshift("You've noted frequent DC fast charging — where possible, mix in slower AC charging to ease long-term battery wear.");
+  if (vehicle?.charge_above_90_frequency === "Frequently") tips.unshift("You've noted charging above 90% often — consider lowering your daily charge limit below for typical driving.");
 
   const hasBatteryHealth = vehicle?.battery_health_pct != null;
   const aiRecommendations = !loadingVehicle && !loadingSchedules
     ? HomeAIService.recommendations({ vehicle, chargeLimit, schedules, walletBalancePesewas: walletBalance, sessionBatteryPct: session.batteryPct })
     : [];
 
+  // Real online/offline badge if linked, otherwise a generic "not connected" state
+  const chargerOnlineReal = primaryLinked ? !!liveCharger?.connected : null;
+
+  if (screen === "chargers") {
+    return (
+      <ChargerManagement T={T} go={goApp} user={user} ctx={ctx} onBack={()=>setScreen("dashboard")}
+        linkedChargers={linkedChargers} onLinkedChanged={loadLinked}/>
+    );
+  }
+
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header T={T} title="EcoCharge Home+" sub="Smart charging dashboard"
-        onBack={()=>go("home")}
+        onBack={()=>goApp("home")}
         right={<Badge label="PREMIUM" color={T.green}/>}/>
 
       <div style={{ flex:1,overflowY:"auto",padding:"16px 16px 100px" }}>
@@ -432,11 +635,22 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
         <div style={{ background:"rgba(56,189,248,0.08)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:14,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:10 }}>
           <i className="fas fa-flask" style={{ color:T.blue,fontSize:14 }}/>
           <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.6 }}>
-            Charger controls and dashboard stats are simulated. Schedules, charge limit, and the AI Assistant use real data.
+            {primaryLinked ? "A real charger is linked — status and Start/Stop use real OCPP commands. Live kWh/cost during a session is still sample data." : "No charger linked yet — dashboard is simulated. Link one in Charger Management for real control."}
           </div>
         </div>
 
-        {/* Vehicle + battery hero */}
+        <button onClick={()=>setScreen("chargers")} className="tap"
+          style={{ width:"100%",background:T.surface,border:`1px solid ${T.surfaceBorder}`,borderRadius:16,padding:"14px 16px",marginBottom:16,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:12 }}>
+          <div style={{ width:38,height:38,borderRadius:10,background:`${T.green}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+            <i className="fas fa-charging-station" style={{ fontSize:15,color:T.green }}/>
+          </div>
+          <div style={{ flex:1,textAlign:"left" }}>
+            <div style={{ fontWeight:700,fontSize:13,color:T.text }}>Charger Management</div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{primaryLinked ? `Linked: ${primaryLinked.nickname}` : "No charger linked"}</div>
+          </div>
+          <i className="fas fa-chevron-right" style={{ fontSize:13,color:T.muted }}/>
+        </button>
+
         <Card T={T} style={{ padding:22, marginBottom:16, background:T.highlightGrad2 || "linear-gradient(135deg,#0a1f12,#0d2d1a)" }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18 }}>
             <div>
@@ -466,7 +680,7 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
               </div>
               <div style={{ fontSize:12,color:T.muted,lineHeight:1.7 }}>
                 {session.status==="Charging" && estCompletion ? (
-                  <>{session.remainingMin} min remaining<br/>Est. completion {fmtTime(estCompletion)}</>
+                  <>{session.remainingMin} min remaining (est.)<br/>Est. completion {fmtTime(estCompletion)}</>
                 ) : session.status==="Paused" ? "Charging paused" : session.status==="Scheduled" ? "Waiting for scheduled window" : "Not charging"}
               </div>
             </div>
@@ -486,11 +700,18 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
             ))}
           </div>
 
+          {primaryLinked && (
+            <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:12,fontSize:11,color:T.muted }}>
+              <div style={{ width:7,height:7,borderRadius:"50%",background:chargerOnlineReal?T.green:T.red }}/>
+              {chargerOnlineReal ? "Home charger online" : "Home charger offline"} · {primaryLinked.nickname}
+            </div>
+          )}
+
           <div style={{ display:"grid",gridTemplateColumns: session.status==="Idle"||session.status==="Scheduled" ? "1fr" : "1fr 1fr", gap:8 }}>
             {(session.status==="Idle" || session.status==="Scheduled") && (
-              <button onClick={startCharging} className="tap"
-                style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
-                <i className="fas fa-bolt" style={{ marginRight:8 }}/>Start Charging
+              <button onClick={startCharging} disabled={sendingCmd} className="tap"
+                style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"13px",fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",opacity:sendingCmd?0.7:1 }}>
+                <i className="fas fa-bolt" style={{ marginRight:8 }}/>{sendingCmd?"Sending…":"Start Charging"}
               </button>
             )}
             {session.status==="Charging" && (
@@ -499,8 +720,8 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
                   style={{ background:"rgba(251,191,36,0.15)",border:`1px solid ${T.yellow}44`,borderRadius:12,padding:"13px",fontSize:13,fontWeight:700,color:T.yellow,cursor:"pointer",fontFamily:"inherit" }}>
                   <i className="fas fa-pause" style={{ marginRight:8 }}/>Pause
                 </button>
-                <button onClick={stopCharging} className="tap"
-                  style={{ background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:12,padding:"13px",fontSize:13,fontWeight:700,color:T.red,cursor:"pointer",fontFamily:"inherit" }}>
+                <button onClick={stopCharging} disabled={sendingCmd} className="tap"
+                  style={{ background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:12,padding:"13px",fontSize:13,fontWeight:700,color:T.red,cursor:"pointer",fontFamily:"inherit",opacity:sendingCmd?0.7:1 }}>
                   <i className="fas fa-stop" style={{ marginRight:8 }}/>Stop
                 </button>
               </>
@@ -520,14 +741,12 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
           </div>
         </Card>
 
-        {/* AI Assistant */}
         <Card T={T} style={{ padding:18, marginBottom:16 }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4 }}>
             <div style={{ fontWeight:800,fontSize:14,color:T.text }}><i className="fas fa-robot" style={{ marginRight:8,color:T.blue }}/>AI Assistant</div>
             <Badge label="Rule-based" color={T.blue}/>
           </div>
           <div style={{ fontSize:11,color:T.muted,marginBottom:14,lineHeight:1.6 }}>Answers use your real wallet, vehicle, and schedule data — not a live conversational AI yet.</div>
-
           {(loadingVehicle || loadingSchedules) ? (
             <div style={{ textAlign:"center",padding:"14px 0",color:T.muted,fontSize:12 }}>Loading…</div>
           ) : (
@@ -538,9 +757,7 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
                   <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.7 }}>{r.text}</div>
                 </div>
               ))}
-
               <div style={{ height:1,background:T.surfaceBorder,margin:"4px 0 14px" }}/>
-
               <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,marginBottom:10 }}>Ask a question</div>
               <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:activeQuestion?14:0 }}>
                 {PRESET_QUESTIONS.map(q=>(
@@ -550,7 +767,6 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
                   </button>
                 ))}
               </div>
-
               {activeQuestion && (
                 <div className="fade" style={{ background:"rgba(56,189,248,0.06)",border:`1px solid ${T.blue}33`,borderRadius:12,padding:"12px 14px" }}>
                   <div style={{ fontSize:12,color:T.text,lineHeight:1.7 }}>{answerText}</div>
@@ -560,7 +776,6 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
           )}
         </Card>
 
-        {/* Battery Protection */}
         <Card T={T} style={{ padding:18, marginBottom:16 }}>
           <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:4 }}><i className="fas fa-shield-alt" style={{ marginRight:8,color:T.green }}/>Battery Protection</div>
           {!vehicle && !loadingVehicle && (
@@ -575,9 +790,7 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
             ))}
           </div>
           <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.7,marginBottom:16 }}>{CHARGE_LIMIT_EXPLANATIONS[chargeLimit]}</div>
-
           <div style={{ height:1,background:T.surfaceBorder,marginBottom:16 }}/>
-
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
             <div style={{ background:T.surfaceFaint,borderRadius:12,padding:"12px 14px" }}>
               <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:5 }}>Battery Health</div>
@@ -593,7 +806,6 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
           </div>
         </Card>
 
-        {/* Battery Tips */}
         <Card T={T} style={{ padding:18, marginBottom:16 }}>
           <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:12 }}><i className="fas fa-lightbulb" style={{ marginRight:8,color:T.yellow }}/>Battery Tips</div>
           {tips.map((tip,i)=>(
@@ -604,18 +816,14 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
           ))}
         </Card>
 
-        {/* Schedules */}
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10 }}>
           <div style={{ fontWeight:800,fontSize:14,color:T.text }}>Charging Schedules</div>
-          <button onClick={()=>{ setScheduleModalPrefill(null); setShowScheduleModal(true); }} className="tap"
+          <button onClick={()=>setShowScheduleModal(true)} className="tap"
             style={{ background:`${T.green}18`,border:`1px solid ${T.green}44`,borderRadius:10,padding:"7px 14px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
             <i className="fas fa-plus" style={{ marginRight:6 }}/>New
           </button>
         </div>
-
-        {loadingSchedules && (
-          <div style={{ textAlign:"center",padding:"20px 0",color:T.muted,fontSize:12 }}>Loading…</div>
-        )}
+        {loadingSchedules && <div style={{ textAlign:"center",padding:"20px 0",color:T.muted,fontSize:12 }}>Loading…</div>}
         {!loadingSchedules && schedules.length===0 && (
           <Card T={T} style={{ padding:18, marginBottom:16, textAlign:"center" }}>
             <i className="fas fa-calendar-plus" style={{ fontSize:22,color:T.muted,marginBottom:8,display:"block" }}/>
@@ -641,7 +849,6 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
           </Card>
         ))}
 
-        {/* Monthly usage */}
         <Card T={T} style={{ padding:18, marginTop:6, marginBottom:14 }}>
           <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:14 }}><i className="fas fa-calendar-alt" style={{ marginRight:8,color:T.green }}/>This Month</div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
@@ -659,10 +866,10 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
         <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10 }}>Coming Soon</div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
           {[
-            { label:"Charger Management", icon:"fa-charging-station" },
             { label:"Family Sharing", icon:"fa-users" },
             { label:"Subscription", icon:"fa-star" },
             { label:"Compatible Chargers", icon:"fa-plug" },
+            { label:"Solar Integration", icon:"fa-sun" },
           ].map(f=>(
             <Card key={f.label} T={T} style={{ padding:14,display:"flex",alignItems:"center",gap:10,opacity:0.6 }}>
               <i className={`fas ${f.icon}`} style={{ fontSize:14,color:T.muted }}/>
@@ -673,7 +880,7 @@ export default function HomePlusDashboard({ go, user, T, getToken, SUPABASE_URL,
       </div>
 
       {showScheduleModal && (
-        <ScheduleModal T={T} saving={savingSchedule} initial={scheduleModalPrefill} onClose={()=>{ setShowScheduleModal(false); setScheduleModalPrefill(null); }} onSave={saveSchedule}/>
+        <ScheduleModal T={T} saving={savingSchedule} onClose={()=>setShowScheduleModal(false)} onSave={saveSchedule}/>
       )}
     </div>
   );
