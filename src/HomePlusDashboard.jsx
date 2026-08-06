@@ -863,11 +863,24 @@ export default function HomePlusDashboard({ go: goApp, user, T, getToken, SUPABA
           </div>
         </Card>
 
+        <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10 }}>Home+ Features</div>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20 }}>
+          {[
+            { label:"Subscription", icon:"fa-star", screen:"subscription" },
+          ].map(f=>(
+            <button key={f.label} onClick={()=>goApp(f.screen)} className="tap"
+              style={{ background:T.surface,border:`1px solid ${T.surfaceBorder}`,borderRadius:20,padding:14,display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontFamily:"inherit",textAlign:"left" }}>
+              <i className={`fas ${f.icon}`} style={{ fontSize:14,color:T.green }}/>
+              <span style={{ fontSize:12,color:T.text,fontWeight:700,flex:1 }}>{f.label}</span>
+              <i className="fas fa-chevron-right" style={{ fontSize:11,color:T.muted }}/>
+            </button>
+          ))}
+        </div>
+
         <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10 }}>Coming Soon</div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
           {[
             { label:"Family Sharing", icon:"fa-users" },
-            { label:"Subscription", icon:"fa-star" },
             { label:"Compatible Chargers", icon:"fa-plug" },
             { label:"Solar Integration", icon:"fa-sun" },
           ].map(f=>(
