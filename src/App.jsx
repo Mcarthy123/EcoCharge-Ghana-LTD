@@ -8,6 +8,7 @@ import { useState, useEffect, useRef, useContext, createContext } from "react";
 import AIRoutePlanner from "./AIRoutePlanner";
 import ReservationSystem from "./ReservationSystem";
 import HomePlusDashboard from "./HomePlusDashboard";
+import SubscriptionScreen from "./SubscriptionScreen";
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL        || "";
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY   || "";
@@ -7899,6 +7900,40 @@ useEffect(()=>{
         };
         setTimeout(verifyWalletPayment, 150);
       }
+      const subPending = (() => { try { return JSON.parse(localStorage.getItem('eco_sub_pending')||'null'); } catch(e){ return null; } })();
+      if (subPending && ref.startsWith('SUB-')) {
+        try { localStorage.removeItem('eco_sub_pending'); } catch(e) {}
+        const verifySubPayment = async () => {
+          try {
+            let verified = false;
+            if (OCPP_URL) {
+              const vRes = await fetch(OCPP_URL + '/api/payment/verify', {
+                method: 'POST',
+                headers: { 'x-api-key': OCPP_KEY, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reference: ref })
+              });
+              const vData = await vRes.json();
+              verified = !!vData.success;
+            } else {
+              verified = true;
+            }
+            if (verified && SUPABASE_URL) {
+              const now = new Date();
+              const periodEnd = new Date(now.getTime() + 30*24*60*60*1000);
+              await fetch(SUPABASE_URL + '/rest/v1/subscriptions?payment_ref=eq.' + ref, {
+                method: 'PATCH',
+                headers: { apikey: SUPABASE_ANON, Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+                body: JSON.stringify({ status: 'active', current_period_start: now.toISOString(), current_period_end: periodEnd.toISOString(), updated_at: now.toISOString() })
+              });
+              if (subPending.userId) {
+                createNotification(subPending.userId, "system", "Subscription Active", `Your EcoCharge ${subPending.tier} plan is now active.`, { reference: ref });
+              }
+            }
+          } catch(e) { console.error('Subscription verify error:', e); }
+          setScreen('subscription');
+        };
+        setTimeout(verifySubPayment, 150);
+      }
     }
   },[]);
 
@@ -7939,6 +7974,7 @@ useEffect(()=>{
     
  reservations: <ReservationSystem go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON} pendingReservation={pendingReservation} onPendingConsumed={()=>setPendingReservation(null)}/>,
    homeplus: <HomePlusDashboard go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
+    subscription: <SubscriptionScreen go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
     };
 
       return (
