@@ -865,9 +865,10 @@ export default function HomePlusDashboard({ go: goApp, user, T, getToken, SUPABA
 
         <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10 }}>Home+ Features</div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20 }}>
-         {[
+        {[
             { label:"Subscription", icon:"fa-star", screen:"subscription" },
             { label:"Compatible Chargers", icon:"fa-plug", screen:"compatiblechargers" },
+            { label:"Family Sharing", icon:"fa-users", screen:"familysharing" },
           ].map(f=>(
             <button key={f.label} onClick={()=>goApp(f.screen)} className="tap"
               style={{ background:T.surface,border:`1px solid ${T.surfaceBorder}`,borderRadius:20,padding:14,display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontFamily:"inherit",textAlign:"left" }}>
