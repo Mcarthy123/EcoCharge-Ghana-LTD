@@ -637,7 +637,7 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => {
           { icon:"fa-bell",             label:"Notifications",   screen:"notifications" },
           { icon:"fa-route",            label:"AI Route Planner", screen:"routeplanner", color:T.green },
           { icon:"fa-calendar-check",   label:"Reserve a Charger", screen:"reservations", color:T.green },
-    { icon:"fa-charging-station", label:"EcoCharge Home+", screen:"homeplus", color:T.green },
+    { icon:"fa-house-signal", label:"EcoCharge Home+", screen:"homeplus", color:T.green },
           { icon:"fa-info-circle",      label:"About EcoCharge", screen:"about"         },
           { icon:"fa-list-alt",         label:"Charging History", screen:"sessions",    color:T.green  },
           { icon:"fa-wallet",           label:"My Wallet",       screen:"wallet",       color:T.yellow },
