@@ -10,6 +10,7 @@ import ReservationSystem from "./ReservationSystem";
 import HomePlusDashboard from "./HomePlusDashboard";
 import SubscriptionScreen from "./SubscriptionScreen";
 import CompatibleChargers from "./CompatibleChargers";
+import FamilySharing from "./FamilySharing";
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL        || "";
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY   || "";
@@ -7977,6 +7978,7 @@ useEffect(()=>{
    homeplus: <HomePlusDashboard go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
     subscription: <SubscriptionScreen go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
     compatiblechargers: <CompatibleChargers go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON} stations={stations}/>,
+    familysharing: <FamilySharing go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
     };
 
       return (
