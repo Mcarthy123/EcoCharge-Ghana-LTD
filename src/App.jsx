@@ -9,6 +9,7 @@ import AIRoutePlanner from "./AIRoutePlanner";
 import ReservationSystem from "./ReservationSystem";
 import HomePlusDashboard from "./HomePlusDashboard";
 import SubscriptionScreen from "./SubscriptionScreen";
+import CompatibleChargers from "./CompatibleChargers";
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL        || "";
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY   || "";
@@ -7975,6 +7976,7 @@ useEffect(()=>{
  reservations: <ReservationSystem go={goSecure} user={user} stations={stations} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON} pendingReservation={pendingReservation} onPendingConsumed={()=>setPendingReservation(null)}/>,
    homeplus: <HomePlusDashboard go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
     subscription: <SubscriptionScreen go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
+    compatiblechargers: <CompatibleChargers go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON} stations={stations}/>,
     };
 
       return (
