@@ -27,7 +27,7 @@
 // - Battery health is only shown if self-reported when adding the
 //   vehicle. Battery Stress is not available from any source yet.
 // ============================================================
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const OCPP_URL = import.meta.env.VITE_OCPP_SERVER_URL || "";
 const OCPP_KEY = import.meta.env.VITE_OCPP_API_KEY    || "";
@@ -320,6 +320,97 @@ function ScheduleModal({ T, onClose, onSave, saving }) {
     </div>
   );
 }
+// ── QR SCANNER FOR HOME CHARGER LINKING ─────────────────────
+let jsQRLoadPromise = null;
+const loadJsQR = () => {
+  if (window.jsQR) return Promise.resolve();
+  if (jsQRLoadPromise) return jsQRLoadPromise;
+  jsQRLoadPromise = new Promise((resolve,reject)=>{
+    const s=document.createElement("script");
+    s.src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js";
+    s.onload=()=>resolve();
+    s.onerror=()=>reject(new Error("Failed to load QR scanner library"));
+    document.head.appendChild(s);
+  });
+  return jsQRLoadPromise;
+};
+
+function HomeChargerQRScanner({ T, onResult, onClose }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const rafRef = useRef(null);
+  const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
+
+  useEffect(()=>{
+    let cancelled = false;
+    (async()=>{
+      try {
+        await loadJsQR();
+        const stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:"environment" } });
+        if (cancelled) { stream.getTracks().forEach(t=>t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
+        setReady(true);
+        const tick = () => {
+          const video = videoRef.current, canvas = canvasRef.current;
+          if (video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            try {
+              const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              const code = window.jsQR && window.jsQR(imageData.data, imageData.width, imageData.height);
+              if (code?.data) { onResult(code.data); return; }
+            } catch(e) {}
+          }
+          rafRef.current = requestAnimationFrame(tick);
+        };
+        rafRef.current = requestAnimationFrame(tick);
+      } catch(e) {
+        setError(e?.name==="NotAllowedError" ? "Camera permission was denied. Enable camera access to scan." : "Couldn't access the camera on this device.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop());
+    };
+  },[]);
+
+  return (
+    <div style={{ position:"fixed",inset:0,background:"#000",zIndex:500,display:"flex",flexDirection:"column" }}>
+      <div style={{ position:"relative",flex:1,overflow:"hidden" }}>
+        <video ref={videoRef} muted playsInline style={{ width:"100%",height:"100%",objectFit:"cover" }}/>
+        <canvas ref={canvasRef} style={{ display:"none" }}/>
+        {ready && !error && (
+          <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center" }}>
+            <div style={{ width:230,height:230,border:`3px solid ${T.green}`,borderRadius:18,boxShadow:"0 0 0 2000px rgba(0,0,0,0.4)" }}/>
+          </div>
+        )}
+        {error && (
+          <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",padding:24,background:"#0a0d10" }}>
+            <div style={{ textAlign:"center" }}>
+              <i className="fas fa-video-slash" style={{ fontSize:40,color:T.red,marginBottom:14,display:"block" }}/>
+              <div style={{ color:"#fff",fontSize:14,lineHeight:1.6 }}>{error}</div>
+            </div>
+          </div>
+        )}
+        {!ready && !error && (
+          <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center" }}>
+            <div style={{ width:18,height:18,borderRadius:"50%",border:`2px solid ${T.green}`,borderTopColor:"transparent",animation:"spin .8s linear infinite" }}/>
+          </div>
+        )}
+      </div>
+      <div style={{ padding:"20px 20px calc(20px + env(safe-area-inset-bottom, 0px))",background:"#0a0d10" }}>
+        <div style={{ textAlign:"center",color:"rgba(255,255,255,0.6)",fontSize:13,marginBottom:14 }}>Point your camera at the QR code on your home charger</div>
+        <button onClick={onClose} className="tap" style={{ width:"100%",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"15px",fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>
+      </div>
+    </div>
+  );
+}
 
 // ── CHARGER MANAGEMENT SCREEN ────────────────────────────────────
 function ChargerManagement({ T, go, user, ctx, onBack, linkedChargers, onLinkedChanged }) {
@@ -329,6 +420,20 @@ function ChargerManagement({ T, go, user, ctx, onBack, linkedChargers, onLinkedC
   const [cmdMsg, setCmdMsg] = useState("");
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [scanMsg, setScanMsg] = useState("");
+
+  const handleScanResult = async (text) => {
+    setScanning(false);
+    const scannedId = text.startsWith("ECOCHARGER:") ? text.slice("ECOCHARGER:".length).trim() : text.trim();
+    const match = ocppChargers.find(c => c.id === scannedId);
+    if (!match) { setScanMsg(`No charger found matching "${scannedId}". Make sure it's powered on and try again.`); setTimeout(()=>setScanMsg(""),4000); return; }
+    if (isLinked(match.id)) { setScanMsg(`"${scannedId}" is already linked.`); setTimeout(()=>setScanMsg(""),4000); return; }
+    const rec = await HomeChargerService.link(user.id, match.id, match.id, ctx);
+    if (rec) { setScanMsg("Charger linked! ✅"); onLinkedChanged(); }
+    else setScanMsg("Could not link charger. Try again.");
+    setTimeout(()=>setScanMsg(""), 4000);
+  };
 
   const loadOcpp = async () => {
     setLoading(true);
@@ -391,6 +496,13 @@ function ChargerManagement({ T, go, user, ctx, onBack, linkedChargers, onLinkedC
         {cmdMsg && (
           <div style={{ background:"rgba(74,222,128,0.08)",border:`1px solid ${T.greenDim||T.green}44`,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:T.green }}>{cmdMsg}</div>
         )}
+        {scanMsg && (
+          <div style={{ background:"rgba(74,222,128,0.08)",border:`1px solid ${T.green}44`,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:T.green }}>{scanMsg}</div>
+        )}
+        <button onClick={()=>setScanning(true)} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"14px",fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:16 }}>
+          <i className="fas fa-qrcode"/> Scan to Link Your Charger
+        </button>
         {loading && <div style={{ textAlign:"center",padding:"30px 0",color:T.muted,fontSize:12 }}>Connecting to OCPP server…</div>}
         {!loading && ocppChargers.length===0 && (
           <div style={{ textAlign:"center",padding:"30px 0",color:T.muted,fontSize:12 }}>No chargers found on your OCPP server yet.</div>
@@ -461,7 +573,9 @@ function ChargerManagement({ T, go, user, ctx, onBack, linkedChargers, onLinkedC
           );
         })}
       </div>
-    </div>
+      {scanning && <HomeChargerQRScanner T={T} onResult={handleScanResult} onClose={()=>setScanning(false)}/>}
+    </div> 
+    
   );
 }
 
