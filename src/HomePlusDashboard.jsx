@@ -881,9 +881,7 @@ export default function HomePlusDashboard({ go: goApp, user, T, getToken, SUPABA
 
         <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10 }}>Coming Soon</div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
-          {[
-            { label:"Family Sharing", icon:"fa-users" },
-            { label:"Compatible Chargers", icon:"fa-plug" },
+         {[
             { label:"Solar Integration", icon:"fa-sun" },
           ].map(f=>(
             <Card key={f.label} T={T} style={{ padding:14,display:"flex",alignItems:"center",gap:10,opacity:0.6 }}>
