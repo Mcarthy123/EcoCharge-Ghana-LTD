@@ -715,7 +715,7 @@ function DriverAssistantHub({ go, user, stations, T, getToken, SUPABASE_URL, SUP
   const [chargerInfoByStation, setChargerInfoByStation] = useState({});
   const [walletBal, setWalletBal] = useState(null);
   const [todayStats, setTodayStats] = useState({ sessions:0, kwh:0, costPesewas:0 });
-  const [fleetSnapshot, setFleetSnapshot] = useState([]);
+ 
   const [tab, setTab] = useState("assistant"); // assistant | commercial | fleet
 
   useEffect(()=>{
@@ -761,11 +761,7 @@ function DriverAssistantHub({ go, user, stations, T, getToken, SUPABASE_URL, SUP
   }, [user]);
 
   useEffect(()=>{
-    if (vehicles?.length > 1) {
-      FleetService.loadFleetSnapshot(vehicles, user?.id, SUPABASE_URL, SUPABASE_ANON, getToken).then(setFleetSnapshot);
-    }
-  }, [vehicles, user]);
-
+   
   const remainingRangeKm = selectedVehicle ? VehicleService.remainingRangeKm(selectedVehicle, battery.pct) : null;
   const traffic = BatteryPredictionService.trafficFactor();
   const recs = AIEngine.driverAssistantRecommendations({
@@ -805,7 +801,6 @@ function DriverAssistantHub({ go, user, stations, T, getToken, SUPABASE_URL, SUP
         {[
           { id:"assistant", label:"Assistant", icon:"fa-robot" },
           { id:"commercial", label:"Driver Stats", icon:"fa-car-side" },
-          ...(vehicles?.length > 1 ? [{ id:"fleet", label:"Fleet", icon:"fa-layer-group" }] : []),
         ].map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)} className="tap"
             style={{ flex:1,background:tab===t.id?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.card,border:`1px solid ${tab===t.id?T.green:T.border}`,borderRadius:10,padding:"9px 6px",fontSize:11,fontWeight:700,color:tab===t.id?"#000":T.muted,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
@@ -929,6 +924,21 @@ function DriverAssistantHub({ go, user, stations, T, getToken, SUPABASE_URL, SUP
               style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginTop:6 }}>
               <i className="fas fa-route"/> Plan a Long-Distance Trip
             </button>
+            {vehicles?.length > 1 && (
+              <GlassCard T={T} style={{ padding:16, marginTop:12, display:"flex",alignItems:"center",gap:12 }}>
+                <div style={{ width:40,height:40,borderRadius:10,background:`${T.green}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                  <i className="fas fa-layer-group" style={{ fontSize:16,color:T.green }}/>
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontWeight:700,fontSize:13,color:T.text }}>Managing multiple vehicles?</div>
+                  <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Unlock the Fleet Dashboard</div>
+                </div>
+                <button onClick={()=>go("fleetdashboard")} className="tap"
+                  style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:"8px 14px",fontSize:11,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
+                  View
+                </button>
+              </GlassCard>
+            )}
           </>
         )}
 
@@ -961,11 +971,11 @@ function DriverAssistantHub({ go, user, stations, T, getToken, SUPABASE_URL, SUP
           </>
         )}
 
-        {tab==="fleet" && (
+        {tab==="" && (
           <>
             <div style={{ fontSize:12,color:T.muted,marginBottom:14,lineHeight:1.7 }}>
               Aggregated across your {vehicles.length} registered vehicles.
-              {fleetSnapshot.some(f=>f.dataSource==="estimate_only") && " Some figures are capacity-based estimates until charging sessions are linked to individual vehicles."}
+              {Snapshot.some(f=>f.dataSource==="estimate_only") && " Some figures are capacity-based estimates until charging sessions are linked to individual vehicles."}
             </div>
             {fleetSnapshot.map(f=>(
               <GlassCard key={f.vehicle.id} T={T} style={{ padding:16, marginBottom:10 }}>
