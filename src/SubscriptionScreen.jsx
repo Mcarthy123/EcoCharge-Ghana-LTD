@@ -26,38 +26,56 @@ const TIERS = [
     id: "free",
     name: "Standard",
     priceGHS: 0,
-    tagline: "Pay-as-you-go, no commitment",
+    tagline: "For every EV driver",
     perks: [
-      "Standard per-kWh station pricing",
-      "Standard reservation queue",
-      "Access to all EcoCharge stations",
+      "Find chargers & view live map",
+      "Live availability",
+      "Basic reservations (limited)",
+      "Standard support",
     ],
-  },
-  {
-    id: "plus",
-    name: "EcoCharge Plus",
-    priceGHS: 49,
-    tagline: "For regular drivers",
-    perks: [
-      "10% off per-kWh at every station",
-      "No idle fees",
-      "Priority queue at busy stations",
-      "1 reservation cancellation waiver / month",
-    ],
-    highlight: true,
   },
   {
     id: "pro",
     name: "EcoCharge Pro",
-    priceGHS: 149,
-    tagline: "For daily or fleet-level use",
+    priceGHS: 49,
+    tagline: "For smart EV drivers",
+    highlight: true,
     perks: [
-      "20% off per-kWh at every station",
-      "No idle fees, ever",
-      "Highest priority queue placement",
-      "Double water bundle (40L) per session",
-      "Dedicated support line",
-      "Early access to new stations",
+      "AI Route Planner",
+      "Unlimited reservations",
+      "Battery intelligence & tips",
+      "Charging history & analytics",
+      "Cost tracking & savings",
+      "Priority support",
+    ],
+  },
+  {
+    id: "home_plus",
+    name: "EcoCharge Home+",
+    priceGHS: 69,
+    tagline: "For home charger owners",
+    perks: [
+      "All Pro features",
+      "Home charger connection",
+      "Remote start/stop",
+      "Smart scheduling",
+      "Energy tracking & insights",
+      "Alerts & notifications",
+    ],
+  },
+  {
+    id: "fleet",
+    name: "EcoCharge Fleet",
+    priceGHS: null,
+    custom: true,
+    tagline: "For businesses & fleets",
+    perks: [
+      "All Pro features",
+      "Fleet dashboard",
+      "Driver & vehicle management",
+      "Smart charging schedules",
+      "Reports & analytics",
+      "Dedicated account manager",
     ],
   },
 ];
@@ -208,8 +226,8 @@ export default function SubscriptionScreen({ go, user, T, getToken, SUPABASE_URL
                   </div>
                   <div style={{ fontSize:12,color:T.muted,marginTop:3 }}>{tier.tagline}</div>
                 </div>
-                <div style={{ fontWeight:900,fontSize:20,color: tier.priceGHS===0 ? T.mutedLight : T.green,whiteSpace:"nowrap" }}>
-                  {fmtGHS(tier.priceGHS)}
+              <div style={{ fontWeight:900,fontSize:20,color: tier.priceGHS===0 ? T.mutedLight : T.green,whiteSpace:"nowrap" }}>
+                  {tier.custom ? "Custom" : fmtGHS(tier.priceGHS)}
                 </div>
               </div>
 
@@ -222,7 +240,7 @@ export default function SubscriptionScreen({ go, user, T, getToken, SUPABASE_URL
                 ))}
               </div>
 
-              {isCurrent ? (
+             {isCurrent ? (
                 <div style={{ width:"100%",background:T.surfaceFaint,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px",textAlign:"center",fontSize:13,fontWeight:700,color:T.muted }}>
                   <i className="fas fa-check-circle" style={{ marginRight:6,color:T.green }}/>Your Current Plan
                 </div>
@@ -230,6 +248,11 @@ export default function SubscriptionScreen({ go, user, T, getToken, SUPABASE_URL
                 <div style={{ width:"100%",background:"none",border:`1px solid ${T.border}`,borderRadius:12,padding:"13px",textAlign:"center",fontSize:13,fontWeight:600,color:T.muted }}>
                   Default plan — no signup needed
                 </div>
+              ) : tier.custom ? (
+                <a href="mailto:ecochargeghanaltd@gmail.com?subject=EcoCharge%20Fleet%20Enquiry" className="tap"
+                  style={{ display:"flex",alignItems:"center",justifyContent:"center",width:"100%",background:T.surface,border:`1px solid ${T.green}66`,borderRadius:12,padding:"14px",fontSize:14,fontWeight:800,color:T.green,cursor:"pointer",textDecoration:"none" }}>
+                  Contact Sales
+                </a>
               ) : (
                 <button onClick={()=>subscribe(tier)} disabled={subscribing===tier.id} className="tap"
                   style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"14px",fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",opacity:subscribing===tier.id?0.7:1 }}>
