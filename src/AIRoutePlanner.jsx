@@ -1034,12 +1034,6 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
     if (!selectedVehicle) { setError("Please select a vehicle."); return; }
     setError(""); setStep("planning");
     try {
-      const distCheck = haversine(fromPlace.lat, fromPlace.lng, toPlace.lat, toPlace.lng);
-      if (distCheck < LOCAL_CITY_RADIUS_KM) {
-        setError(`This destination is only ${distCheck.toFixed(1)} km away — that's local driving, not a long-distance trip. The Driver Assistant already has you covered for this.`);
-        setStep("input");
-        return;
-      }
       const result = await TripPlannerService.planTrip({
         origin: fromPlace, destination: toPlace, vehicle: selectedVehicle,
         batteryPct, preference, stations, SUPABASE_URL, SUPABASE_ANON, getToken,
