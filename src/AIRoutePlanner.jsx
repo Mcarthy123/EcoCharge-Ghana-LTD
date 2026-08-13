@@ -969,7 +969,11 @@ function DriverAssistantHub({ go, user, stations, T, getToken, SUPABASE_URL, SUP
           </>
         )}
 
-      
+      </div>
+    </div>
+  );
+}
+
 // ── MODE 1 — TRIP PLANNER FLOW (unchanged behaviour from previous version) ──
 function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL, SUPABASE_ANON, vehicles, initialVehicle, onReserve }) {
   const [step, setStep] = useState("input");
