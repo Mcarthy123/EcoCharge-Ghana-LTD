@@ -11,6 +11,7 @@ import HomePlusDashboard from "./HomePlusDashboard";
 import SubscriptionScreen from "./SubscriptionScreen";
 import CompatibleChargers from "./CompatibleChargers";
 import FamilySharing from "./FamilySharing";
+import FleetDashboard from "./FleetDashboard";
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL        || "";
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY   || "";
@@ -7979,6 +7980,7 @@ useEffect(()=>{
     subscription: <SubscriptionScreen go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
     compatiblechargers: <CompatibleChargers go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON} stations={stations}/>,
     familysharing: <FamilySharing go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
+    fleetdashboard: <FleetDashboard go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
     };
 
       return (
@@ -7986,6 +7988,7 @@ useEffect(()=>{
     <div style={{ position:"relative",height:"100vh",overflow:"hidden",background:T.bg }}>
       <Drawer open={drawer} onClose={()=>setDrawer(false)} go={goSecure} user={user} onLogout={()=>{ setUser(null);go("splash"); }}/>
       <div style={{ height:"100%",display:"flex",flexDirection:"column",overflow:"hidden" }}>
+        
         {views[screen]||views.home}
       </div>
     </div>
