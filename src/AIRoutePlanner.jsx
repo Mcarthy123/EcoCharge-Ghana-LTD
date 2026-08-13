@@ -758,10 +758,8 @@ function DriverAssistantHub({ go, user, stations, T, getToken, SUPABASE_URL, SUP
         }
       } catch(e) {}
     })();
-  }, [user]);
+ }, [user]);
 
-  useEffect(()=>{
-   
   const remainingRangeKm = selectedVehicle ? VehicleService.remainingRangeKm(selectedVehicle, battery.pct) : null;
   const traffic = BatteryPredictionService.trafficFactor();
   const recs = AIEngine.driverAssistantRecommendations({
@@ -971,44 +969,7 @@ function DriverAssistantHub({ go, user, stations, T, getToken, SUPABASE_URL, SUP
           </>
         )}
 
-        {tab==="" && (
-          <>
-            <div style={{ fontSize:12,color:T.muted,marginBottom:14,lineHeight:1.7 }}>
-              Aggregated across your {vehicles.length} registered vehicles.
-              {Snapshot.some(f=>f.dataSource==="estimate_only") && " Some figures are capacity-based estimates until charging sessions are linked to individual vehicles."}
-            </div>
-            {fleetSnapshot.map(f=>(
-              <GlassCard key={f.vehicle.id} T={T} style={{ padding:16, marginBottom:10 }}>
-                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
-                  <div>
-                    <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{f.vehicle.nickname}</div>
-                    <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{f.vehicle.manufacturer} {f.vehicle.model}</div>
-                  </div>
-                  <div style={{ fontSize:9,fontWeight:700,color:T.muted,background:T.surfaceFaint,borderRadius:6,padding:"3px 8px" }}>
-                    {f.dataSource==="linked_sessions" ? "Live data" : "Estimate"}
-                  </div>
-                </div>
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
-                  {[
-                    { label:"Capacity", value:`${f.capacityKWh} kWh` },
-                    { label:"Sessions", value: f.sessionCount },
-                    { label:"Total Cost", value:`GH₵${(f.totalCostPesewas/100).toFixed(0)}` },
-                  ].map(r=>(
-                    <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"8px",textAlign:"center" }}>
-                      <div style={{ fontWeight:700,fontSize:12,color:T.text }}>{r.value}</div>
-                      <div style={{ fontSize:8,color:T.muted,marginTop:3,textTransform:"uppercase" }}>{r.label}</div>
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
-            ))}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
+      
 // ── MODE 1 — TRIP PLANNER FLOW (unchanged behaviour from previous version) ──
 function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL, SUPABASE_ANON, vehicles, initialVehicle, onReserve }) {
   const [step, setStep] = useState("input");
