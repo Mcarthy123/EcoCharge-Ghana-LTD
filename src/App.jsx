@@ -1712,15 +1712,15 @@ function Vehicles({ go,setVehicle,bookingMode,user }) {
             {myVehicles.map((v,i)=>(
               <div key={v.id} className={`tap fade${i}`} onClick={()=>pickReal(v)}
                 style={{ borderRadius:18,marginBottom:14,overflow:"hidden",border:`2px solid ${sel?.vehicleId===v.id?T.green:T.border}`,transition:"border-color .2s" }}>
-                <div style={{ height:170,position:"relative",overflow:"hidden",background:T.surface }}>
+               <div style={{ height:170,position:"relative",overflow:"hidden",background:T.surface }}>
                   {v.image_url
                     ? <img src={v.image_url} alt={v.nickname} style={{ width:"100%",height:"100%",objectFit:"cover",filter:"brightness(0.8)" }} onError={e=>{ e.target.style.display="none"; }}/>
                     : <div style={{ width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center" }}><i className={`fas ${VEHICLE_TYPE_ICON[v.vehicle_type]||"fa-car"}`} style={{ fontSize:48,color:T.green,opacity:0.3 }}/></div>
                   }
                   <div style={{ position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,0.75) 0%,transparent 55%)" }}/>
                   <div style={{ position:"absolute",bottom:10,left:14 }}>
-                    <div style={{ fontWeight:800,fontSize:17,color:T.text }}>{v.nickname}</div>
-                    <div style={{ fontSize:11,color:T.mutedLight,marginTop:2 }}>{v.year} {v.manufacturer} {v.model}</div>
+                    <div style={{ fontWeight:800,fontSize:17,color:"#fff" }}>{v.nickname}</div>
+                    <div style={{ fontSize:11,color:"rgba(255,255,255,0.75)",marginTop:2 }}>{v.year} {v.manufacturer} {v.model}</div>
                   </div>
                   {sel?.vehicleId===v.id&&(
                     <div style={{ position:"absolute",top:12,right:12,width:28,height:28,borderRadius:"50%",background:T.green,display:"flex",alignItems:"center",justifyContent:"center" }}>
