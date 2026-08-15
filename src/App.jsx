@@ -1789,7 +1789,7 @@ function Booking({ go,station,vehicle,user,setBooking }) {
     if (!email.trim()||!email.includes("@")) { setErr("Enter a valid email");return; }
     setLoad(true);setErr("");
     const ref=genRef();
-    const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",vehicleImageUrl:vehicle?.imageUrl||null,slot_time:slots[slotIdx].toISOString(),duration_min:dur.value,amount:total,name,phone,email,user_id:user?.id||null,pay_method:payHow,status:"confirmed",created_at:new Date().toISOString() };
+    const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",vehicle_id:vehicle?.vehicleId||null,vehicleImageUrl:vehicle?.imageUrl||null,slot_time:slots[slotIdx].toISOString(),duration_min:dur.value,amount:total,name,phone,email,user_id:user?.id||null,pay_method:payHow,status:"confirmed",created_at:new Date().toISOString() };
     let saved=true;
     if (SUPABASE_URL) saved=await sb("bookings",{ method:"POST",headers:{ Prefer:"return=minimal" },body:JSON.stringify(data) });
     if (!saved) { setErr("Could not save booking. Please check your connection and try again."); setLoad(false); return; }
@@ -1951,7 +1951,7 @@ function ChargeNow({ go,station,vehicle,user,setBooking }) {
     if (!email.trim()||!email.includes("@")) { setErr("Enter a valid email");return; }
     setLoad(true);setErr("");
     const ref=genRef();
-    const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",vehicleImageUrl:vehicle?.imageUrl||null,slot_time:new Date().toISOString(),duration_min:null,amount:null,name,phone,email,user_id:user?.id||null,pay_method:"wallet",booking_mode:"now",status:"confirmed",created_at:new Date().toISOString() };
+    const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",vehicle_id:vehicle?.vehicleId||null,vehicleImageUrl:vehicle?.imageUrl||null,slot_time:new Date().toISOString(),duration_min:null,amount:null,name,phone,email,user_id:user?.id||null,pay_method:"wallet",booking_mode:"now",status:"confirmed",created_at:new Date().toISOString() };
     let saved=true;
     if (SUPABASE_URL) saved=await sb("bookings",{ method:"POST",headers:{ Prefer:"return=minimal" },body:JSON.stringify(data) });
     if (!saved) { setErr("Could not start your session. Please check your connection and try again."); setLoad(false); return; }
@@ -2248,7 +2248,7 @@ function QRScreen({ go, booking, setBooking, user }) {
               id: newSessionId, session_ref: b.reference, transaction_id: newTxId,
               charger_id: chargerId, connector_id: 1, user_id: user?.id || null,
               booking_ref: b.reference, id_tag: user?.id || b.reference,
-              status: "Charging", vehicle_type: b.vehicle, meter_start: 0,
+              status: "Charging", vehicle_type: b.vehicle, vehicle_id: b.vehicle_id || null, meter_start: 0,
               rate_per_kwh: 85, base_fee: 500, started_at: new Date().toISOString(), authorized_at: new Date().toISOString(),
             })
           });
@@ -2309,18 +2309,31 @@ function QRScreen({ go, booking, setBooking, user }) {
 
      if (SUPABASE_URL && user?.id && finalCostPs > 0) {
         try {
-          await fetch(`${SUPABASE_URL}/rest/v1/rpc/wallet_debit`, {
-            method: "POST",
-            headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ p_user_id: user.id, p_amount_pesewas: finalCostPs, p_type: "debit", p_description: `Charging session at ${b?.station || "EcoCharge"} — ${finalKwh.toFixed(3)} kWh`, p_session_id: sessionId, p_booking_ref: b?.reference })
-          });
+          let fleetId = null;
+          if (b.vehicle_id) {
+            const vRes = await fetch(`${SUPABASE_URL}/rest/v1/user_vehicles?id=eq.${b.vehicle_id}&select=fleet_id`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` } });
+            const vData = await vRes.json();
+            fleetId = vData?.[0]?.fleet_id || null;
+          }
+          if (fleetId) {
+            await fetch(`${SUPABASE_URL}/rest/v1/rpc/fleet_wallet_debit`, {
+              method: "POST",
+              headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ p_fleet_id: fleetId, p_amount_pesewas: finalCostPs, p_description: `Charging session at ${b?.station || "EcoCharge"} — ${finalKwh.toFixed(3)} kWh`, p_session_id: sessionId })
+            });
+          } else {
+            await fetch(`${SUPABASE_URL}/rest/v1/rpc/wallet_debit`, {
+              method: "POST",
+              headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ p_user_id: user.id, p_amount_pesewas: finalCostPs, p_type: "debit", p_description: `Charging session at ${b?.station || "EcoCharge"} — ${finalKwh.toFixed(3)} kWh`, p_session_id: sessionId, p_booking_ref: b?.reference })
+            });
+          }
           await fetch(`${SUPABASE_URL}/rest/v1/wallets?user_id=eq.${user.id}`, {
             method: "PATCH",
             headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", Prefer: "return=minimal" },
             body: JSON.stringify({ locked_pesewas: 0 })
           });
         } catch(e) { console.error("Wallet debit error:", e); }
-
         // 10 loyalty points per GH₵1 spent (finalCostPs is in pesewas, 100 = GH₵1)
         try {
           const pointsEarned = Math.round(finalCostPs / 500);
