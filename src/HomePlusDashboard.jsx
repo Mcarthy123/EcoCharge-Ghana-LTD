@@ -499,9 +499,9 @@ function ChargerManagement({ T, go, user, ctx, onBack, linkedChargers, onLinkedC
         {scanMsg && (
           <div style={{ background:"rgba(74,222,128,0.08)",border:`1px solid ${T.green}44`,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:T.green }}>{scanMsg}</div>
         )}
-        <button onClick={()=>setScanning(true)} className="tap"
+        <button onClick={()=>go("quickconnect")} className="tap"
           style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"14px",fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:16 }}>
-          <i className="fas fa-qrcode"/> Scan to Link Your Charger
+          <i className="fas fa-qrcode"/> Quick Connect
         </button>
         {loading && <div style={{ textAlign:"center",padding:"30px 0",color:T.muted,fontSize:12 }}>Connecting to OCPP server…</div>}
         {!loading && ocppChargers.length===0 && (
