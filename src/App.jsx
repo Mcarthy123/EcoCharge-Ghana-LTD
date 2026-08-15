@@ -7953,6 +7953,32 @@ useEffect(()=>{
         };
         setTimeout(verifySubPayment, 150);
       }
+      const fleetTopupPending = (() => { try { return JSON.parse(localStorage.getItem('eco_fleet_topup_pending')||'null'); } catch(e){ return null; } })();
+      if (fleetTopupPending && ref.startsWith('FLEETTOPUP-')) {
+        try { localStorage.removeItem('eco_fleet_topup_pending'); } catch(e) {}
+        const verifyFleetTopup = async () => {
+          try {
+            let verified = false;
+            if (OCPP_URL) {
+              const vRes = await fetch(OCPP_URL + '/api/payment/verify', {
+                method: 'POST', headers: { 'x-api-key': OCPP_KEY, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reference: ref })
+              });
+              const vData = await vRes.json();
+              verified = !!vData.success;
+            } else { verified = true; }
+            if (verified && SUPABASE_URL) {
+              await fetch(SUPABASE_URL + '/rest/v1/rpc/fleet_wallet_credit', {
+                method: 'POST',
+                headers: { apikey: SUPABASE_ANON, Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ p_fleet_id: fleetTopupPending.fleetId, p_amount_pesewas: fleetTopupPending.amount, p_description: 'Fleet wallet top-up via Paystack', p_payment_ref: ref })
+              });
+            }
+          } catch(e) { console.error('Fleet top-up verify error:', e); }
+          setScreen('fleetdashboard');
+        };
+        setTimeout(verifyFleetTopup, 150);
+      }
     }
   },[]);
 
