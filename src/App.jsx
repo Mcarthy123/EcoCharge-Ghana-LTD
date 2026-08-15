@@ -12,6 +12,7 @@ import SubscriptionScreen from "./SubscriptionScreen";
 import CompatibleChargers from "./CompatibleChargers";
 import FamilySharing from "./FamilySharing";
 import FleetDashboard from "./FleetDashboard";
+import QuickConnect from "./QuickConnect";
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL        || "";
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY   || "";
@@ -7983,6 +7984,7 @@ useEffect(()=>{
     compatiblechargers: <CompatibleChargers go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON} stations={stations}/>,
     familysharing: <FamilySharing go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
     fleetdashboard: <FleetDashboard go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
+    quickconnect: <QuickConnect go={goSecure} user={user} T={T} getToken={getToken} SUPABASE_URL={SUPABASE_URL} SUPABASE_ANON={SUPABASE_ANON}/>,
     };
 
       return (
