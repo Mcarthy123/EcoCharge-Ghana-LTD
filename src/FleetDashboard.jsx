@@ -164,8 +164,22 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
   const createFleet = async () => {
     if (!fleetName.trim()) { setError("Enter a fleet name"); return; }
     setCreating(true); setError("");
-    const saved = await sbPost(...ctx, "fleets", { owner_id: user.id, name: fleetName.trim() });
-    if (saved?.[0]) { setFleet(saved[0]); loadAll(); } else setError("Could not create fleet. Try again.");
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/fleets`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ owner_id: user.id, name: fleetName.trim() }),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        setError(`Failed (${res.status}): ${text.slice(0, 300)}`);
+      } else {
+        const saved = JSON.parse(text);
+        if (saved?.[0]) { setFleet(saved[0]); loadAll(); } else setError("Insert succeeded but returned no row.");
+      }
+    } catch(e) {
+      setError("Network error: " + String(e));
+    }
     setCreating(false);
   };
 
