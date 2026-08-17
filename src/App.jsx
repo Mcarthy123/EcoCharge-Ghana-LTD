@@ -6397,11 +6397,7 @@ const getModels = (make, vehicleType, dbVehicles=[]) => {
   return [...new Set([...local, ...registry, ...fromDb])].sort();
 };
 
-const getModels = (make) => {
-  const local    = EV_DATABASE[make]    ? Object.keys(EV_DATABASE[make].models)    : [];
-  const registry = ECOCHARGE_REGISTRY[make] ? Object.keys(ECOCHARGE_REGISTRY[make]) : [];
-  return [...new Set([...local, ...registry])].sort();
-};
+
 
 const getYears = (make, model) => {
   const localInfo    = EV_DATABASE[make]?.models?.[model];
