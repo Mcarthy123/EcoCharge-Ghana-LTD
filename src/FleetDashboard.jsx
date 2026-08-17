@@ -301,7 +301,7 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
         {!loading && fleet && (
           <>
             {/* Fleet Wallet */}
-           <Card T={T} style={{ padding:16, marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <Card T={T} style={{ padding:16, marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
                 <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4 }}>Current Plan</div>
                 <div style={{ fontWeight:800,fontSize:15,color:T.text }}>{FLEET_TIER_NAMES[fleetTier] || "—"}</div>
@@ -314,6 +314,12 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
                 Manage
               </button>
             </Card>
+
+            {/* Fleet Wallet */}
+            <Card T={T} style={{ padding:18, marginBottom:16 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16 }}>
+                <div>
+                  <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Fleet Wallet</div>
                   <div style={{ fontWeight:900,fontSize:28,color:T.text }}>{fmtGHS(wallet?.balance_pesewas)}</div>
                 </div>
                 <button onClick={()=>setShowTopUp(v=>!v)} className="tap"
