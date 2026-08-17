@@ -112,16 +112,22 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
   const [stats, setStats] = useState({});
   const [wallet, setWallet] = useState(null);
   const [txns, setTxns] = useState([]);
+  const [fleetTier, setFleetTier] = useState(null);
   const [showTopUp, setShowTopUp] = useState(false);
   const [topupAmt, setTopupAmt] = useState("");
   const [payingTopUp, setPayingTopUp] = useState(false);
   const [error, setError] = useState("");
 
+ const FLEET_TIER_LIMITS = { fleet_starter:5, fleet_business:15, fleet_pro:30, fleet_enterprise:Infinity };
+  const FLEET_TIER_NAMES  = { fleet_starter:"Fleet Starter", fleet_business:"Fleet Business", fleet_pro:"Fleet Pro", fleet_enterprise:"Fleet Enterprise" };
+
   useEffect(()=>{
     if (!user?.id || !SUPABASE_URL) { setSubLoading(false); return; }
     (async()=>{
-      const data = await sbGet(...ctx, `subscriptions?user_id=eq.${user.id}&status=eq.active&tier=eq.fleet&order=created_at.desc&limit=1`);
-      setHasFleetSub(Array.isArray(data) && data.length > 0);
+      const data = await sbGet(...ctx, `subscriptions?user_id=eq.${user.id}&status=eq.active&tier=in.(fleet_starter,fleet_business,fleet_pro,fleet_enterprise)&order=created_at.desc&limit=1`);
+      const row = Array.isArray(data) && data[0] ? data[0] : null;
+      setHasFleetSub(!!row);
+      setFleetTier(row?.tier || null);
       setSubLoading(false);
     })();
   }, [user?.id]);
@@ -200,6 +206,13 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
 
   const toggleVehicleInFleet = async (v) => {
     const inFleet = v.fleet_id === fleet.id;
+    if (!inFleet) {
+      const limit = FLEET_TIER_LIMITS[fleetTier] ?? 0;
+      if (fleetVehicles.length >= limit) {
+        setError(`Your ${FLEET_TIER_NAMES[fleetTier] || "plan"} allows up to ${limit} vehicles. Upgrade to add more.`);
+        return;
+      }
+    }
     const ok = await sbPatch(...ctx, `user_vehicles?id=eq.${v.id}`, { fleet_id: inFleet ? null : fleet.id, assigned_driver_id: inFleet ? null : v.assigned_driver_id });
     if (ok) setMyVehicles(prev => prev.map(x => x.id===v.id ? { ...x, fleet_id: inFleet ? null : fleet.id } : x));
   };
@@ -288,10 +301,19 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
         {!loading && fleet && (
           <>
             {/* Fleet Wallet */}
-            <Card T={T} style={{ padding:18, marginBottom:16 }}>
-              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16 }}>
-                <div>
-                  <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Fleet Wallet</div>
+           <Card T={T} style={{ padding:16, marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div>
+                <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4 }}>Current Plan</div>
+                <div style={{ fontWeight:800,fontSize:15,color:T.text }}>{FLEET_TIER_NAMES[fleetTier] || "—"}</div>
+                <div style={{ fontSize:12,color:T.muted,marginTop:2 }}>
+                  {fleetVehicles.length} of {FLEET_TIER_LIMITS[fleetTier]===Infinity ? "unlimited" : FLEET_TIER_LIMITS[fleetTier]} vehicles used
+                </div>
+              </div>
+              <button onClick={()=>go("subscription")} className="tap"
+                style={{ background:T.surfaceFaint,border:`1px solid ${T.border}`,borderRadius:10,padding:"9px 14px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
+                Manage
+              </button>
+            </Card>
                   <div style={{ fontWeight:900,fontSize:28,color:T.text }}>{fmtGHS(wallet?.balance_pesewas)}</div>
                 </div>
                 <button onClick={()=>setShowTopUp(v=>!v)} className="tap"
