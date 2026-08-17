@@ -6380,10 +6380,21 @@ const submitVehicleToRegistry = async (vehicle) => {
 };
 
 // ── COMBINED MANUFACTURER LIST ────────────────────────────────
-const getManufacturers = () => {
-  const fromLocal    = Object.keys(EV_DATABASE);
-  const fromRegistry = Object.keys(ECOCHARGE_REGISTRY);
-  return [...new Set([...fromLocal, ...fromRegistry])].sort();
+const getManufacturers = (vehicleType, dbVehicles=[]) => {
+  const hasMatch = (models) => Object.values(models).some(m => !vehicleType || m.type === vehicleType);
+  const fromLocal    = Object.keys(EV_DATABASE).filter(mk => hasMatch(EV_DATABASE[mk].models));
+  const fromRegistry = Object.keys(ECOCHARGE_REGISTRY).filter(mk => hasMatch(ECOCHARGE_REGISTRY[mk]));
+  const fromDb = [...new Set(dbVehicles.filter(v=>!vehicleType||v.type===vehicleType).map(v=>v.brand))];
+  return [...new Set([...fromLocal, ...fromRegistry, ...fromDb])].sort();
+};
+
+const getModels = (make, vehicleType, dbVehicles=[]) => {
+  const localModels    = EV_DATABASE[make]?.models || {};
+  const registryModels = ECOCHARGE_REGISTRY[make] || {};
+  const local    = Object.keys(localModels).filter(mo => !vehicleType || localModels[mo].type === vehicleType);
+  const registry = Object.keys(registryModels).filter(mo => !vehicleType || registryModels[mo].type === vehicleType);
+  const fromDb = dbVehicles.filter(v=>v.brand===make && (!vehicleType||v.type===vehicleType)).map(v=>v.model);
+  return [...new Set([...local, ...registry, ...fromDb])].sort();
 };
 
 const getModels = (make) => {
@@ -6495,8 +6506,15 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
   const [autoFilled, setAutoFilled] = useState(false);
+  const [dbVehicles, setDbVehicles] = useState([]);
+  useEffect(()=>{
+    if (!SUPABASE_URL) return;
+    fetch(`${SUPABASE_URL}/rest/v1/vehicle_registry?select=brand,model,type,battery_capacity_kwh,connector_type,estimated_range_km,max_charging_power_kw`,
+      { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` } })
+      .then(r=>r.json()).then(d=>{ if(Array.isArray(d)) setDbVehicles(d); }).catch(()=>{});
+  }, []);
 
-  const models = getModels(manufacturer);
+  const models = getModels(manufacturer, vehicleType, dbVehicles);
   const years  = getYears(manufacturer, model);
 
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -6715,7 +6733,7 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
             )}
 
             {sel("Manufacturer *", manufacturer, setManufacturer,
-              [...getManufacturers(), "Other"].map(m=>({ value:m, label:m })),
+              [...getManufacturers(vehicleType, dbVehicles), "Other"].map(m=>({ value:m, label:m })),
               "Select or type manufacturer")}
 
             {manufacturer==="Other" ? (
