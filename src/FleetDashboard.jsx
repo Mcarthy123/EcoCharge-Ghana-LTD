@@ -20,6 +20,13 @@
 // requires the App.jsx charging flow to capture it (see the
 // integration notes that came with this file) — sessions created
 // before that wiring won't retroactively show up here.
+//
+// HONESTY NOTE (Fleet Overview KPIs): the KPI totals below are
+// computed by summing get_fleet_vehicle_stats() rows, whatever time
+// range that RPC is defined to return (not confirmed to be "this
+// month" — treat as all-time until the RPC definition is checked).
+// "Active Vehicles" = vehicles with an assigned driver, not vehicles
+// with recent activity (no last-session timestamp is surfaced yet).
 // ============================================================
 import { useState, useEffect } from "react";
 
@@ -245,6 +252,15 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
   const fleetVehicles = myVehicles.filter(v => v.fleet_id === fleet?.id);
   const availableVehicles = myVehicles.filter(v => v.fleet_id !== fleet?.id);
 
+  // Fleet Overview KPIs — derived from already-loaded stats/wallet/drivers.
+  // See HONESTY NOTE at top of file re: data scope.
+  const fleetStatsList = fleetVehicles.map(v => stats[v.id]).filter(Boolean);
+  const totalSessions = fleetStatsList.reduce((sum, s) => sum + (s.session_count || 0), 0);
+  const totalKwh = fleetStatsList.reduce((sum, s) => sum + Number(s.total_kwh || 0), 0);
+  const totalCostPesewas = fleetStatsList.reduce((sum, s) => sum + Number(s.total_cost_pesewas || 0), 0);
+  const avgCostPerKwh = totalKwh > 0 ? (totalCostPesewas / 100) / totalKwh : 0;
+  const activeVehicleCount = fleetVehicles.filter(v => v.assigned_driver_id).length;
+
   if (subLoading) {
     return (
       <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,alignItems:"center",justifyContent:"center" }}>
@@ -300,6 +316,27 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
 
         {!loading && fleet && (
           <>
+            {/* Fleet Overview KPIs */}
+            <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:10 }}>Fleet Overview</div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16 }}>
+              {[
+                { label:"Active Vehicles", value: activeVehicleCount, sub: `of ${fleetVehicles.length} in fleet`, icon:"fa-car" },
+                { label:"Total Sessions", value: totalSessions, sub: "across fleet", icon:"fa-bolt" },
+                { label:"Total Energy", value: `${totalKwh.toFixed(1)} kWh`, sub: "consumed", icon:"fa-charging-station" },
+                { label:"Total Spend", value: fmtGHS(totalCostPesewas), sub: `${avgCostPerKwh > 0 ? `GH₵${avgCostPerKwh.toFixed(2)}/kWh avg` : "—"}`, icon:"fa-coins" },
+              ].map(k => (
+                <Card key={k.label} T={T} style={{ padding:14 }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
+                    <div style={{ width:28,height:28,borderRadius:8,background:`${T.green}18`,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                      <i className={`fas ${k.icon}`} style={{ fontSize:12,color:T.green }}/>
+                    </div>
+                  </div>
+                  <div style={{ fontWeight:900,fontSize:19,color:T.text,marginBottom:2 }}>{k.value}</div>
+                  <div style={{ fontSize:10,color:T.muted }}>{k.label} · {k.sub}</div>
+                </Card>
+              ))}
+            </div>
+
             {/* Fleet Wallet */}
           <Card T={T} style={{ padding:16, marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
