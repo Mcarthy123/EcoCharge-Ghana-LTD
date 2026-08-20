@@ -1,8 +1,6 @@
 // ============================================================
 // EcoCharge Ghana — Fleet Dashboard (real implementation)
 //
-// This replaces the earlier "aggregate my own vehicles" view with
-// an actual fleet system:
 // - A fleet is a business entity separate from the owner's personal
 //   account (fleets table)
 // - Drivers are invited by email and accept, exactly like Family
@@ -16,17 +14,40 @@
 //   the get_fleet_vehicle_stats() function, not capacity estimates
 //
 // HONESTY NOTE: for a vehicle's charging cost to appear here, the
-// charging session that used it must have vehicle_id set. That
-// requires the App.jsx charging flow to capture it (see the
-// integration notes that came with this file) — sessions created
-// before that wiring won't retroactively show up here.
+// charging session that used it must have vehicle_id set.
 //
-// HONESTY NOTE (Fleet Overview KPIs): the KPI totals below are
-// computed by summing get_fleet_vehicle_stats() rows, whatever time
-// range that RPC is defined to return (not confirmed to be "this
-// month" — treat as all-time until the RPC definition is checked).
-// "Active Vehicles" = vehicles with an assigned driver, not vehicles
-// with recent activity (no last-session timestamp is surfaced yet).
+// HONESTY NOTE (KPIs / driver stats): totals sum get_fleet_vehicle_stats()
+// rows, whatever time range that RPC covers (not confirmed "this month").
+//
+// HONESTY NOTE (Vehicle Detail tabs): Charging/Energy tabs are real.
+// Trips and Maintenance tabs are placeholders — no trip logging or
+// maintenance_records table exists yet. Performance tab only shows
+// cost-per-kWh (no distance/odometer data to compute efficiency).
+//
+// HONESTY NOTE (Driver daily spending limits): sets a limit on record.
+// NOT YET enforced at charge time — needs a follow-up change in
+// App.jsx's wallet-debit flow.
+//
+// HONESTY NOTE (Fleet Map): NO GPS hardware exists on any EcoCharge
+// vehicle. This shows each vehicle's LAST CHARGING STATION from real
+// session history — not a live map, not live location.
+//
+// HONESTY NOTE (Charging Management / Preferred Stations): saves a
+// preference on the fleet record. Actually steering drivers toward
+// these stations in-app is not wired yet.
+//
+// HONESTY NOTE (Permissions/roles): the role field already existed
+// in the schema. This UI lets the owner set it. Enforcing different
+// permissions elsewhere in the app based on role is not wired yet —
+// this only records the intended role.
+//
+// HONESTY NOTE (AI Fleet Assistant): rule-based on real fleet data
+// (wallet balance, unassigned vehicles/drivers, zero-session vehicles,
+// tier limits) — not a live conversational AI, same pattern as Home+.
+//
+// REQUIRED SQL (run once in Supabase SQL Editor before using this file):
+//   alter table fleet_drivers add column if not exists daily_limit_pesewas integer;
+//   alter table fleets add column if not exists preferred_station_ids uuid[];
 // ============================================================
 import { useState, useEffect } from "react";
 
@@ -125,6 +146,24 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
   const [payingTopUp, setPayingTopUp] = useState(false);
   const [error, setError] = useState("");
 
+  // Vehicle detail view
+  const [selectedVehicle, setSelectedVehicle] = useState(null);
+  const [vehicleTab, setVehicleTab] = useState("charging");
+  const [vehicleSessions, setVehicleSessions] = useState([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+
+  // Driver daily spending limits (policy)
+  const [limitDrafts, setLimitDrafts] = useState({});
+  const [savingLimit, setSavingLimit] = useState(null);
+
+  // Fleet Map — last known location (real, from session history, not GPS)
+  const [lastLocations, setLastLocations] = useState({});
+
+  // Charging Management — preferred stations
+  const [allStations, setAllStations] = useState([]);
+  const [preferredStations, setPreferredStations] = useState([]);
+  const [savingPolicy, setSavingPolicy] = useState(false);
+
  const FLEET_TIER_LIMITS = { fleet_starter:5, fleet_business:15, fleet_pro:30, fleet_enterprise:Infinity };
   const FLEET_TIER_NAMES  = { fleet_starter:"Fleet Starter", fleet_business:"Fleet Business", fleet_pro:"Fleet Pro", fleet_enterprise:"Fleet Enterprise" };
 
@@ -139,12 +178,20 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
     })();
   }, [user?.id]);
 
+  useEffect(()=>{
+    (async()=>{
+      const s = await sbGet(...ctx, `stations?select=id,name&order=name.asc`);
+      setAllStations(Array.isArray(s) ? s : []);
+    })();
+  }, []);
+
   const loadAll = async () => {
     if (!user?.id || !hasFleetSub) { setLoading(false); return; }
     setLoading(true);
     const owned = await sbGet(...ctx, `fleets?owner_id=eq.${user.id}&limit=1`);
     const f = Array.isArray(owned) && owned[0] ? owned[0] : null;
     setFleet(f);
+    setPreferredStations(f?.preferred_station_ids || []);
 
     if (f) {
       const [d, v, w] = await Promise.all([
@@ -169,6 +216,18 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
       const statMap = {};
       (Array.isArray(s) ? s : []).forEach(row => { statMap[row.vehicle_id] = row; });
       setStats(statMap);
+
+      const fVehicleIds = (Array.isArray(v) ? v : []).filter(x => x.fleet_id === f.id).map(x => x.id);
+      if (fVehicleIds.length > 0) {
+        const recentSessions = await sbGet(...ctx, `charging_sessions?vehicle_id=in.(${fVehicleIds.join(",")})&order=created_at.desc&limit=200`);
+        const locMap = {};
+        (Array.isArray(recentSessions) ? recentSessions : []).forEach(sess => {
+          if (!locMap[sess.vehicle_id]) locMap[sess.vehicle_id] = { station: sess.station_name, at: sess.created_at };
+        });
+        setLastLocations(locMap);
+      } else {
+        setLastLocations({});
+      }
     }
     setLoading(false);
   };
@@ -211,6 +270,12 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
     await sbDelete(...ctx, `fleet_drivers?id=eq.${id}`);
   };
 
+  const updateDriverRole = async (driverId, role) => {
+    const ok = await sbPatch(...ctx, `fleet_drivers?id=eq.${driverId}`, { role });
+    if (ok) setDrivers(prev => prev.map(d => d.id===driverId ? { ...d, role } : d));
+    else setError("Could not update role.");
+  };
+
   const toggleVehicleInFleet = async (v) => {
     const inFleet = v.fleet_id === fleet.id;
     if (!inFleet) {
@@ -248,18 +313,109 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
     } catch(e) { setError("Could not start checkout."); setPayingTopUp(false); }
   };
 
+  const openVehicleDetail = async (v) => {
+    setSelectedVehicle(v);
+    setVehicleTab("charging");
+    setVehicleSessions([]);
+    setLoadingSessions(true);
+    const sessions = await sbGet(...ctx, `charging_sessions?vehicle_id=eq.${v.id}&order=created_at.desc&limit=25`);
+    setVehicleSessions(Array.isArray(sessions) ? sessions : []);
+    setLoadingSessions(false);
+  };
+
+  const saveDriverLimit = async (driverId) => {
+    const raw = limitDrafts[driverId];
+    const amount = raw && raw.trim() !== "" ? toPesewas(raw) : null;
+    setSavingLimit(driverId);
+    const ok = await sbPatch(...ctx, `fleet_drivers?id=eq.${driverId}`, { daily_limit_pesewas: amount });
+    if (ok) setDrivers(prev => prev.map(d => d.id===driverId ? { ...d, daily_limit_pesewas: amount } : d));
+    else setError("Could not save limit. Run the required SQL migration first (see file header).");
+    setSavingLimit(null);
+  };
+
+  const toggleStationPref = (id) => {
+    setPreferredStations(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev, id]);
+  };
+  const savePolicy = async () => {
+    setSavingPolicy(true);
+    const ok = await sbPatch(...ctx, `fleets?id=eq.${fleet.id}`, { preferred_station_ids: preferredStations });
+    if (ok) setFleet(prev => ({ ...prev, preferred_station_ids: preferredStations }));
+    else setError("Could not save preferences. Run the required SQL migration first (see file header).");
+    setSavingPolicy(false);
+  };
+
   const activeDrivers = drivers.filter(d => d.status === "active");
   const fleetVehicles = myVehicles.filter(v => v.fleet_id === fleet?.id);
   const availableVehicles = myVehicles.filter(v => v.fleet_id !== fleet?.id);
 
-  // Fleet Overview KPIs — derived from already-loaded stats/wallet/drivers.
-  // See HONESTY NOTE at top of file re: data scope.
+  // Fleet Overview KPIs
   const fleetStatsList = fleetVehicles.map(v => stats[v.id]).filter(Boolean);
   const totalSessions = fleetStatsList.reduce((sum, s) => sum + (s.session_count || 0), 0);
   const totalKwh = fleetStatsList.reduce((sum, s) => sum + Number(s.total_kwh || 0), 0);
   const totalCostPesewas = fleetStatsList.reduce((sum, s) => sum + Number(s.total_cost_pesewas || 0), 0);
   const avgCostPerKwh = totalKwh > 0 ? (totalCostPesewas / 100) / totalKwh : 0;
   const activeVehicleCount = fleetVehicles.filter(v => v.assigned_driver_id).length;
+
+  // Per-driver stats
+  const driverStatsMap = {};
+  activeDrivers.forEach(d => {
+    const theirVehicles = fleetVehicles.filter(v => v.assigned_driver_id === d.user_id);
+    const theirStats = theirVehicles.map(v => stats[v.id]).filter(Boolean);
+    driverStatsMap[d.id] = {
+      vehicleCount: theirVehicles.length,
+      sessions: theirStats.reduce((s,x)=>s+(x.session_count||0),0),
+      kwh: theirStats.reduce((s,x)=>s+Number(x.total_kwh||0),0),
+      costPesewas: theirStats.reduce((s,x)=>s+Number(x.total_cost_pesewas||0),0),
+    };
+  });
+
+  // Alerts — real, rule-based on data already loaded
+  const fleetAlerts = [];
+  if (fleet) {
+    if (wallet && wallet.balance_pesewas < 2000) {
+      fleetAlerts.push({ severity:"high", icon:"fa-wallet", message:`Fleet wallet is low (${fmtGHS(wallet.balance_pesewas)}). Top up to avoid interrupted charging.` });
+    }
+    const unassignedVehicles = fleetVehicles.filter(v=>!v.assigned_driver_id).length;
+    if (unassignedVehicles > 0) {
+      fleetAlerts.push({ severity:"medium", icon:"fa-car", message:`${unassignedVehicles} vehicle${unassignedVehicles>1?"s":""} in your fleet ${unassignedVehicles>1?"have":"has"} no driver assigned.` });
+    }
+    const unassignedDrivers = activeDrivers.filter(d=>!fleetVehicles.some(v=>v.assigned_driver_id===d.user_id)).length;
+    if (unassignedDrivers > 0) {
+      fleetAlerts.push({ severity:"low", icon:"fa-user", message:`${unassignedDrivers} active driver${unassignedDrivers>1?"s":""} ${unassignedDrivers>1?"have":"has"} no vehicle assigned.` });
+    }
+    const neverCharged = fleetVehicles.filter(v=>!stats[v.id] || stats[v.id].session_count===0).length;
+    if (neverCharged > 0) {
+      fleetAlerts.push({ severity:"low", icon:"fa-bolt", message:`${neverCharged} vehicle${neverCharged>1?"s haven't":" hasn't"} recorded a single charging session yet.` });
+    }
+    const tierLimit = FLEET_TIER_LIMITS[fleetTier] ?? 0;
+    if (tierLimit !== Infinity && fleetVehicles.length >= tierLimit) {
+      fleetAlerts.push({ severity:"medium", icon:"fa-layer-group", message:`You've reached your ${FLEET_TIER_NAMES[fleetTier]} vehicle limit (${tierLimit}). Upgrade to add more.` });
+    }
+  }
+  const alertColor = (sev) => sev==="high" ? T.red : sev==="medium" ? T.yellow : T.green;
+
+  const exportCsv = () => {
+    if (!fleet) return;
+    const rows = [["Vehicle","Manufacturer","Model","Driver","Sessions","kWh","Cost (GHS)"]];
+    fleetVehicles.forEach(v=>{
+      const s = stats[v.id];
+      const driver = activeDrivers.find(d=>d.user_id===v.assigned_driver_id);
+      rows.push([
+        v.nickname, v.manufacturer, v.model,
+        driver ? driver.invited_email : "Unassigned",
+        s?.session_count || 0,
+        s ? Number(s.total_kwh).toFixed(1) : "0.0",
+        s ? (Number(s.total_cost_pesewas)/100).toFixed(2) : "0.00",
+      ]);
+    });
+    const csv = rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type:"text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${fleet.name.replace(/\s+/g,"_")}_fleet_report.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   if (subLoading) {
     return (
@@ -285,6 +441,90 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
             style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px 32px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
             View Fleet Plan
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Vehicle Detail overlay
+  if (selectedVehicle) {
+    const vStat = stats[selectedVehicle.id];
+    const costPerKwh = vStat && Number(vStat.total_kwh) > 0
+      ? (Number(vStat.total_cost_pesewas)/100) / Number(vStat.total_kwh)
+      : null;
+    return (
+      <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+        <Header T={T} title={selectedVehicle.nickname} sub={`${selectedVehicle.manufacturer} ${selectedVehicle.model}`} onBack={()=>setSelectedVehicle(null)}/>
+        <div style={{ display:"flex",gap:6,padding:"12px 16px",overflowX:"auto" }}>
+          {["charging","energy","trips","performance","maintenance"].map(tab => (
+            <button key={tab} onClick={()=>setVehicleTab(tab)} className="tap"
+              style={{ padding:"8px 14px",borderRadius:20,border:`1px solid ${vehicleTab===tab?T.green:T.border}`,background:vehicleTab===tab?`${T.green}18`:"transparent",color:vehicleTab===tab?T.green:T.muted,fontSize:12,fontWeight:700,whiteSpace:"nowrap",cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize" }}>
+              {tab}
+            </button>
+          ))}
+        </div>
+        <div style={{ flex:1,overflowY:"auto",padding:"0 16px 100px" }}>
+          {vehicleTab === "charging" && (
+            <>
+              {loadingSessions && <div style={{ textAlign:"center",padding:"30px 0",color:T.muted,fontSize:12 }}>Loading sessions…</div>}
+              {!loadingSessions && vehicleSessions.length === 0 && (
+                <Card T={T} style={{ padding:16,textAlign:"center" }}>
+                  <div style={{ fontSize:12,color:T.muted }}>No charging sessions recorded for this vehicle yet.</div>
+                </Card>
+              )}
+              {vehicleSessions.map(s=>(
+                <Card key={s.id} T={T} style={{ padding:14,marginBottom:8 }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
+                    <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{s.station_name || "Charging Session"}</div>
+                    <div style={{ fontWeight:800,fontSize:13,color:T.green }}>{fmtGHS(s.cost_pesewas)}</div>
+                  </div>
+                  <div style={{ fontSize:11,color:T.muted }}>
+                    {s.energy_kwh != null ? `${Number(s.energy_kwh).toFixed(1)} kWh · ` : ""}
+                    {s.created_at ? new Date(s.created_at).toLocaleDateString("en-GH",{day:"numeric",month:"short",year:"numeric"}) : ""}
+                  </div>
+                </Card>
+              ))}
+            </>
+          )}
+          {vehicleTab === "energy" && (
+            <Card T={T} style={{ padding:18 }}>
+              <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",marginBottom:14 }}>Energy Summary</div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
+                <div>
+                  <div style={{ fontWeight:900,fontSize:22,color:T.text }}>{vStat ? Number(vStat.total_kwh).toFixed(1) : "0.0"} kWh</div>
+                  <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>Total consumed</div>
+                </div>
+                <div>
+                  <div style={{ fontWeight:900,fontSize:22,color:T.text }}>{vStat?.session_count || 0}</div>
+                  <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>Sessions</div>
+                </div>
+              </div>
+              <div style={{ fontSize:10,color:T.muted,lineHeight:1.6 }}>Monthly breakdowns require session-level date grouping — not yet built.</div>
+            </Card>
+          )}
+          {vehicleTab === "trips" && (
+            <Card T={T} style={{ padding:18,textAlign:"center" }}>
+              <i className="fas fa-route" style={{ fontSize:24,color:T.muted,marginBottom:10,display:"block" }}/>
+              <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:6 }}>Trip History Coming Soon</div>
+              <div style={{ fontSize:11,color:T.muted,lineHeight:1.6 }}>AI Route Planner trips aren't logged to the database yet — this tab will populate once trip logging is built.</div>
+            </Card>
+          )}
+          {vehicleTab === "performance" && (
+            <Card T={T} style={{ padding:18 }}>
+              <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",marginBottom:14 }}>Cost Efficiency</div>
+              <div style={{ fontWeight:900,fontSize:22,color:T.text,marginBottom:8 }}>
+                {costPerKwh != null ? `GH₵${costPerKwh.toFixed(2)}/kWh` : "—"}
+              </div>
+              <div style={{ fontSize:10,color:T.muted,lineHeight:1.6 }}>Distance-based efficiency (km/kWh) and utilization require odometer or trip-distance tracking — not yet built.</div>
+            </Card>
+          )}
+          {vehicleTab === "maintenance" && (
+            <Card T={T} style={{ padding:18,textAlign:"center" }}>
+              <i className="fas fa-wrench" style={{ fontSize:24,color:T.muted,marginBottom:10,display:"block" }}/>
+              <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:6 }}>Maintenance Tracking Coming Soon</div>
+              <div style={{ fontSize:11,color:T.muted,lineHeight:1.6 }}>This requires a maintenance_records table, which hasn't been built yet.</div>
+            </Card>
+          )}
         </div>
       </div>
     );
@@ -337,7 +577,40 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
               ))}
             </div>
 
-            {/* Fleet Wallet */}
+            {/* Alerts */}
+            {fleetAlerts.length > 0 && (
+              <>
+                <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:10 }}>Alerts</div>
+                {fleetAlerts.map((a,i)=>(
+                  <Card key={i} T={T} style={{ padding:14, marginBottom:8, display:"flex", alignItems:"flex-start", gap:10 }}>
+                    <div style={{ width:26,height:26,borderRadius:8,background:`${alertColor(a.severity)}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2 }}>
+                      <i className={`fas ${a.icon}`} style={{ fontSize:11,color:alertColor(a.severity) }}/>
+                    </div>
+                    <div style={{ fontSize:12,color:T.text,lineHeight:1.5 }}>{a.message}</div>
+                  </Card>
+                ))}
+              </>
+            )}
+
+            {/* AI Fleet Assistant — rule-based */}
+            <div style={{ fontWeight:800,fontSize:14,color:T.text,margin:"20px 0 10px" }}>AI Fleet Assistant</div>
+            <Card T={T} style={{ padding:16, marginBottom:16 }}>
+              <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:12 }}>
+                <i className="fas fa-robot" style={{ fontSize:14,color:T.green }}/>
+                <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase" }}>Rule-based recommendations</div>
+              </div>
+              {fleetAlerts.length === 0 && (
+                <div style={{ fontSize:13,color:T.text,lineHeight:1.6 }}>Your fleet looks healthy — no issues detected from wallet, vehicle, or driver data.</div>
+              )}
+              {fleetAlerts.map((a,i)=>(
+                <div key={i} style={{ fontSize:12,color:T.text,lineHeight:1.6,marginBottom: i<fleetAlerts.length-1 ? 10 : 0 }}>
+                  • {a.message}
+                </div>
+              ))}
+              <div style={{ fontSize:9,color:T.muted,marginTop:12,lineHeight:1.5 }}>Based on your real wallet, vehicle, and driver data — not a live conversational AI.</div>
+            </Card>
+
+            {/* Current Plan */}
           <Card T={T} style={{ padding:16, marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
                 <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4 }}>Current Plan</div>
@@ -381,7 +654,7 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
               {error && <div style={{ fontSize:12,color:T.red,marginTop:10 }}>{error}</div>}
             </Card>
 
-            {/* Drivers */}
+            {/* Drivers — with per-driver stats, daily spending limit, and role */}
             <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:10 }}>Drivers</div>
             <Card T={T} style={{ padding:16, marginBottom:12 }}>
               <div style={{ display:"flex",gap:8 }}>
@@ -398,20 +671,66 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
                 <div style={{ fontSize:12,color:T.muted }}>No drivers yet — invite one above.</div>
               </Card>
             )}
-            {drivers.map(d=>(
-              <Card key={d.id} T={T} style={{ padding:14, marginBottom:8, display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-                <div>
-                  <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{d.invited_email}</div>
-                  <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{d.status==="active" ? "Active driver" : "Invite pending"}</div>
-                </div>
-                <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-                  <Badge label={d.status==="active"?"Active":"Pending"} color={d.status==="active"?T.green:T.yellow}/>
-                  <button onClick={()=>removeDriver(d.id)} className="tap" style={{ background:"none",border:"none",color:T.red,cursor:"pointer",padding:4 }}>
-                    <i className="fas fa-times-circle"/>
-                  </button>
-                </div>
-              </Card>
-            ))}
+            {drivers.map(d=>{
+              const dStat = driverStatsMap[d.id];
+              return (
+                <Card key={d.id} T={T} style={{ padding:14, marginBottom:8 }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom: d.status==="active" ? 12 : 0 }}>
+                    <div>
+                      <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{d.invited_email}</div>
+                      <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{d.status==="active" ? "Active driver" : "Invite pending"}</div>
+                    </div>
+                    <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                      <Badge label={d.status==="active"?"Active":"Pending"} color={d.status==="active"?T.green:T.yellow}/>
+                      <button onClick={()=>removeDriver(d.id)} className="tap" style={{ background:"none",border:"none",color:T.red,cursor:"pointer",padding:4 }}>
+                        <i className="fas fa-times-circle"/>
+                      </button>
+                    </div>
+                  </div>
+
+                  {d.status === "active" && (
+                    <>
+                      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12 }}>
+                        {[
+                          { label:"Vehicles", value: dStat?.vehicleCount || 0 },
+                          { label:"Sessions", value: dStat?.sessions || 0 },
+                          { label:"Spend", value: fmtGHS(dStat?.costPesewas || 0) },
+                        ].map(r=>(
+                          <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:8,padding:"8px",textAlign:"center" }}>
+                            <div style={{ fontWeight:700,fontSize:12,color:T.text }}>{r.value}</div>
+                            <div style={{ fontSize:8,color:T.muted,marginTop:3,textTransform:"uppercase" }}>{r.label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ marginBottom:12 }}>
+                        <div style={{ fontSize:10,color:T.muted,marginBottom:5 }}>Role</div>
+                        <select value={d.role || "driver"} onChange={e=>updateDriverRole(d.id, e.target.value)}
+                          style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:8,padding:"9px 10px",color:T.text,fontSize:12,fontFamily:"inherit" }}>
+                          <option value="driver">Driver</option>
+                          <option value="manager">Co-Manager</option>
+                        </select>
+                        <div style={{ fontSize:9,color:T.muted,marginTop:5,lineHeight:1.5 }}>Sets the intended role. Different in-app permissions per role aren't wired yet.</div>
+                      </div>
+
+                      <div style={{ fontSize:10,color:T.muted,marginBottom:6 }}>Daily spending limit (optional)</div>
+                      <div style={{ display:"flex",gap:8 }}>
+                        <input
+                          value={limitDrafts[d.id] ?? (d.daily_limit_pesewas != null ? (d.daily_limit_pesewas/100).toString() : "")}
+                          onChange={e=>setLimitDrafts(prev=>({ ...prev, [d.id]: e.target.value }))}
+                          placeholder="No limit" type="number"
+                          style={{ flex:1,background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:8,padding:"9px 10px",color:T.text,fontSize:12,fontFamily:"inherit" }}/>
+                        <button onClick={()=>saveDriverLimit(d.id)} disabled={savingLimit===d.id} className="tap"
+                          style={{ background:T.surfaceFaint,border:`1px solid ${T.border}`,borderRadius:8,padding:"9px 14px",fontSize:11,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
+                          {savingLimit===d.id ? "…" : "Save"}
+                        </button>
+                      </div>
+                      <div style={{ fontSize:9,color:T.muted,marginTop:6,lineHeight:1.5 }}>Sets the limit on record. Not yet enforced at charge time.</div>
+                    </>
+                  )}
+                </Card>
+              );
+            })}
 
             {/* Vehicles */}
             <div style={{ fontWeight:800,fontSize:14,color:T.text,margin:"20px 0 10px" }}>Fleet Vehicles</div>
@@ -442,7 +761,7 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
                       {activeDrivers.map(d=>(<option key={d.id} value={d.user_id}>{d.invited_email}</option>))}
                     </select>
                   </div>
-                  <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
+                  <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10 }}>
                     {[
                       { label:"Sessions", value: stat?.session_count || 0 },
                       { label:"kWh", value: stat ? Number(stat.total_kwh).toFixed(1) : "0.0" },
@@ -454,6 +773,10 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
                       </div>
                     ))}
                   </div>
+                  <button onClick={()=>openVehicleDetail(v)} className="tap"
+                    style={{ width:"100%",background:"transparent",border:`1px solid ${T.border}`,borderRadius:8,padding:"9px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
+                    View Details →
+                  </button>
                 </Card>
               );
             })}
@@ -484,6 +807,57 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
                 </button>
               </Card>
             )}
+
+            {/* Fleet Map — Last Known Location (real data, NOT GPS) */}
+            <div style={{ fontWeight:800,fontSize:14,color:T.text,margin:"20px 0 10px" }}>Fleet Map — Last Known Location</div>
+            <div style={{ fontSize:10,color:T.muted,marginBottom:10,lineHeight:1.5 }}>No live GPS tracking exists yet — this shows each vehicle's last charging station from session history.</div>
+            {fleetVehicles.length === 0 && (
+              <Card T={T} style={{ padding:16, marginBottom:16, textAlign:"center" }}>
+                <div style={{ fontSize:12,color:T.muted }}>No fleet vehicles yet.</div>
+              </Card>
+            )}
+            {fleetVehicles.map(v=>{
+              const loc = lastLocations[v.id];
+              return (
+                <Card key={v.id} T={T} style={{ padding:14, marginBottom:8, display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                  <div>
+                    <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{v.nickname}</div>
+                    <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>
+                      {loc ? `Last at ${loc.station || "Unknown Station"}` : "No charging history yet"}
+                    </div>
+                  </div>
+                  {loc && <div style={{ fontSize:10,color:T.muted }}>{new Date(loc.at).toLocaleDateString("en-GH",{day:"numeric",month:"short"})}</div>}
+                </Card>
+              );
+            })}
+
+            {/* Charging Management — Preferred Stations */}
+            <div style={{ fontWeight:800,fontSize:14,color:T.text,margin:"20px 0 10px" }}>Charging Management</div>
+            <Card T={T} style={{ padding:16, marginBottom:16 }}>
+              <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",marginBottom:10 }}>Preferred Stations</div>
+              <div style={{ fontSize:10,color:T.muted,marginBottom:12,lineHeight:1.5 }}>Select stations to prefer for this fleet. Saves a preference on record — steering drivers toward these in-app isn't wired yet.</div>
+              {allStations.length === 0 && <div style={{ fontSize:12,color:T.muted }}>No stations found.</div>}
+              {allStations.map(s=>(
+                <label key={s.id} style={{ display:"flex",alignItems:"center",gap:10,padding:"8px 0",fontSize:13,color:T.text,cursor:"pointer" }}>
+                  <input type="checkbox" checked={preferredStations.includes(s.id)} onChange={()=>toggleStationPref(s.id)} />
+                  {s.name}
+                </label>
+              ))}
+              <button onClick={savePolicy} disabled={savingPolicy} className="tap"
+                style={{ marginTop:10, width:"100%", background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:10,padding:"11px",fontSize:12,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+                {savingPolicy ? "Saving…" : "Save Preferences"}
+              </button>
+            </Card>
+
+            {/* Reports & Analytics */}
+            <div style={{ fontWeight:800,fontSize:14,color:T.text,margin:"20px 0 10px" }}>Reports & Analytics</div>
+            <Card T={T} style={{ padding:16, marginBottom:16 }}>
+              <div style={{ fontSize:12,color:T.muted,marginBottom:12,lineHeight:1.6 }}>Export a CSV summary of every fleet vehicle's sessions, energy, and cost.</div>
+              <button onClick={exportCsv} className="tap"
+                style={{ width:"100%",background:T.surfaceFaint,border:`1px solid ${T.border}`,borderRadius:10,padding:"12px",fontSize:13,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
+                <i className="fas fa-file-csv" style={{ marginRight:8 }}/> Export CSV Report
+              </button>
+            </Card>
 
             {/* Recent transactions */}
             {txns.length > 0 && (
