@@ -5,6 +5,7 @@
 // Phase 3: Battery Protection + Battery Tips
 // Phase 4: AI Assistant (rule-based — no LLM key configured yet)
 // Phase 5: Charger Management + real OCPP telemetry
+// Phase 6: Multi-protocol charger adapter layer (see chargerAdapters.js)
 //
 // HONESTY NOTES:
 // - If you LINK a real charger (via your existing OCPP simulator/
@@ -26,8 +27,17 @@
 // - The "AI Assistant" is RULE-BASED off real data, not a live LLM.
 // - Battery health is only shown if self-reported when adding the
 //   vehicle. Battery Stress is not available from any source yet.
+// - Start/Stop now route through a protocol adapter layer
+//   (see chargerAdapters.js). Only OCPP is real today — linking a
+//   charger with any other protocol value surfaces a clear
+//   "not built yet" error instead of pretending to work. Status
+//   polling and charger discovery in Charger Management remain
+//   OCPP-specific for now (they call your proven-working
+//   /api/chargers list endpoint) — a generic multi-protocol
+//   discovery/status system isn't built yet.
 // ============================================================
 import { useState, useEffect, useRef } from "react";
+import { getAdapter } from "./chargerAdapters";
 
 const OCPP_URL = import.meta.env.VITE_OCPP_SERVER_URL || "";
 const OCPP_KEY = import.meta.env.VITE_OCPP_API_KEY    || "";
@@ -152,6 +162,7 @@ const HomeChargerService = {
   async link(userId, chargerOcppId, nickname, ctx) {
     const saved = await sbPost(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, "home_chargers", {
       user_id: userId, charger_ocpp_id: chargerOcppId, nickname: nickname || "Home Charger", status:"Idle",
+      charger_protocol: "ocpp", // every charger linked through this flow is discovered on your OCPP server
     });
     return saved?.[0] || null;
   },
@@ -599,6 +610,7 @@ export default function HomePlusDashboard({ go: goApp, user, T, getToken, SUPABA
   const [loadingLinked, setLoadingLinked] = useState(true);
   const [liveCharger, setLiveCharger] = useState(null); // real OCPP state for the linked charger, if any
   const [sendingCmd, setSendingCmd] = useState(false);
+  const [chargerCmdError, setChargerCmdError] = useState(""); // surfaced when a charger's protocol isn't supported yet
 
   const statusColor = STATUS_COLOR[session.status] || T.muted;
   const statusIcon = STATUS_ICON[session.status] || "fa-bolt";
@@ -639,7 +651,7 @@ export default function HomePlusDashboard({ go: goApp, user, T, getToken, SUPABA
 
   // Poll real OCPP status for the linked charger, if one exists
   useEffect(()=>{
-    if (!primaryLinked || !OCPP_URL) { setLiveCharger(null); return; }
+    if (!primaryLinked || !OCPP_URL || primaryLinked.charger_protocol && primaryLinked.charger_protocol !== "ocpp") { setLiveCharger(null); return; }
     let cancelled = false;
     const poll = async () => {
       const data = await ocppApi("/api/chargers");
@@ -651,13 +663,22 @@ export default function HomePlusDashboard({ go: goApp, user, T, getToken, SUPABA
     return () => { cancelled = true; clearInterval(t); };
   }, [primaryLinked?.id]);
 
-  // ── Charging controls: real OCPP if a charger is linked, simulated otherwise ──
+  // ── Charging controls: routed through the protocol adapter layer ──
+  // Only OCPP is real today. Any other charger_protocol value will
+  // throw a clear "not built yet" error via the adapter, surfaced
+  // below rather than silently failing or pretending to succeed.
   const startCharging = async () => {
-    if (primaryLinked && OCPP_URL) {
+    if (primaryLinked) {
       setSendingCmd(true);
-      const result = await ocppApi(`/api/chargers/${primaryLinked.charger_ocpp_id}/remote-start`, "POST", { idTag: user?.id || "eco-home", connectorId: 1 });
+      setChargerCmdError("");
+      try {
+        const adapter = getAdapter(primaryLinked.charger_protocol || "ocpp");
+        const result = await adapter.remoteStart({ ...primaryLinked, ocpp_charger_id: primaryLinked.charger_ocpp_id });
+        if (result?.success !== false) setSession(s => ({ ...s, status:"Charging" }));
+      } catch (e) {
+        setChargerCmdError(e.message || "Could not start charging.");
+      }
       setSendingCmd(false);
-      if (result?.success) setSession(s => ({ ...s, status:"Charging" }));
       return;
     }
     const d = new Date(); d.setMinutes(d.getMinutes()+48);
@@ -665,11 +686,17 @@ export default function HomePlusDashboard({ go: goApp, user, T, getToken, SUPABA
     setSession(s => ({ ...s, status:"Charging" }));
   };
   const stopCharging = async () => {
-    if (primaryLinked && OCPP_URL) {
+    if (primaryLinked) {
       setSendingCmd(true);
-      await ocppApi(`/api/chargers/${primaryLinked.charger_ocpp_id}/remote-stop`, "POST", {});
+      setChargerCmdError("");
+      try {
+        const adapter = getAdapter(primaryLinked.charger_protocol || "ocpp");
+        await adapter.remoteStop({ ...primaryLinked, ocpp_charger_id: primaryLinked.charger_ocpp_id });
+        setSession(s => ({ ...s, status:"Idle" }));
+      } catch (e) {
+        setChargerCmdError(e.message || "Could not stop charging.");
+      }
       setSendingCmd(false);
-      setSession(s => ({ ...s, status:"Idle" }));
       return;
     }
     setSession(s => ({ ...s, status:"Idle" }));
@@ -818,6 +845,12 @@ export default function HomePlusDashboard({ go: goApp, user, T, getToken, SUPABA
             <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:12,fontSize:11,color:T.muted }}>
               <div style={{ width:7,height:7,borderRadius:"50%",background:chargerOnlineReal?T.green:T.red }}/>
               {chargerOnlineReal ? "Home charger online" : "Home charger offline"} · {primaryLinked.nickname}
+            </div>
+          )}
+
+          {chargerCmdError && (
+            <div style={{ background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:10,padding:"9px 12px",marginBottom:12,fontSize:11,color:T.red,lineHeight:1.5 }}>
+              {chargerCmdError}
             </div>
           )}
 
