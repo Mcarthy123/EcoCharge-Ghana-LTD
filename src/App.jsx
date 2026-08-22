@@ -5,6 +5,7 @@
 // Paystack, Supabase, QR, Booking, Verify, Map
 // ============================================================
 import { useState, useEffect, useRef, useContext, createContext } from "react";
+import OneSignal from "react-onesignal";
 import AIRoutePlanner from "./AIRoutePlanner";
 import ReservationSystem from "./ReservationSystem";
 import HomePlusDashboard from "./HomePlusDashboard";
@@ -17,6 +18,8 @@ import QuickConnect from "./QuickConnect";
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL        || "";
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY   || "";
 const PAYSTACK_KEY  = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "";
+const ONESIGNAL_APP_ID = "6dee6ea7-035a-4a52-8ced-12022c82cab5";
+let oneSignalInitStarted = false; // guards against double-init
 // ── AUTH TOKEN HELPER ─────────────────────────────────────────
 // Reads the real user session token from localStorage (set by
 // Supabase Auth on sign-in). Falls back to anon key for public
@@ -7836,8 +7839,27 @@ function AppInner() {
  
   const [pendingReservation,setPendingReservation]= useState(null);
 
- const setUser=(u)=>{ setUserRaw(u); try { u?localStorage.setItem("eco_user",JSON.stringify(u)):localStorage.removeItem("eco_user"); } catch(e){} };
+   const setUser=(u)=>{ setUserRaw(u); try { u?localStorage.setItem("eco_user",JSON.stringify(u)):localStorage.removeItem("eco_user"); } catch(e){} };
   const go=(s)=>{ setScreen(s);setDrawer(false); };
+
+  // ── PUSH NOTIFICATIONS (OneSignal) ──────────────────────────
+  // HONESTY NOTE: this only initializes the SDK and prompts for
+  // permission. Actually SENDING a push (e.g. "your charge is
+  // complete") is a separate backend step, not wired yet. On iOS,
+  // push only works if the person added this app to their home
+  // screen (iOS 16.4+) — visiting in a browser tab can't receive it.
+  useEffect(()=>{
+    if (oneSignalInitStarted) return;
+    oneSignalInitStarted = true;
+    OneSignal.init({ appId: ONESIGNAL_APP_ID, allowLocalhostAsSecureOrigin: true })
+      .then(()=>{ OneSignal.Slidedown.promptPush(); })
+      .catch(()=>{});
+  },[]);
+
+  useEffect(()=>{
+    if (!user?.id) { OneSignal.logout().catch(()=>{}); return; }
+    OneSignal.login(user.id).catch(()=>{});
+  },[user?.id]);
 
   // Proactively refresh the session ~5 min before it expires, so the app never silently goes stale.
   useEffect(()=>{
