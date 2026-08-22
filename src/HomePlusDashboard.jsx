@@ -592,6 +592,8 @@ function ChargerManagement({ T, go, user, ctx, onBack, linkedChargers, onLinkedC
 
 export default function HomePlusDashboard({ go: goApp, user, T, getToken, SUPABASE_URL, SUPABASE_ANON }) {
   const ctx = { SUPABASE_URL, SUPABASE_ANON, getToken };
+  const [subLoading, setSubLoading] = useState(true);
+  const [hasHomePlusSub, setHasHomePlusSub] = useState(false);
   const [screen, setScreen] = useState("dashboard"); // dashboard | chargers
   const [session, setSession] = useState({ ...MOCK_SESSION_BASE, status:"Idle" });
   const [vehicle, setVehicle] = useState(null);
@@ -615,6 +617,18 @@ export default function HomePlusDashboard({ go: goApp, user, T, getToken, SUPABA
   const statusColor = STATUS_COLOR[session.status] || T.muted;
   const statusIcon = STATUS_ICON[session.status] || "fa-bolt";
   const primaryLinked = linkedChargers[0] || null;
+
+  // HONESTY NOTE: this checks for an active 'home_plus' subscription
+  // before showing the dashboard — same pattern as FleetDashboard's
+  // hasFleetSub check. Before this, Home+ had no gating at all.
+  useEffect(()=>{
+    if (!user?.id || !SUPABASE_URL) { setSubLoading(false); return; }
+    (async()=>{
+      const data = await sbGet(SUPABASE_URL, SUPABASE_ANON, getToken, `subscriptions?user_id=eq.${user.id}&status=eq.active&tier=eq.home_plus&order=created_at.desc&limit=1`);
+      setHasHomePlusSub(Array.isArray(data) && data.length > 0);
+      setSubLoading(false);
+    })();
+  }, [user?.id]);
 
   const loadVehicle = async () => {
     if (!user?.id || !SUPABASE_URL) { setLoadingVehicle(false); return; }
@@ -757,6 +771,35 @@ export default function HomePlusDashboard({ go: goApp, user, T, getToken, SUPABA
 
   // Real online/offline badge if linked, otherwise a generic "not connected" state
   const chargerOnlineReal = primaryLinked ? !!liveCharger?.connected : null;
+
+  if (subLoading) {
+    return (
+      <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,alignItems:"center",justifyContent:"center" }}>
+        <div style={{ width:22,height:22,borderRadius:"50%",border:`2px solid ${T.green}`,borderTopColor:"transparent",animation:"spin .8s linear infinite" }}/>
+      </div>
+    );
+  }
+
+  if (!hasHomePlusSub) {
+    return (
+      <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+        <Header T={T} title="EcoCharge Home+" sub="Smart charging dashboard" onBack={()=>goApp("home")}/>
+        <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",textAlign:"center" }}>
+          <div style={{ width:72,height:72,borderRadius:"50%",background:`${T.green}18`,border:`2px solid ${T.green}44`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:20 }}>
+            <i className="fas fa-house-signal" style={{ fontSize:28,color:T.green }}/>
+          </div>
+          <div style={{ fontWeight:800,fontSize:18,color:T.text,marginBottom:10 }}>Home+ is a Premium Feature</div>
+          <div style={{ fontSize:13,color:T.muted,lineHeight:1.8,marginBottom:28,maxWidth:320 }}>
+            Subscribe to EcoCharge Home+ to link a home charger, control it remotely, and unlock smart scheduling.
+          </div>
+          <button onClick={()=>goApp("subscription")} className="tap"
+            style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px 32px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+            View Home+ Plan
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (screen === "chargers") {
     return (
