@@ -17,6 +17,13 @@
 //   not a learned prediction — no historical session-duration data
 //   exists yet to build a real model from.
 // - GPS arrival detection is real (browser geolocation + haversine).
+// - Free-tier reservation limit: your subscription tier list says Free
+//   gets "Basic reservations (limited)" without specifying the number.
+//   FREE_TIER_RESERVATION_LIMIT below is a chosen default (1 active
+//   reservation at a time), not something from the original spec —
+//   change the constant if you want a different cap. Pro, Home+, and
+//   all Fleet tiers get unlimited reservations, matching "Unlimited
+//   reservations" on the Pro tier.
 // ============================================================
 import { useState, useEffect, useRef } from "react";
 
@@ -30,6 +37,7 @@ const DEFAULT_PRICE_PER_KWH = 0.85;
 const FALLBACK_ESTIMATED_RANGE_KM = 250; // used only if the vehicle has no saved range
 const CO2_PER_KWH = 0.5;
 const WATER_LITRES_PER_SESSION = 20;
+const FREE_TIER_RESERVATION_LIMIT = 1; // see HONESTY NOTE at top of file
 
 // ── GEO HELPERS ───────────────────────────────────────────────
 const toRad = (d) => (d * Math.PI) / 180;
@@ -284,6 +292,15 @@ const BookingService = {
   async loadHistory(userId, ctx) {
     const data = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `bookings?user_id=eq.${userId}&order=created_at.desc&limit=50`);
     return Array.isArray(data) ? data : [];
+  },
+};
+
+// ── RESERVATION LIMIT SERVICE (Free-tier cap) ─────────────────
+// See HONESTY NOTE at the top of this file re: FREE_TIER_RESERVATION_LIMIT.
+const ReservationLimitService = {
+  async activeCount(userId, ctx) {
+    const data = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `bookings?user_id=eq.${userId}&status=eq.confirmed&select=reference`);
+    return Array.isArray(data) ? data.length : 0;
   },
 };
 
@@ -1878,13 +1895,15 @@ function FleetReports({ T, fleetId, ctx }) {
 }
 
 export default function ReservationSystem({ go, user, stations, T, getToken, SUPABASE_URL, SUPABASE_ANON, pendingReservation, onPendingConsumed }) {
-  const [step, setStep] = useState("list"); // list | detail | reserve | dashboard | charging | receipt | history
+  const [step, setStep] = useState("list"); // list | detail | reserve | dashboard | charging | receipt | history | limit
   const [station, setStation] = useState(null);
   const [charger, setCharger] = useState(null);
   const [booking, setBooking] = useState(null);
   const [chargingResult, setChargingResult] = useState(null);
   const [vehicles, setVehicles] = useState([]);
   const [reservePrefill, setReservePrefill] = useState(null);
+  const [subLoading, setSubLoading] = useState(true);
+  const [hasUnlimitedReservations, setHasUnlimitedReservations] = useState(false);
 
   const ctx = { SUPABASE_URL, SUPABASE_ANON, getToken };
 
@@ -1893,11 +1912,37 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
     sbGet(SUPABASE_URL, SUPABASE_ANON, getToken, `user_vehicles?user_id=eq.${user.id}&order=created_at.asc`).then(v=>setVehicles(Array.isArray(v)?v:[]));
   }, [user]);
 
+  // Pro, Home+, and all Fleet tiers get unlimited reservations. Free tier is
+  // capped at FREE_TIER_RESERVATION_LIMIT — see HONESTY NOTE at top of file.
+  useEffect(()=>{
+    if (!user?.id || !SUPABASE_URL) { setSubLoading(false); return; }
+    (async()=>{
+      try {
+        const data = await sbGet(SUPABASE_URL, SUPABASE_ANON, getToken, `subscriptions?user_id=eq.${user.id}&status=eq.active&tier=in.(pro,home_plus,fleet_starter,fleet_business,fleet_pro,fleet_enterprise)&order=created_at.desc&limit=1`);
+        setHasUnlimitedReservations(Array.isArray(data) && data.length > 0);
+      } catch(e) { setHasUnlimitedReservations(false); }
+      setSubLoading(false);
+    })();
+  }, [user?.id]);
+
+  const tryReserve = async (chosenCharger) => {
+    if (!hasUnlimitedReservations) {
+      const count = await ReservationLimitService.activeCount(user.id, ctx);
+      if (count >= FREE_TIER_RESERVATION_LIMIT) { setStep("limit"); return; }
+    }
+    setCharger(chosenCharger);
+    setStep("reserve");
+  };
+
   // Handoff from the AI Route Planner / Driver Assistant "Reserve" buttons —
   // jumps straight into the reservation form instead of the station list.
   useEffect(()=>{
-    if (!pendingReservation?.station) return;
+    if (!pendingReservation?.station || subLoading) return;
     (async()=>{
+      if (!hasUnlimitedReservations) {
+        const count = await ReservationLimitService.activeCount(user.id, ctx);
+        if (count >= FREE_TIER_RESERVATION_LIMIT) { setStep("limit"); onPendingConsumed?.(); return; }
+      }
       const stationChargers = await StationService.loadChargers(pendingReservation.station.id, ctx);
       const available = stationChargers.find(c => StationService.chargerStatus(c) === "Available");
       const chosenCharger = available || stationChargers[0] || { id: "auto", price_per_kwh: DEFAULT_PRICE_PER_KWH, power_kw: DEFAULT_CHARGER_KW };
@@ -1911,7 +1956,7 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
       setStep("reserve");
       onPendingConsumed?.();
     })();
-  }, [pendingReservation]);
+  }, [pendingReservation, subLoading]);
   if (!user) return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,alignItems:"center",justifyContent:"center",padding:24,textAlign:"center" }}>
       <i className="fas fa-calendar-times" style={{ fontSize:48,color:T.muted,marginBottom:16 }}/>
@@ -1922,6 +1967,25 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
 
   if (step==="list") return <StationList T={T} go={go} stations={stations} onSelect={(s)=>{ setStation(s); setStep("detail"); }} onOpenFleet={()=>setStep("fleet")}/>;
 
+  if (step==="limit") return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header T={T} title="Reserve a Charger" onBack={()=>setStep("list")}/>
+      <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",textAlign:"center" }}>
+        <div style={{ width:72,height:72,borderRadius:"50%",background:`${T.green}18`,border:`2px solid ${T.green}44`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:20 }}>
+          <i className="fas fa-calendar-check" style={{ fontSize:28,color:T.green }}/>
+        </div>
+        <div style={{ fontWeight:800,fontSize:18,color:T.text,marginBottom:10 }}>Reservation Limit Reached</div>
+        <div style={{ fontSize:13,color:T.muted,lineHeight:1.8,marginBottom:28,maxWidth:320 }}>
+          Your free plan allows {FREE_TIER_RESERVATION_LIMIT} active reservation at a time. Upgrade to EcoCharge Pro for unlimited reservations.
+        </div>
+        <button onClick={()=>go("subscription")} className="tap"
+          style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px 32px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+          View Pro Plan
+        </button>
+      </div>
+    </div>
+  );
+
   if (step==="fleet") return (
     <FleetDashboard T={T} go={go} user={user} stations={stations} ctx={ctx} onBack={()=>setStep("list")}/>
   );
@@ -1931,7 +1995,7 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
       onBack={()=>setStep("list")}
       onOpenHistory={()=>setStep("history")}
       onChargeNow={(c)=>{ setCharger(c); go("detail"); /* hands off to existing Charge Now flow */ }}
-      onReserve={(c)=>{ setCharger(c); setStep("reserve"); }}
+      onReserve={(c)=>tryReserve(c)}
     />
   );
 
