@@ -3834,6 +3834,18 @@ function EcoRewardsScreen({ go, user }) {
               </div>
             </div>
 
+                        <div onClick={()=>go("referrals")} className="tap"
+              style={{ background:`${T.green}12`,border:`1px solid ${T.green}33`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,cursor:"pointer" }}>
+              <div style={{ width:36,height:36,borderRadius:10,background:`${T.green}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                <i className="fas fa-user-plus" style={{ fontSize:15,color:T.green }}/>
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:700,fontSize:13,color:T.text }}>Refer a Friend</div>
+                <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Earn 300 points when they complete their first charge</div>
+              </div>
+              <i className="fas fa-chevron-right" style={{ fontSize:12,color:T.muted }}/>
+            </div>
+
             <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20 }}>
               <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px" }}>
                 <div style={{ fontSize:10,color:T.muted,textTransform:"uppercase",marginBottom:6 }}>This Month</div>
@@ -4237,6 +4249,105 @@ function AdminEcoRewards({ go, user }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+function ReferAndEarnScreen({ go, user }) {
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [referrals, setReferrals] = useState([]);
+  const [pointsEarned, setPointsEarned] = useState(0);
+  const [copied, setCopied] = useState(false);
+
+  const shareUrl = code ? `${window.location.origin}/?ref=${code}` : "";
+
+  const load = async () => {
+    if (!user?.id) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const codeResult = await sb("rpc/get_or_create_referral_code", { method:"POST", body: JSON.stringify({ p_user_id: user.id }) });
+      setCode(typeof codeResult === "string" ? codeResult.replace(/"/g,"") : "");
+      const [refs, ledger] = await Promise.all([
+        sb(`referrals?referrer_id=eq.${user.id}&order=created_at.desc`),
+        sb(`points_ledger?user_id=eq.${user.id}&action_key=eq.referral_completed&select=points_delta`),
+      ]);
+      setReferrals(Array.isArray(refs) ? refs : []);
+      setPointsEarned(Array.isArray(ledger) ? ledger.reduce((a,r)=>a+r.points_delta,0) : 0);
+    } catch(e) {}
+    setLoading(false);
+  };
+  useEffect(()=>{ load(); },[user?.id]);
+
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(()=>setCopied(false),2000); } catch(e) {}
+  };
+  const share = async () => {
+    if (navigator.share) {
+      try { await navigator.share({ title:"Join EcoCharge Ghana", text:`Use my code ${code} to sign up for EcoCharge — solar EV charging across Ghana.`, url:shareUrl }); } catch(e) {}
+    } else { copyLink(); }
+  };
+
+  const pendingCount = referrals.filter(r=>r.status==="signed_up").length;
+
+  if (loading) return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Refer & Earn" onBack={()=>go("rewards")}/>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center" }}><Spinner/></div>
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Refer & Earn" sub="Invite friends, earn EcoPoints" onBack={()=>go("rewards")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 16px 100px" }}>
+
+        <div style={{ background:T.highlightGrad2,borderRadius:20,padding:"22px",marginBottom:18,border:`1px solid ${T.greenDim}`,textAlign:"center" }}>
+          <i className="fas fa-user-plus" style={{ fontSize:28,color:T.green,marginBottom:10 }}/>
+          <div style={{ fontWeight:800,fontSize:16,color:T.text,marginBottom:6 }}>Give your friends a reason to switch</div>
+          <div style={{ fontSize:12,color:T.muted,lineHeight:1.7,marginBottom:18 }}>Share your code. When they complete their first paid charging session, you earn EcoPoints.</div>
+          <div style={{ background:"rgba(0,0,0,0.25)",borderRadius:14,padding:"16px",marginBottom:14 }}>
+            <div style={{ fontSize:10,color:T.muted,marginBottom:6,textTransform:"uppercase",letterSpacing:0.5 }}>Your Referral Code</div>
+            <div style={{ fontWeight:900,fontSize:24,color:T.green,letterSpacing:3,fontFamily:"monospace" }}>{code || "—"}</div>
+          </div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+            <button onClick={copyLink} className="tap"
+              style={{ background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px",fontSize:13,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>
+              <i className={`fas ${copied?"fa-check":"fa-copy"}`} style={{ marginRight:8 }}/>{copied?"Copied!":"Copy Link"}
+            </button>
+            <button onClick={share} className="tap"
+              style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"13px",fontSize:13,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+              <i className="fas fa-share-alt" style={{ marginRight:8 }}/>Share
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:20 }}>
+          {[
+            { label:"Invited", value:referrals.length, color:T.text },
+            { label:"Pending", value:pendingCount, color:T.yellow },
+            { label:"Points Earned", value:pointsEarned.toLocaleString(), color:T.green },
+          ].map(s=>(
+            <div key={s.label} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px 8px",textAlign:"center" }}>
+              <div style={{ fontWeight:800,fontSize:17,color:s.color }}>{s.value}</div>
+              <div style={{ fontSize:9,color:T.muted,marginTop:4,textTransform:"uppercase" }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:10 }}>Your Referrals</div>
+        {referrals.length === 0 && (
+          <div style={{ textAlign:"center",padding:"40px 20px",color:T.muted,fontSize:13 }}>No referrals yet — share your code to get started.</div>
+        )}
+        {referrals.map(r=>(
+          <div key={r.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+            <div>
+              <div style={{ fontWeight:600,fontSize:12,color:T.text }}>{r.referred_email || "New user"}</div>
+              <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{new Date(r.created_at).toLocaleDateString("en-GH",{day:"numeric",month:"short",year:"numeric"})}</div>
+            </div>
+            <Badge label={r.status==="completed"?"Earned":"Awaiting first charge"} color={r.status==="completed"?T.green:T.yellow}/>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -8684,6 +8795,7 @@ useEffect(()=>{
     promotions:     <PromotionsScreen go={goSecure}/>,
     rewards:        <EcoRewardsScreen go={goSecure} user={user}/>,
     ecorewardsadmin:<AdminEcoRewards go={goSecure} user={user}/>,
+    referrals:      <ReferAndEarnScreen go={goSecure} user={user}/>,
     home:           <Home {...props}/>,
     map:            <MapScreen {...props}/>,
     detail:         <Detail {...props}/>,
