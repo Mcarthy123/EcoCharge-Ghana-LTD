@@ -654,6 +654,7 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => {
           { icon:"fa-tags",             label:"Pricing Engine",  screen:"pricing",      color:"#a78bfa", adminOnly:true },
           { icon:"fa-shield-alt",       label:"Admin Dashboard", screen:"admin",        color:"#f87171", adminOnly:true },
           { icon:"fa-car",              label:"Vehicle Registry", screen:"vehicleregistry", color:T.blue, adminOnly:true },
+          { icon:"fa-gift",             label:"EcoRewards Admin", screen:"ecorewardsadmin", color:T.green, adminOnly:true },
         ].filter(item=>!item.adminOnly || user?.is_admin).map(item=>(
           <div key={item.label} className="tap row" onClick={()=>{ go(item.screen);onClose(); }}
             style={{ display:"flex",alignItems:"center",gap:14,padding:"16px 20px",borderBottom:`1px solid ${T.border}20` }}>
@@ -713,10 +714,10 @@ function Auth({ mode, onBack, onSuccess }) {
   const [phone,setPhone]      = useState("");
   const [otp,setOtp]          = useState("");
   const [otpSent,setOtpSent]  = useState(false);
-  const [loading,setLoad]     = useState(false);
+   const [loading,setLoad]     = useState(false);
   const [error,setErr]        = useState("");
   const [success,setSuccess]  = useState("");
-
+  const [referralCode,setReferralCode] = useState(()=>{ try { return localStorage.getItem("eco_referral_code")||""; } catch(e){ return ""; } });
   const call = async (ep,body) => {
     if (!SUPABASE_URL) return { access_token:"demo",id:"demo" };
     const r = await fetch(`${SUPABASE_URL}/auth/v1/${ep}`,{ method:"POST",headers:{ apikey:SUPABASE_ANON,"Content-Type":"application/json" },body:JSON.stringify(body) });
@@ -731,8 +732,15 @@ function Auth({ mode, onBack, onSuccess }) {
     const d = mode==="login"
       ? await call("token?grant_type=password",{ email,password })
       : await call("signup",{ email,password,data:{ full_name:name } });
-    if (d.access_token||d.id||d.user) {
-      onSuccess({ email,name:name||email.split("@")[0],token:d.access_token||"demo",refreshToken:d.refresh_token||null,expiresAt:d.expires_in?Date.now()+d.expires_in*1000:null,id:d.user?.id||"demo" });
+       if (d.access_token||d.id||d.user) {
+      const newUserId = d.user?.id||"demo";
+      if (mode==="register" && referralCode.trim() && newUserId!=="demo") {
+        try {
+          await sb("rpc/redeem_referral_code",{ method:"POST", body:JSON.stringify({ p_new_user_id:newUserId, p_code:referralCode.trim(), p_email:email }) });
+          localStorage.removeItem("eco_referral_code");
+        } catch(e) {}
+      }
+      onSuccess({ email,name:name||email.split("@")[0],token:d.access_token||"demo",refreshToken:d.refresh_token||null,expiresAt:d.expires_in?Date.now()+d.expires_in*1000:null,id:newUserId });
     } else { setErr(d.error_description||d.msg||"Something went wrong. Try again."); }
     setLoad(false);
   };
@@ -752,7 +760,16 @@ function Auth({ mode, onBack, onSuccess }) {
     setLoad(true); setErr("");
     const intl = phone.startsWith("+")?phone:`+233${phone.replace(/^0/,"")}`;
     const d = await call("verify",{ phone:intl,token:otp,type:"sms" });
-    if (d.access_token||d.user) { onSuccess({ phone:intl,name:intl,token:d.access_token||"demo",refreshToken:d.refresh_token||null,expiresAt:d.expires_in?Date.now()+d.expires_in*1000:null,id:d.user?.id||"demo" }); }
+        if (d.access_token||d.user) {
+      const newUserId = d.user?.id||"demo";
+      if (referralCode.trim() && newUserId!=="demo") {
+        try {
+          await sb("rpc/redeem_referral_code",{ method:"POST", body:JSON.stringify({ p_new_user_id:newUserId, p_code:referralCode.trim() }) });
+          localStorage.removeItem("eco_referral_code");
+        } catch(e) {}
+      }
+      onSuccess({ phone:intl,name:intl,token:d.access_token||"demo",refreshToken:d.refresh_token||null,expiresAt:d.expires_in?Date.now()+d.expires_in*1000:null,id:newUserId });
+    }
     else { setErr(d.error_description||"Invalid OTP. Try again."); }
     setLoad(false);
   };
@@ -790,9 +807,10 @@ function Auth({ mode, onBack, onSuccess }) {
           <div style={{ fontWeight:800,fontSize:24,color:T.text,marginTop:14 }}>{mode==="login"?"Welcome Back":"Create Account"}</div>
           <div style={{ fontSize:13,color:T.muted,marginTop:6 }}>{mode==="login"?"Sign in to your account":"Join EcoCharge Ghana today"}</div>
         </div>
-        {tab==="email" && (
+                {tab==="email" && (
           <>
             {mode==="register" && inp("Full name",name,setPname,"text","fa-user")}
+            {mode==="register" && inp("Referral code (optional)",referralCode,setReferralCode,"text","fa-gift")}
             {inp("Email address",email,setEmail,"email","fa-envelope")}
             <div style={{ position:"relative",marginBottom:14 }}>
               <i className="fas fa-lock" style={{ position:"absolute",left:16,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:14,zIndex:1 }}/>
@@ -2359,9 +2377,10 @@ function QRScreen({ go, booking, setBooking, user }) {
             p_user_id:user.id, p_action_key:"charge_completed", p_source_type:"session",
             p_source_id:sessionId, p_override_points: Math.max(proportionalBonus, 10)
           })});
-          await sb("rpc/award_points",{ method:"POST", body:JSON.stringify({
+                   await sb("rpc/award_points",{ method:"POST", body:JSON.stringify({
             p_user_id:user.id, p_action_key:"first_session", p_source_type:"session", p_source_id:sessionId
           })});
+          await sb("rpc/process_referral_completion",{ method:"POST", body:JSON.stringify({ p_user_id:user.id, p_session_id:sessionId }) });
           try {
             const stRes = await sb(`stations?name=eq.${encodeURIComponent(b.station)}&select=solar&limit=1`);
             if (Array.isArray(stRes) && stRes[0]?.solar >= 70) {
@@ -3019,7 +3038,7 @@ function Profile({ go,user,setUser,onMenu }) {
     { icon:"fa-car",            label:"My Vehicles",     sub:"Manage your vehicles",      screen:"myvehicles"    },
     { icon:"fa-wallet",         label:"Wallet",           sub:"View balance & transactions", screen:"wallet"      },
     { icon:"fa-clock",          label:"Charging History", sub:"View all your sessions",    screen:"sessions"      },
-    { icon:"fa-star",           label:"Rewards",          sub:"Check points & redeem rewards", screen:"__toast_rewards"   },
+    { icon:"fa-star",           label:"Rewards",          sub:"Check points & redeem rewards", screen:"rewards"   },
     { icon:"fa-tag",            label:"Promotions",       sub:"View current offers",        screen:"promotions"      },
   ];
 
@@ -3683,6 +3702,541 @@ function PromotionsScreen({ go }) {
             )}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+const REWARD_CATEGORIES = [
+  { key:"all",        label:"All",        icon:"fa-th" },
+  { key:"charging",   label:"Charging",   icon:"fa-bolt" },
+  { key:"mobile",     label:"Mobile",     icon:"fa-mobile-alt" },
+  { key:"shopping",   label:"Shopping",   icon:"fa-shopping-bag" },
+  { key:"lifestyle",  label:"Lifestyle",  icon:"fa-utensils" },
+  { key:"ecocharge",  label:"EcoCharge",  icon:"fa-charging-station" },
+];
+
+const REWARD_TYPE_INFO = {
+  wallet_credit:        { howTo:"Applied automatically to your EcoCharge wallet." },
+  free_kwh:             { howTo:"Free kWh credit — applied at your next session." },
+  airtime:              { howTo:"Delivered to your registered phone number within 24 hours." },
+  data_bundle:          { howTo:"Delivered to your registered phone number within 24 hours." },
+  voucher:              { howTo:"Show this code at checkout to redeem." },
+  partner_voucher:      { howTo:"Show this code to the partner merchant to redeem." },
+  free_reservation:     { howTo:"Show this code when reserving your next charger." },
+  priority_reservation: { howTo:"Show this code when reserving your next charger." },
+  discount_code:        { howTo:"Apply this code at checkout." },
+};
+
+function EcoRewardsScreen({ go, user }) {
+  const [tab, setTab] = useState("overview");
+  const [loading, setLoading] = useState(true);
+  const [points, setPoints] = useState(0);
+  const [tier, setTier] = useState("Bronze");
+  const [earnedThisMonth, setEarnedThisMonth] = useState(0);
+  const [redeemedTotal, setRedeemedTotal] = useState(0);
+  const [impact, setImpact] = useState({ kwh:0, sessions:0 });
+  const [catalog, setCatalog] = useState([]);
+  const [category, setCategory] = useState("all");
+  const [redemptions, setRedemptions] = useState([]);
+  const [selectedReward, setSelectedReward] = useState(null);
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemResult, setRedeemResult] = useState(null);
+  const [redeemError, setRedeemError] = useState("");
+
+  const tierColor = {"Bronze":"#cd7f32","Silver":"#9ca3af","Gold":"#fbbf24","Platinum":"#38bdf8"}[tier]||"#cd7f32";
+  const tierMedal = {"Bronze":"🥉","Silver":"🥈","Gold":"🥇","Platinum":"💎"}[tier]||"🥉";
+  const tierNext  = {"Bronze":500,"Silver":2000,"Gold":5000,"Platinum":5000}[tier]||500;
+  const tierPct   = Math.min(100, Math.round((points/tierNext)*100));
+
+  const loadAll = async () => {
+    if (!user?.id || !SUPABASE_URL) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const [u, catalogData, redemptionsData, sessions] = await Promise.all([
+        sb(`users?auth_id=eq.${user.id}&select=loyalty_points,loyalty_tier`),
+        sb(`reward_catalog?is_active=eq.true&order=priority.desc`),
+        sb(`reward_redemptions?user_id=eq.${user.id}&order=redeemed_at.desc&select=*,reward_catalog(name,icon,category,reward_type,description)`),
+        sb(`charging_sessions?user_id=eq.${user.id}&status=eq.Completed&select=energy_kwh`),
+      ]);
+      setPoints(u?.[0]?.loyalty_points || 0);
+      setTier(u?.[0]?.loyalty_tier || "Bronze");
+      setCatalog(Array.isArray(catalogData) ? catalogData : []);
+      setRedemptions(Array.isArray(redemptionsData) ? redemptionsData : []);
+      const sl = Array.isArray(sessions) ? sessions : [];
+      setImpact({ kwh: sl.reduce((a,s)=>a+(s.energy_kwh||0),0), sessions: sl.length });
+
+      const firstOfMonth = new Date(); firstOfMonth.setDate(1); firstOfMonth.setHours(0,0,0,0);
+      const [earned, redeemed] = await Promise.all([
+        sb(`points_ledger?user_id=eq.${user.id}&points_delta=gt.0&created_at=gte.${firstOfMonth.toISOString()}&select=points_delta`),
+        sb(`points_ledger?user_id=eq.${user.id}&points_delta=lt.0&select=points_delta`),
+      ]);
+      setEarnedThisMonth(Array.isArray(earned) ? earned.reduce((a,r)=>a+r.points_delta,0) : 0);
+      setRedeemedTotal(Array.isArray(redeemed) ? Math.abs(redeemed.reduce((a,r)=>a+r.points_delta,0)) : 0);
+    } catch(e) {}
+    setLoading(false);
+  };
+  useEffect(()=>{ loadAll(); },[user?.id]);
+
+  const filteredCatalog = category==="all" ? catalog : catalog.filter(r=>r.category===category);
+  const recommended = [...catalog].filter(r=>r.points_cost<=points).sort((a,b)=>a.points_cost-b.points_cost).slice(0,3);
+
+  const openRedeem = (reward) => { setSelectedReward(reward); setRedeemResult(null); setRedeemError(""); };
+
+  const confirmRedeem = async () => {
+    if (!selectedReward) return;
+    setRedeeming(true); setRedeemError("");
+    try {
+      const result = await sb("rpc/redeem_reward", { method:"POST", body: JSON.stringify({ p_user_id:user.id, p_reward_id:selectedReward.id }) });
+      if (result?.success) { setRedeemResult(result); setPoints(result.new_balance); loadAll(); }
+      else setRedeemError(result?.error || "Could not redeem this reward. Try again.");
+    } catch(e) { setRedeemError("Network error. Please try again."); }
+    setRedeeming(false);
+  };
+
+  if (loading) return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="EcoRewards" onBack={()=>go("profile")}/>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center" }}><Spinner/></div>
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="EcoRewards" sub="Earn points, redeem real rewards" onBack={()=>go("profile")}/>
+      <div style={{ display:"flex",gap:6,padding:"12px 16px 0" }}>
+        {[["overview","Overview"],["marketplace","Marketplace"],["myrewards","My Rewards"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)} className="tap"
+            style={{ flex:1,background:tab===id?T.green:T.card,border:`1px solid ${tab===id?T.green:T.border}`,borderRadius:20,padding:"9px 4px",fontSize:12,fontWeight:700,color:tab===id?"#000":T.muted,cursor:"pointer",fontFamily:"inherit" }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 16px 100px" }}>
+
+        {tab==="overview" && (
+          <>
+            <div style={{ background:T.highlightGrad2,borderRadius:20,padding:"22px",marginBottom:16,border:`1px solid ${T.greenDim}`,position:"relative",overflow:"hidden" }}>
+              <div style={{ position:"absolute",top:-30,right:-30,fontSize:120,opacity:0.08 }}>⭐</div>
+              <div style={{ position:"relative",zIndex:2 }}>
+                <div style={{ fontSize:12,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>EcoPoints</div>
+                <div style={{ fontWeight:900,fontSize:42,color:T.green,letterSpacing:-1,marginBottom:14 }}>{points.toLocaleString()}</div>
+                <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:14 }}>
+                  <span style={{ fontSize:20 }}>{tierMedal}</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:700,fontSize:13,color:tierColor }}>{tier}</div>
+                    <div style={{ height:5,borderRadius:3,background:T.track,overflow:"hidden",marginTop:4 }}>
+                      <div style={{ height:"100%",width:`${tierPct}%`,background:tierColor,borderRadius:3 }}/>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize:11,color:T.muted }}>{Math.max(0,tierNext-points)} points to your next tier</div>
+              </div>
+            </div>
+
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20 }}>
+              <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px" }}>
+                <div style={{ fontSize:10,color:T.muted,textTransform:"uppercase",marginBottom:6 }}>This Month</div>
+                <div style={{ fontWeight:800,fontSize:18,color:T.green }}>+{earnedThisMonth.toLocaleString()}</div>
+                <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>points earned</div>
+              </div>
+              <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px" }}>
+                <div style={{ fontSize:10,color:T.muted,textTransform:"uppercase",marginBottom:6 }}>Redeemed</div>
+                <div style={{ fontWeight:800,fontSize:18,color:T.text }}>{redeemedTotal.toLocaleString()}</div>
+                <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>all-time points spent</div>
+              </div>
+            </div>
+
+            <div style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,padding:"18px",marginBottom:20 }}>
+              <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:12 }}>Your Impact</div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12 }}>
+                <div>
+                  <div style={{ fontWeight:800,fontSize:16,color:T.green }}>{(impact.kwh*0.5).toFixed(1)} kg</div>
+                  <div style={{ fontSize:9,color:T.muted,marginTop:2 }}>CO₂ avoided</div>
+                </div>
+                <div>
+                  <div style={{ fontWeight:800,fontSize:16,color:T.blue }}>{impact.kwh.toFixed(1)} kWh</div>
+                  <div style={{ fontSize:9,color:T.muted,marginTop:2 }}>charged</div>
+                </div>
+                <div>
+                  <div style={{ fontWeight:800,fontSize:16,color:T.text }}>{impact.sessions}</div>
+                  <div style={{ fontSize:9,color:T.muted,marginTop:2 }}>sessions</div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12 }}>
+              <div style={{ fontWeight:700,fontSize:14,color:T.text }}>Recommended For You</div>
+              <button onClick={()=>setTab("marketplace")} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit" }}>See all</button>
+            </div>
+            {recommended.length===0 && <div style={{ fontSize:12,color:T.muted,marginBottom:20 }}>Keep charging to unlock rewards you can afford right now.</div>}
+            <div style={{ display:"flex",gap:10,overflowX:"auto",paddingBottom:6,marginBottom:10 }}>
+              {recommended.map(r=>(
+                <div key={r.id} onClick={()=>openRedeem(r)} className="tap"
+                  style={{ flexShrink:0,width:150,background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:"14px",cursor:"pointer" }}>
+                  <div style={{ width:36,height:36,borderRadius:10,background:`${T.green}18`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:10 }}>
+                    <i className={`fas ${r.icon||"fa-gift"}`} style={{ fontSize:15,color:T.green }}/>
+                  </div>
+                  <div style={{ fontWeight:700,fontSize:12,color:T.text,marginBottom:6,lineHeight:1.3 }}>{r.name}</div>
+                  <div style={{ fontSize:12,fontWeight:800,color:T.green }}>{r.points_cost.toLocaleString()} pts</div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {tab==="marketplace" && (
+          <>
+            <div style={{ display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginBottom:14 }}>
+              {REWARD_CATEGORIES.map(c=>(
+                <button key={c.key} onClick={()=>setCategory(c.key)} className="tap"
+                  style={{ flexShrink:0,background:category===c.key?T.green:T.card,border:`1px solid ${category===c.key?T.green:T.border}`,borderRadius:20,padding:"7px 14px",fontSize:12,fontWeight:700,color:category===c.key?"#000":T.muted,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}>
+                  <i className={`fas ${c.icon}`}/> {c.label}
+                </button>
+              ))}
+            </div>
+            {filteredCatalog.length===0 && (
+              <div style={{ textAlign:"center",padding:"40px 0",color:T.muted,fontSize:13 }}>No rewards in this category yet.</div>
+            )}
+            {filteredCatalog.map(r=>{
+              const canAfford = points >= r.points_cost;
+              return (
+                <div key={r.id} onClick={()=>openRedeem(r)} className="tap"
+                  style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,padding:"16px",marginBottom:10,display:"flex",alignItems:"center",gap:14,cursor:"pointer",opacity:canAfford?1:0.7 }}>
+                  <div style={{ width:44,height:44,borderRadius:12,background:`${T.green}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                    <i className={`fas ${r.icon||"fa-gift"}`} style={{ fontSize:18,color:T.green }}/>
+                  </div>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{r.name}</div>
+                    {r.description && <div style={{ fontSize:11,color:T.muted,marginTop:2,lineHeight:1.5 }}>{r.description}</div>}
+                    {r.partner_name && <Badge label={r.partner_name} color={T.blue}/>}
+                  </div>
+                  <div style={{ textAlign:"right",flexShrink:0 }}>
+                    <div style={{ fontWeight:800,fontSize:14,color:canAfford?T.green:T.muted }}>{r.points_cost.toLocaleString()}</div>
+                    <div style={{ fontSize:9,color:T.muted }}>points</div>
+                    {!canAfford && <div style={{ fontSize:9,color:T.yellow,marginTop:4 }}>Need {(r.points_cost-points).toLocaleString()} more</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
+
+        {tab==="myrewards" && (
+          <>
+            {redemptions.length===0 && (
+              <div style={{ textAlign:"center",padding:"60px 20px" }}>
+                <i className="fas fa-gift" style={{ fontSize:48,color:T.muted,marginBottom:16,display:"block" }}/>
+                <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>No rewards redeemed yet</div>
+                <div style={{ fontSize:13,color:T.muted,lineHeight:1.7 }}>Browse the Marketplace and redeem your first reward.</div>
+              </div>
+            )}
+            {redemptions.map(r=>{
+              const info = REWARD_TYPE_INFO[r.reward_catalog?.reward_type] || {};
+              const statusColor = r.status==="fulfilled" ? T.green : (r.status==="expired"||r.status==="cancelled") ? T.red : T.yellow;
+              return (
+                <div key={r.id} style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,padding:"16px",marginBottom:12 }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
+                    <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                      <div style={{ width:36,height:36,borderRadius:10,background:`${T.green}18`,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                        <i className={`fas ${r.reward_catalog?.icon||"fa-gift"}`} style={{ fontSize:14,color:T.green }}/>
+                      </div>
+                      <div>
+                        <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{r.reward_catalog?.name || "Reward"}</div>
+                        <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{new Date(r.redeemed_at).toLocaleDateString("en-GH",{day:"numeric",month:"short",year:"numeric"})}</div>
+                      </div>
+                    </div>
+                    <Badge label={r.status} color={statusColor}/>
+                  </div>
+                  <div style={{ background:T.innerTint,borderRadius:10,padding:"10px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8 }}>
+                    <span style={{ fontSize:11,color:T.muted }}>Redemption code</span>
+                    <span style={{ fontWeight:800,fontSize:13,color:T.green,letterSpacing:1,fontFamily:"monospace" }}>{r.redemption_code}</span>
+                  </div>
+                  <div style={{ fontSize:11,color:T.muted,lineHeight:1.6 }}>{info.howTo || "Contact support to redeem."}</div>
+                  <div style={{ fontSize:10,color:T.muted,marginTop:8 }}>−{r.points_spent.toLocaleString()} points</div>
+                </div>
+              );
+            })}
+          </>
+        )}
+      </div>
+
+      {selectedReward && (
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:400,display:"flex",alignItems:"flex-end",justifyContent:"center" }} onClick={()=>{ if(!redeeming) setSelectedReward(null); }}>
+          <div style={{ background:T.card,borderRadius:"20px 20px 0 0",padding:"24px 20px 40px",width:"100%",maxWidth:480,border:`1px solid ${T.border}` }} onClick={e=>e.stopPropagation()}>
+            {!redeemResult ? (
+              <>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}>
+                  <div style={{ fontWeight:800,fontSize:16,color:T.text }}>Confirm Redemption</div>
+                  <button onClick={()=>setSelectedReward(null)} className="tap" style={{ background:"none",border:"none",color:T.muted,fontSize:18,cursor:"pointer" }}><i className="fas fa-times"/></button>
+                </div>
+                <div style={{ display:"flex",alignItems:"center",gap:14,marginBottom:20 }}>
+                  <div style={{ width:52,height:52,borderRadius:14,background:`${T.green}18`,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                    <i className={`fas ${selectedReward.icon||"fa-gift"}`} style={{ fontSize:22,color:T.green }}/>
+                  </div>
+                  <div>
+                    <div style={{ fontWeight:700,fontSize:15,color:T.text }}>{selectedReward.name}</div>
+                    {selectedReward.description && <div style={{ fontSize:12,color:T.muted,marginTop:3 }}>{selectedReward.description}</div>}
+                  </div>
+                </div>
+                <div style={{ background:T.innerTint,borderRadius:12,padding:"14px 16px",marginBottom:16 }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",marginBottom:8 }}>
+                    <span style={{ fontSize:12,color:T.muted }}>Points required</span>
+                    <span style={{ fontWeight:700,fontSize:13,color:T.text }}>{selectedReward.points_cost.toLocaleString()}</span>
+                  </div>
+                  <div style={{ display:"flex",justifyContent:"space-between" }}>
+                    <span style={{ fontSize:12,color:T.muted }}>Your balance</span>
+                    <span style={{ fontWeight:700,fontSize:13,color:points>=selectedReward.points_cost?T.green:T.red }}>{points.toLocaleString()}</span>
+                  </div>
+                </div>
+                {redeemError && <div style={{ background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",borderRadius:10,padding:"11px 14px",marginBottom:14,color:T.red,fontSize:12 }}>{redeemError}</div>}
+                <button onClick={confirmRedeem} disabled={redeeming || points<selectedReward.points_cost} className="tap"
+                  style={{ width:"100%",background:points>=selectedReward.points_cost?`linear-gradient(135deg,${T.green},${T.greenDark})`:T.border,border:"none",borderRadius:14,padding:"15px",fontSize:14,fontWeight:800,color:points>=selectedReward.points_cost?"#000":T.muted,cursor:points>=selectedReward.points_cost?"pointer":"not-allowed",fontFamily:"inherit" }}>
+                  {redeeming ? "Redeeming…" : points<selectedReward.points_cost ? "Not Enough Points" : "Confirm Redemption"}
+                </button>
+              </>
+            ) : (
+              <div style={{ textAlign:"center" }}>
+                <div style={{ width:64,height:64,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}>
+                  <i className="fas fa-check" style={{ fontSize:26,color:"#000" }}/>
+                </div>
+                <div style={{ fontWeight:800,fontSize:17,color:T.green,marginBottom:8 }}>Reward Redeemed!</div>
+                <div style={{ background:T.innerTint,borderRadius:12,padding:"14px",marginBottom:16 }}>
+                  <div style={{ fontSize:11,color:T.muted,marginBottom:4 }}>Your redemption code</div>
+                  <div style={{ fontWeight:900,fontSize:18,color:T.green,letterSpacing:2,fontFamily:"monospace" }}>{redeemResult.redemption_code}</div>
+                </div>
+                <button onClick={()=>{ setSelectedReward(null); setTab("myrewards"); }} className="tap"
+                  style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:14,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+                  View My Rewards
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+const REWARD_TYPES = ["wallet_credit","free_kwh","airtime","data_bundle","voucher","free_reservation","priority_reservation","discount_code","partner_voucher"];
+const REWARD_CATS = ["charging","mobile","shopping","lifestyle","ecocharge"];
+
+function AdminEcoRewards({ go, user }) {
+  const [tab, setTab] = useState("catalog"); // catalog | rules
+  const [catalog, setCatalog] = useState([]);
+  const [rules, setRules] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null); // reward being edited/created
+  const [saving, setSaving] = useState(false);
+  const [ruleEdits, setRuleEdits] = useState({});
+  const [savingRule, setSavingRule] = useState(null);
+  const [msg, setMsg] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    const [c, r] = await Promise.all([
+      sb(`reward_catalog?order=category.asc,priority.desc`),
+      sb(`points_earning_rules?order=action_key.asc`),
+    ]);
+    setCatalog(Array.isArray(c) ? c : []);
+    setRules(Array.isArray(r) ? r : []);
+    setLoading(false);
+  };
+  useEffect(()=>{ load(); },[]);
+
+  const newReward = () => {
+    setEditing({
+      category:"charging", name:"", description:"", points_cost:1000,
+      reward_type:"wallet_credit", reward_value_pesewas:1000, reward_value_kwh:null,
+      partner_name:"", icon:"fa-gift", stock_limit:null, priority:0, is_active:true,
+    });
+  };
+
+  const saveReward = async () => {
+    if (!editing.name.trim() || !editing.points_cost) return;
+    setSaving(true);
+    const payload = {
+      category: editing.category, name: editing.name.trim(), description: editing.description||null,
+      points_cost: parseInt(editing.points_cost)||0, reward_type: editing.reward_type,
+      reward_value_pesewas: editing.reward_value_pesewas ? parseInt(editing.reward_value_pesewas) : null,
+      reward_value_kwh: editing.reward_value_kwh ? parseFloat(editing.reward_value_kwh) : null,
+      partner_name: editing.partner_name?.trim() || null, icon: editing.icon || "fa-gift",
+      stock_limit: editing.stock_limit ? parseInt(editing.stock_limit) : null,
+      priority: parseInt(editing.priority)||0, is_active: editing.is_active,
+      updated_at: new Date().toISOString(),
+    };
+    if (editing.id) {
+      await sb(`reward_catalog?id=eq.${editing.id}`, { method:"PATCH", headers:{ Prefer:"return=minimal" }, body: JSON.stringify(payload) });
+    } else {
+      await sb(`reward_catalog`, { method:"POST", headers:{ Prefer:"return=minimal" }, body: JSON.stringify(payload) });
+    }
+    setSaving(false);
+    setEditing(null);
+    setMsg("Saved ✅"); setTimeout(()=>setMsg(""),2000);
+    load();
+  };
+
+  const toggleActive = async (reward) => {
+    await sb(`reward_catalog?id=eq.${reward.id}`, { method:"PATCH", headers:{ Prefer:"return=minimal" }, body: JSON.stringify({ is_active: !reward.is_active }) });
+    setCatalog(prev => prev.map(r => r.id===reward.id ? { ...r, is_active: !r.is_active } : r));
+  };
+
+  const saveRule = async (rule) => {
+    const draft = ruleEdits[rule.id] || {};
+    setSavingRule(rule.id);
+    const payload = {
+      points: draft.points !== undefined ? parseInt(draft.points)||0 : rule.points,
+      max_per_user: draft.max_per_user !== undefined ? (draft.max_per_user === "" ? null : parseInt(draft.max_per_user)) : rule.max_per_user,
+      cooldown_hours: draft.cooldown_hours !== undefined ? (draft.cooldown_hours === "" ? null : parseInt(draft.cooldown_hours)) : rule.cooldown_hours,
+      updated_at: new Date().toISOString(),
+    };
+    await sb(`points_earning_rules?id=eq.${rule.id}`, { method:"PATCH", headers:{ Prefer:"return=minimal" }, body: JSON.stringify(payload) });
+    setRules(prev => prev.map(r => r.id===rule.id ? { ...r, ...payload } : r));
+    setRuleEdits(prev => ({ ...prev, [rule.id]: {} }));
+    setSavingRule(null);
+    setMsg("Saved ✅"); setTimeout(()=>setMsg(""),2000);
+  };
+
+  const toggleRuleActive = async (rule) => {
+    await sb(`points_earning_rules?id=eq.${rule.id}`, { method:"PATCH", headers:{ Prefer:"return=minimal" }, body: JSON.stringify({ is_active: !rule.is_active }) });
+    setRules(prev => prev.map(r => r.id===rule.id ? { ...r, is_active: !r.is_active } : r));
+  };
+
+  const inp = (label, val, onChange, type="text", placeholder="") => (
+    <div style={{ marginBottom:12 }}>
+      <div style={{ fontSize:10,color:T.muted,marginBottom:5,fontWeight:600,textTransform:"uppercase" }}>{label}</div>
+      <input type={type} placeholder={placeholder} value={val ?? ""} onChange={e=>onChange(e.target.value)}
+        style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"11px 12px",color:T.text,fontSize:13,fontFamily:"inherit" }}/>
+    </div>
+  );
+  const sel = (label, val, onChange, options) => (
+    <div style={{ marginBottom:12 }}>
+      <div style={{ fontSize:10,color:T.muted,marginBottom:5,fontWeight:600,textTransform:"uppercase" }}>{label}</div>
+      <select value={val} onChange={e=>onChange(e.target.value)}
+        style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"11px 12px",color:T.text,fontSize:13,fontFamily:"inherit" }}>
+        {options.map(o=>(<option key={o} value={o}>{o}</option>))}
+      </select>
+    </div>
+  );
+
+  if (editing) return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title={editing.id?"Edit Reward":"New Reward"} sub="EcoRewards catalog" onBack={()=>setEditing(null)}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 16px 100px" }}>
+        {sel("Category", editing.category, v=>setEditing(p=>({...p,category:v})), REWARD_CATS)}
+        {inp("Reward Name", editing.name, v=>setEditing(p=>({...p,name:v})), "text", "e.g. GH₵25 Charging Discount")}
+        {inp("Description", editing.description, v=>setEditing(p=>({...p,description:v})), "text", "Short customer-facing description")}
+        {inp("Points Cost", editing.points_cost, v=>setEditing(p=>({...p,points_cost:v})), "number")}
+        {sel("Reward Type", editing.reward_type, v=>setEditing(p=>({...p,reward_type:v})), REWARD_TYPES)}
+        {editing.reward_type==="wallet_credit" && inp("Wallet Credit (pesewas — 100 = GH₵1)", editing.reward_value_pesewas, v=>setEditing(p=>({...p,reward_value_pesewas:v})), "number")}
+        {editing.reward_type==="free_kwh" && inp("Free kWh Amount", editing.reward_value_kwh, v=>setEditing(p=>({...p,reward_value_kwh:v})), "number")}
+        {inp("Partner Name (optional)", editing.partner_name, v=>setEditing(p=>({...p,partner_name:v})), "text", "Leave blank if fulfilled by EcoCharge directly")}
+        {inp("Icon (Font Awesome class)", editing.icon, v=>setEditing(p=>({...p,icon:v})), "text", "e.g. fa-bolt")}
+        {inp("Stock Limit (optional)", editing.stock_limit, v=>setEditing(p=>({...p,stock_limit:v})), "number", "Leave blank for unlimited")}
+        {inp("Display Priority (higher shows first)", editing.priority, v=>setEditing(p=>({...p,priority:v})), "number")}
+        <div style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 0" }}>
+          <span style={{ fontSize:13,color:T.text,flex:1 }}>Active</span>
+          <div onClick={()=>setEditing(p=>({...p,is_active:!p.is_active}))} className="tap"
+            style={{ width:44,height:24,borderRadius:12,background:editing.is_active?T.green:T.border,position:"relative",cursor:"pointer" }}>
+            <div style={{ width:18,height:18,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:editing.is_active?23:3,transition:"left .2s" }}/>
+          </div>
+        </div>
+        <button onClick={saveReward} disabled={saving} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",marginTop:8 }}>
+          {saving?"Saving…":"Save Reward"}
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="EcoRewards Admin" sub="Manage catalog & earning rules" onBack={()=>go("home")}/>
+      <div style={{ display:"flex",gap:6,padding:"12px 16px 0",alignItems:"center" }}>
+        {[["catalog","Catalog"],["rules","Earning Rules"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)} className="tap"
+            style={{ background:tab===id?T.green:T.card,border:`1px solid ${tab===id?T.green:T.border}`,borderRadius:20,padding:"7px 16px",fontSize:12,fontWeight:700,color:tab===id?"#000":T.muted,cursor:"pointer",fontFamily:"inherit" }}>
+            {label}
+          </button>
+        ))}
+        {msg && <span style={{ fontSize:11,color:T.green,fontWeight:700,marginLeft:"auto" }}>{msg}</span>}
+      </div>
+
+      <div style={{ flex:1,overflowY:"auto",padding:"14px 16px 100px" }}>
+        {loading && <div style={{ textAlign:"center",padding:"30px 0" }}><Spinner/></div>}
+
+        {!loading && tab==="catalog" && (
+          <>
+            <button onClick={newReward} className="tap"
+              style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+              <i className="fas fa-plus"/> New Reward
+            </button>
+            {catalog.map(r=>(
+              <div key={r.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${r.is_active?T.border:T.surface}`,padding:"14px",marginBottom:10,opacity:r.is_active?1:0.55 }}>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                    <i className={`fas ${r.icon||"fa-gift"}`} style={{ fontSize:16,color:T.green,width:20 }}/>
+                    <div>
+                      <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{r.name}</div>
+                      <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{r.category} · {r.reward_type} · {r.points_cost.toLocaleString()} pts</div>
+                    </div>
+                  </div>
+                  <button onClick={()=>toggleActive(r)} className="tap"
+                    style={{ background:r.is_active?`${T.green}18`:T.surface,border:`1px solid ${r.is_active?T.green:T.border}`,borderRadius:20,padding:"4px 12px",fontSize:10,fontWeight:700,color:r.is_active?T.green:T.muted,cursor:"pointer",fontFamily:"inherit" }}>
+                    {r.is_active?"ON":"OFF"}
+                  </button>
+                </div>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                  <div style={{ fontSize:10,color:T.muted }}>Redeemed {r.redeemed_count} time{r.redeemed_count!==1?"s":""}{r.stock_limit?` of ${r.stock_limit}`:""}</div>
+                  <button onClick={()=>setEditing(r)} className="tap"
+                    style={{ background:T.surfaceFaint,border:`1px solid ${T.border}`,borderRadius:8,padding:"5px 12px",fontSize:11,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
+                    Edit
+                  </button>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+
+        {!loading && tab==="rules" && rules.map(r=>{
+          const draft = ruleEdits[r.id] || {};
+          const isPhase2 = r.points === 0 || ["referral_completed","trip_completed","promo_participation"].includes(r.action_key);
+          return (
+            <div key={r.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px",marginBottom:10,opacity:r.is_active?1:0.55 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
+                <div>
+                  <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{r.label}</div>
+                  <div style={{ fontSize:10,color:T.muted,marginTop:2,lineHeight:1.5 }}>{r.description}</div>
+                  {isPhase2 && <Badge label="Not wired yet" color={T.yellow}/>}
+                </div>
+                <button onClick={()=>toggleRuleActive(r)} className="tap"
+                  style={{ background:r.is_active?`${T.green}18`:T.surface,border:`1px solid ${r.is_active?T.green:T.border}`,borderRadius:20,padding:"4px 12px",fontSize:10,fontWeight:700,color:r.is_active?T.green:T.muted,cursor:"pointer",fontFamily:"inherit",flexShrink:0 }}>
+                  {r.is_active?"ON":"OFF"}
+                </button>
+              </div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10 }}>
+                <div>
+                  <div style={{ fontSize:9,color:T.muted,marginBottom:4 }}>Points</div>
+                  <input type="number" value={draft.points ?? r.points} onChange={e=>setRuleEdits(prev=>({...prev,[r.id]:{...prev[r.id],points:e.target.value}}))}
+                    style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:8,padding:"8px",color:T.text,fontSize:12,fontFamily:"inherit" }}/>
+                </div>
+                <div>
+                  <div style={{ fontSize:9,color:T.muted,marginBottom:4 }}>Max/User</div>
+                  <input type="number" placeholder="∞" value={draft.max_per_user ?? (r.max_per_user ?? "")} onChange={e=>setRuleEdits(prev=>({...prev,[r.id]:{...prev[r.id],max_per_user:e.target.value}}))}
+                    style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:8,padding:"8px",color:T.text,fontSize:12,fontFamily:"inherit" }}/>
+                </div>
+                <div>
+                  <div style={{ fontSize:9,color:T.muted,marginBottom:4 }}>Cooldown (hrs)</div>
+                  <input type="number" placeholder="None" value={draft.cooldown_hours ?? (r.cooldown_hours ?? "")} onChange={e=>setRuleEdits(prev=>({...prev,[r.id]:{...prev[r.id],cooldown_hours:e.target.value}}))}
+                    style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:8,padding:"8px",color:T.text,fontSize:12,fontFamily:"inherit" }}/>
+                </div>
+              </div>
+              <button onClick={()=>saveRule(r)} disabled={savingRule===r.id} className="tap"
+                style={{ width:"100%",background:T.surfaceFaint,border:`1px solid ${T.border}`,borderRadius:8,padding:"9px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>
+                {savingRule===r.id?"Saving…":"Save Rule"}
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -6691,7 +7245,7 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
       charge_above_90_frequency: chargeAbove90Freq || null,
     };
 
-    let saved;
+       let saved;
     if (isEdit) {
       payload.updated_at = new Date().toISOString();
       saved = await updateVehicle(editVehicle.id, payload);
@@ -6700,6 +7254,11 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
       const result = await saveVehicle(payload);
       if (result) {
         onSaved?.(result);
+        try {
+          await sb("rpc/award_points",{ method:"POST", body:JSON.stringify({
+            p_user_id:user.id, p_action_key:"vehicle_registered", p_source_type:"vehicle", p_source_id:result.id
+          })});
+        } catch(e) {}
       } else {
         // Offline fallback — generate a local id
         onSaved?.({ ...payload, id: `local-${Date.now()}` });
@@ -7966,7 +8525,7 @@ function AppInner() {
     window.addEventListener("eco:auth-expired", handler);
     return ()=>window.removeEventListener("eco:auth-expired", handler);
   },[]);
-  const ADMIN_SCREENS = ["admin","chargers","pricing","vehicleregistry","verify"];
+  const ADMIN_SCREENS = ["admin","chargers","pricing","vehicleregistry","verify","ecorewardsadmin"];
   const goSecure=(s)=>{
     const open=["splash","auth","about","home","detail","map","privacypolicy","terms","refund","zeroemissions"];
     if(!user&&!open.includes(s)){ setAuthMode("login");go("auth");return; }
@@ -7999,7 +8558,9 @@ useEffect(()=>{
           .then(u=>{ if(u?.email){ const usr={ email:u.email,name:u.user_metadata?.full_name||u.email.split("@")[0],token,refreshToken,expiresAt:expiresIn?Date.now()+parseInt(expiresIn)*1000:null,id:u.id }; setUser(usr); window.history.replaceState({},"",window.location.pathname); setScreen("home"); } }).catch(()=>{});
       }
     }
-    const params=new URLSearchParams(window.location.search);
+       const params=new URLSearchParams(window.location.search);
+    const refCode = params.get("ref");
+    if (refCode) { try { localStorage.setItem("eco_referral_code", refCode.toUpperCase()); } catch(e){} }
     const ref=params.get("reference")||params.get("trxref");
     if (ref) {
       window.history.replaceState({},"",window.location.pathname);
@@ -8121,6 +8682,8 @@ useEffect(()=>{
     settings:       <SettingsScreen go={goSecure} user={user} setUser={setUser} onMenu={()=>setDrawer(true)}/>,
     zeroemissions:  <ZeroEmissions go={goSecure}/>,
     promotions:     <PromotionsScreen go={goSecure}/>,
+    rewards:        <EcoRewardsScreen go={goSecure} user={user}/>,
+    ecorewardsadmin:<AdminEcoRewards go={goSecure} user={user}/>,
     home:           <Home {...props}/>,
     map:            <MapScreen {...props}/>,
     detail:         <Detail {...props}/>,
