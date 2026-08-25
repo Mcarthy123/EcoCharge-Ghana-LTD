@@ -37,7 +37,7 @@ const DEFAULT_PRICE_PER_KWH = 0.85;
 const FALLBACK_ESTIMATED_RANGE_KM = 250; // used only if the vehicle has no saved range
 const CO2_PER_KWH = 0.5;
 const WATER_LITRES_PER_SESSION = 20;
-const FREE_TIER_RESERVATION_LIMIT = 1; // see HONESTY NOTE at top of file
+const FREE_TIER_RESERVATION_LIMIT = 5; // reservations per calendar month — see HONESTY NOTE at top of file
 
 // ── GEO HELPERS ───────────────────────────────────────────────
 const toRad = (d) => (d * Math.PI) / 180;
@@ -296,10 +296,16 @@ const BookingService = {
 };
 
 // ── RESERVATION LIMIT SERVICE (Free-tier cap) ─────────────────
+// Counts every reservation MADE this calendar month, not just currently-active
+// ones — a cancelled or completed booking still counts against the monthly
+// quota, matching how "5 reservations per month" is normally understood.
 // See HONESTY NOTE at the top of this file re: FREE_TIER_RESERVATION_LIMIT.
 const ReservationLimitService = {
-  async activeCount(userId, ctx) {
-    const data = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `bookings?user_id=eq.${userId}&status=eq.confirmed&select=reference`);
+  async monthlyCount(userId, ctx) {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0,0,0,0);
+    const data = await sbGet(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `bookings?user_id=eq.${userId}&created_at=gte.${startOfMonth.toISOString()}&select=reference`);
     return Array.isArray(data) ? data.length : 0;
   },
 };
@@ -1943,22 +1949,21 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
 
   const tryReserve = async (chosenCharger) => {
     if (!hasUnlimitedReservations) {
-      const count = await ReservationLimitService.activeCount(user.id, ctx);
+      const count = await ReservationLimitService.monthlyCount(user.id, ctx);
       if (count >= FREE_TIER_RESERVATION_LIMIT) { setStep("limit"); return; }
     }
     setCharger(chosenCharger);
     setStep("reserve");
   };
-
   // Handoff from the AI Route Planner / Driver Assistant "Reserve" buttons —
   // jumps straight into the reservation form instead of the station list.
   useEffect(()=>{
     if (!pendingReservation?.station || subLoading) return;
     (async()=>{
-      if (!hasUnlimitedReservations) {
-        const count = await ReservationLimitService.activeCount(user.id, ctx);
-        if (count >= FREE_TIER_RESERVATION_LIMIT) { setStep("limit"); onPendingConsumed?.(); return; }
-      }
+                 <div style={{ fontWeight:800,fontSize:18,color:T.text,marginBottom:10 }}>Monthly Reservation Limit Reached</div>
+        <div style={{ fontSize:13,color:T.muted,lineHeight:1.8,marginBottom:28,maxWidth:320 }}>
+          Your free plan allows {FREE_TIER_RESERVATION_LIMIT} reservations per month. This resets at the start of next month — or upgrade to EcoCharge Pro for unlimited reservations right away.
+        </div>
       const stationChargers = await StationService.loadChargers(pendingReservation.station.id, ctx);
       const available = stationChargers.find(c => StationService.chargerStatus(c) === "Available");
       const chosenCharger = available || stationChargers[0] || { id: "auto", price_per_kwh: DEFAULT_PRICE_PER_KWH, power_kw: DEFAULT_CHARGER_KW };
