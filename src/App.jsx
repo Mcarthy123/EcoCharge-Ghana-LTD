@@ -1948,16 +1948,31 @@ function ChargeNow({ go,station,vehicle,user,setBooking }) {
         style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px 12px 40px",color:T.text,fontSize:14 }}/>
     </div>
   );
-  const start=async()=>{
+   const start=async()=>{
     if (!name.trim()) { setErr("Enter your name");return; }
     if (!phone.trim()||phone.length<10) { setErr("Enter a valid phone number");return; }
     if (!email.trim()||!email.includes("@")) { setErr("Enter a valid email");return; }
     setLoad(true);setErr("");
     const ref=genRef();
     const data={ reference:ref,station:s.name,city:s.city,vehicle:vehicle?.type||"Car",vehicle_id:vehicle?.vehicleId||null,vehicleImageUrl:vehicle?.imageUrl||null,slot_time:new Date().toISOString(),duration_min:null,amount:null,name,phone,email,user_id:user?.id||null,pay_method:"wallet",booking_mode:"now",status:"confirmed",created_at:new Date().toISOString() };
-    let saved=true;
-    if (SUPABASE_URL) saved=await sb("bookings",{ method:"POST",headers:{ Prefer:"return=minimal" },body:JSON.stringify(data) });
-    if (!saved) { setErr("Could not start your session. Please check your connection and try again."); setLoad(false); return; }
+    if (SUPABASE_URL) {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/bookings`, {
+          method:"POST",
+          headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json", Prefer:"return=minimal" },
+          body: JSON.stringify(data),
+        });
+        if (res.status===401) { window.dispatchEvent(new Event("eco:auth-expired")); setErr("Your session expired — please sign in again."); setLoad(false); return; }
+        if (!res.ok) {
+          const errText = await res.text().catch(()=>"");
+          setErr(`Could not start session (${res.status}): ${errText.slice(0,220)}`);
+          setLoad(false); return;
+        }
+      } catch(e) {
+        setErr("Network error starting session: " + String(e));
+        setLoad(false); return;
+      }
+    }
     setBooking(data);
     try { localStorage.setItem("eco_booking",JSON.stringify(data)); } catch(e){}
     if (user?.id) { createNotification(user.id, "booking_confirmed", "Ready to Charge", `${s.name} — you're checked in. Start charging when ready.`, { reference: ref }); }
@@ -2337,17 +2352,25 @@ function QRScreen({ go, booking, setBooking, user }) {
             body: JSON.stringify({ locked_pesewas: 0 })
           });
         } catch(e) { console.error("Wallet debit error:", e); }
-        // 10 loyalty points per GH₵1 spent (finalCostPs is in pesewas, 100 = GH₵1)
+                // EcoRewards — base points are admin-configurable, plus a proportional kWh bonus
         try {
-          const pointsEarned = Math.round(finalCostPs / 500);
-          if (pointsEarned > 0) {
-            await fetch(`${SUPABASE_URL}/rest/v1/rpc/loyalty_credit`, {
-              method: "POST",
-              headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ p_auth_id: user.id, p_points: pointsEarned, p_kwh: finalKwh })
-            });
-          }
-        } catch(e) { console.error("Loyalty credit error:", e); }
+          const proportionalBonus = Math.round(finalCostPs / 500);
+          await sb("rpc/award_points",{ method:"POST", body:JSON.stringify({
+            p_user_id:user.id, p_action_key:"charge_completed", p_source_type:"session",
+            p_source_id:sessionId, p_override_points: Math.max(proportionalBonus, 10)
+          })});
+          await sb("rpc/award_points",{ method:"POST", body:JSON.stringify({
+            p_user_id:user.id, p_action_key:"first_session", p_source_type:"session", p_source_id:sessionId
+          })});
+          try {
+            const stRes = await sb(`stations?name=eq.${encodeURIComponent(b.station)}&select=solar&limit=1`);
+            if (Array.isArray(stRes) && stRes[0]?.solar >= 70) {
+              await sb("rpc/award_points",{ method:"POST", body:JSON.stringify({
+                p_user_id:user.id, p_action_key:"solar_bonus", p_source_type:"session", p_source_id:sessionId
+              })});
+            }
+          } catch(e) {}
+        } catch(e) { console.error("EcoRewards award error:", e); }
       }
 
       if (SUPABASE_URL && b?.reference) {
@@ -2965,11 +2988,22 @@ function Profile({ go,user,setUser,onMenu }) {
     }catch(e){ setAvatarErr("Network error while saving photo: "+String(e)); }
     setAvatarSaving(false);
   };
-  const booking=(()=>{ try { const b=localStorage.getItem("eco_booking"); return b?JSON.parse(b):null; } catch(e){ return null; } })();
-  const totalCharges=booking?1:0;
-  const totalSpent=booking?.amount||0;
-  const co2Saved=totalCharges*4;
-  const waterReceived=totalCharges*20;
+   const [impact,setImpact]=useState({ charges:0,kwh:0,water:0,spentPesewas:0 });
+  useEffect(()=>{
+    if(!SUPABASE_URL||!user?.id)return;
+    (async()=>{
+      try {
+        const res=await fetch(`${SUPABASE_URL}/rest/v1/charging_sessions?user_id=eq.${user.id}&status=eq.Completed&select=energy_kwh,cost_total`,
+          { headers:{ apikey:SUPABASE_ANON,Authorization:`Bearer ${getToken()}` }});
+        const data=await res.json();
+        if (Array.isArray(data)) {
+          const kwh=data.reduce((a,s)=>a+(s.energy_kwh||0),0);
+          const spentPesewas=data.reduce((a,s)=>a+(s.cost_total||0),0);
+          setImpact({ charges:data.length, kwh, water:data.length*20, spentPesewas });
+        }
+      } catch(e) {}
+    })();
+  },[user]);
   const [loyaltyData,setLoyaltyData]=useState({points:0,tier:"Bronze",totalCharges:0,totalKwh:0});
   useEffect(()=>{
     if(!SUPABASE_URL||!user?.id)return;
@@ -2986,7 +3020,7 @@ function Profile({ go,user,setUser,onMenu }) {
     { icon:"fa-wallet",         label:"Wallet",           sub:"View balance & transactions", screen:"wallet"      },
     { icon:"fa-clock",          label:"Charging History", sub:"View all your sessions",    screen:"sessions"      },
     { icon:"fa-star",           label:"Rewards",          sub:"Check points & redeem rewards", screen:"__toast_rewards"   },
-    { icon:"fa-tag",            label:"Promotions",       sub:"View current offers",        screen:"__toast_promos"      },
+    { icon:"fa-tag",            label:"Promotions",       sub:"View current offers",        screen:"promotions"      },
   ];
 
   const accountItems=[
@@ -3099,11 +3133,11 @@ function Profile({ go,user,setUser,onMenu }) {
 
             <div style={{ fontSize:11,color:T.muted,fontWeight:700,letterSpacing:0.6,textTransform:"uppercase",marginBottom:10 }}>Your Impact</div>
             <div className="fade1" style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:16 }}>
-              {[
-                { label:"Total Charges", sub:"session"+(totalCharges===1?"":"s"), value:totalCharges,       color:T.green,  icon:"fa-bolt" },
-                { label:"CO₂ Saved",     sub:"emissions",  value:`${co2Saved} kg`,   color:T.green,  icon:"fa-leaf" },
-                { label:"Water Received",sub:"conserved",  value:`${waterReceived} L`,color:T.blue,   icon:"fa-tint" },
-                { label:"Total Spent",   sub:"this month", value:`GH₵${totalSpent}`, color:T.yellow, icon:"fa-money-bill-alt" },
+                            {[
+                { label:"Total Charges", sub:"session"+(impact.charges===1?"":"s"), value:impact.charges,       color:T.green,  icon:"fa-bolt" },
+                { label:"CO₂ Saved",     sub:"emissions",  value:`${(impact.kwh*0.5).toFixed(1)} kg`,   color:T.green,  icon:"fa-leaf" },
+                { label:"Water Received",sub:"conserved",  value:`${impact.water} L`,color:T.blue,   icon:"fa-tint" },
+                { label:"Total Spent",   sub:"all time", value:fmtGHS(impact.spentPesewas), color:T.yellow, icon:"fa-money-bill-alt" },
               ].map(s=>(
                 <div key={s.label} style={{ background:T.card,borderRadius:14,padding:"14px 6px",border:`1px solid ${T.border}`,textAlign:"center" }}>
                   <i className={`fas ${s.icon}`} style={{ fontSize:16,color:s.color,marginBottom:8,display:"block" }}/>
@@ -3600,6 +3634,55 @@ We aim to respond to all refund requests within 48 hours.`}
             <i className="fas fa-envelope"/> Request a Refund
           </a>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PromotionsScreen({ go }) {
+  const [promos,setPromos]=useState([]);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{
+    (async()=>{
+      const data = await sb(`tariffs?is_active=eq.true&is_promo=eq.true&order=priority.asc`);
+      setPromos(Array.isArray(data)?data:[]);
+      setLoading(false);
+    })();
+  },[]);
+  const promoLabel=(t)=>{
+    if (t.promo_type==="Percentage") return `${t.promo_value}% off`;
+    if (t.promo_type==="FixedDiscount") return `GH₵${(t.promo_value/100).toFixed(2)} off`;
+    if (t.promo_type==="FlatRate") return `Flat GH₵${(t.promo_value/100).toFixed(2)}`;
+    if (t.promo_type==="FreeKwh") return `${t.promo_value} free kWh`;
+    return "Special offer";
+  };
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Promotions" sub="Current offers" onBack={()=>go("profile")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
+        {loading && <div style={{ textAlign:"center",padding:"40px 0" }}><Spinner/></div>}
+        {!loading && promos.length===0 && (
+          <div style={{ textAlign:"center",padding:"60px 20px" }}>
+            <i className="fas fa-tag" style={{ fontSize:48,color:T.muted,marginBottom:16,display:"block" }}/>
+            <div style={{ fontWeight:700,fontSize:16,color:T.text,marginBottom:8 }}>No active promotions right now</div>
+            <div style={{ fontSize:13,color:T.muted,lineHeight:1.7 }}>Check back soon — new offers appear here as soon as they go live.</div>
+          </div>
+        )}
+        {promos.map(t=>(
+          <div key={t.id} style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,padding:"16px",marginBottom:12 }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
+              <div style={{ fontWeight:800,fontSize:15,color:T.text }}>{t.name}</div>
+              <Badge label={promoLabel(t)} color={T.yellow}/>
+            </div>
+            {t.description && <div style={{ fontSize:12,color:T.muted,marginBottom:10,lineHeight:1.6 }}>{t.description}</div>}
+            {t.promo_code && (
+              <div style={{ background:T.innerTint,borderRadius:10,padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                <span style={{ fontSize:11,color:T.muted }}>Promo code</span>
+                <span style={{ fontWeight:800,fontSize:13,color:T.green,letterSpacing:1,fontFamily:"monospace" }}>{t.promo_code}</span>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -8037,6 +8120,7 @@ useEffect(()=>{
     myvehicles:     <MyVehicles go={goSecure} user={user}/>,
     settings:       <SettingsScreen go={goSecure} user={user} setUser={setUser} onMenu={()=>setDrawer(true)}/>,
     zeroemissions:  <ZeroEmissions go={goSecure}/>,
+    promotions:     <PromotionsScreen go={goSecure}/>,
     home:           <Home {...props}/>,
     map:            <MapScreen {...props}/>,
     detail:         <Detail {...props}/>,
