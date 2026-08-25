@@ -1284,8 +1284,21 @@ function LiveChargingSession({ T, go, booking, user, ctx, onComplete }) {
         p_user_id:user.id, p_amount_pesewas:finalCostPesewas, p_type:"debit", p_description:`Charging at ${booking.station} — ${liveKwh.toFixed(3)} kWh`, p_session_id:sessionId, p_booking_ref:booking.reference,
       });
     }
-    await BookingService.complete(booking.reference, ctx);
+       await BookingService.complete(booking.reference, ctx);
     await ReliabilityService.adjust(user.id, ReliabilityService.POINTS.completedSession, "Completed charging session", ctx);
+    // EcoRewards — proportional charge points + a reservation-kept bonus on top
+    try {
+      const proportionalBonus = Math.round(finalCostPesewas / 500);
+      await sbPost(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, "rpc/award_points", {
+        p_user_id:user.id, p_action_key:"charge_completed", p_source_type:"reservation", p_source_id:sessionId, p_override_points: Math.max(proportionalBonus, 10)
+      });
+      await sbPost(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, "rpc/award_points", {
+        p_user_id:user.id, p_action_key:"reservation_completed", p_source_type:"reservation", p_source_id:booking.reference
+      });
+      await sbPost(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, "rpc/award_points", {
+        p_user_id:user.id, p_action_key:"first_session", p_source_type:"reservation", p_source_id:sessionId
+      });
+    } catch(e) {}
     await NotificationService.send(user.id, "charging_completed", "Session Complete", `You used ${liveKwh.toFixed(2)} kWh for GH₵${costSoFar.toFixed(2)}.`, { session_id:sessionId }, ctx);
     setStopping(false);
     onComplete({ liveKwh, costSoFar, elapsed, sessionId });
