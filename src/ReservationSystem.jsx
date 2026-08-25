@@ -728,17 +728,15 @@ const AIAssistantService = {
     const driftMin = Math.round((projectedArrival - arrivalTime.getTime()) / 60000);
     return driftMin;
   },
-  // Given a self-reported battery % and the vehicle's rated range, how far can it go
+   // Given a self-reported battery % and the vehicle's rated range, how far can it go
   // before the remaining distance becomes risky (15% safety margin)?
-{batteryRisk && !rerouteDismissed && (alternative ? (
-  ...
-  At {batteryPct}% battery your estimated range may not comfortably cover the {distanceKm.toFixed(1)}km to {station.name}.
-  ...
-) : (
-  ...
-  At {batteryPct}% battery, your estimated range may not comfortably cover the {distanceKm.toFixed(1)}km to {station.name}. No closer open station was found nearby.
-  ...
-))},
+  isBatteryRisk(batteryPct, ratedRangeKm, remainingDistanceKm) {
+    if (batteryPct == null) return false;
+    if (batteryPct <= 15) return true; // critically low — flag regardless of distance data
+    if (!ratedRangeKm || remainingDistanceKm == null) return false; // can't verify range yet — handled separately, never reported as "safe"
+    const remainingRangeKm = ratedRangeKm * (batteryPct / 100);
+    return remainingRangeKm < remainingDistanceKm * 1.15;
+  },
   // Nearest station to a position, excluding the current one, with open bays.
   nearestAlternative(pos, stations, excludeStationId) {
     return stations
