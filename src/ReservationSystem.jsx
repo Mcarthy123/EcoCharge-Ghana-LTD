@@ -730,13 +730,15 @@ const AIAssistantService = {
   },
   // Given a self-reported battery % and the vehicle's rated range, how far can it go
   // before the remaining distance becomes risky (15% safety margin)?
-  isBatteryRisk(batteryPct, ratedRangeKm, remainingDistanceKm) {
-    if (batteryPct == null) return false;
-    if (batteryPct <= 15) return true; // critically low — flag regardless of distance data
-    if (!ratedRangeKm || remainingDistanceKm == null) return false; // can't verify range yet — handled separately, never reported as "safe"
-    const remainingRangeKm = ratedRangeKm * (batteryPct / 100);
-    return remainingRangeKm < remainingDistanceKm * 1.15;
-  },
+{batteryRisk && !rerouteDismissed && (alternative ? (
+  ...
+  At {batteryPct}% battery your estimated range may not comfortably cover the {distanceKm.toFixed(1)}km to {station.name}.
+  ...
+) : (
+  ...
+  At {batteryPct}% battery, your estimated range may not comfortably cover the {distanceKm.toFixed(1)}km to {station.name}. No closer open station was found nearby.
+  ...
+))},
   // Nearest station to a position, excluding the current one, with open bays.
   nearestAlternative(pos, stations, excludeStationId) {
     return stations
@@ -1008,7 +1010,7 @@ const ratedRangeKm = bookedVehicle?.estimated_range || FALLBACK_ESTIMATED_RANGE_
   </Card>
 )}
 
-{batteryRisk && !rerouteDismissed && (alternative ? (
+{batteryRisk && !rerouteDismissed && distanceKm != null && (alternative ? (
   <Card T={T} style={{ padding:16, marginBottom:14, background:"rgba(251,191,36,0.08)", border:"1px solid rgba(251,191,36,0.35)" }}>
     <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}>
       <i className="fas fa-robot" style={{ color:T.yellow }}/>
