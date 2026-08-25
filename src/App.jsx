@@ -2555,7 +2555,7 @@ if (phase === 'charging' || phase === 'stopping') return (
         </button>
       </div>
 
-      <div style={{ flex:1,overflowY:'auto',padding:'16px 16px 24px' }}>
+      <div style={{ flex:1,overflowY:'auto',padding:'16px 16px 110px' }}>
 
         {/* Station card */}
         <div style={{ background:T.card,borderRadius:16,border:`1px solid ${T.border}`,padding:"14px",marginBottom:14,display:"flex",gap:12 }}>
@@ -3132,10 +3132,10 @@ function Profile({ go,user,setUser,onMenu }) {
                 <div style={{ width:1,background:T.border,alignSelf:"stretch" }}/>
                 <div style={{ flex:1,display:"flex",flexDirection:"column",gap:10,justifyContent:"center" }}>
                   {[
-                    { icon:"fa-star", label:"Earn points", sub:"Every charge" },
-                    { icon:"fa-gift", label:"Redeem rewards", sub:"Great offers & more" },
+                    { icon:"fa-star", label:"Earn points", sub:"Every charge", screen:"rewards" },
+                    { icon:"fa-gift", label:"Redeem rewards", sub:"Great offers & more", screen:"rewards" },
                   ].map(r=>(
-                    <div key={r.label} className="tap" style={{ display:"flex",alignItems:"center",gap:10,cursor:"pointer" }}>
+                    <div key={r.label} className="tap" onClick={()=>go(r.screen)} style={{ display:"flex",alignItems:"center",gap:10,cursor:"pointer" }}>
                       <div style={{ width:30,height:30,borderRadius:8,background:"rgba(34,197,94,0.15)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
                         <i className={`fas ${r.icon}`} style={{ fontSize:12,color:T.green }}/>
                       </div>
