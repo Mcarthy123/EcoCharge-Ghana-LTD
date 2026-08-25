@@ -1295,8 +1295,11 @@ function LiveChargingSession({ T, go, booking, user, ctx, onComplete }) {
       await sbPost(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, "rpc/award_points", {
         p_user_id:user.id, p_action_key:"reservation_completed", p_source_type:"reservation", p_source_id:booking.reference
       });
-      await sbPost(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, "rpc/award_points", {
+            await sbPost(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, "rpc/award_points", {
         p_user_id:user.id, p_action_key:"first_session", p_source_type:"reservation", p_source_id:sessionId
+      });
+      await sbPost(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, "rpc/process_referral_completion", {
+        p_user_id:user.id, p_session_id:sessionId
       });
     } catch(e) {}
     await NotificationService.send(user.id, "charging_completed", "Session Complete", `You used ${liveKwh.toFixed(2)} kWh for GH₵${costSoFar.toFixed(2)}.`, { session_id:sessionId }, ctx);
