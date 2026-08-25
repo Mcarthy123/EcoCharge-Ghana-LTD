@@ -230,6 +230,43 @@ const WalletService = {
   },
 };
 
+// ── TRIP LOG SERVICE (real trip logging — powers EcoRewards trip_completed points) ──
+const TripLogService = {
+  async start({ userId, vehicleId, originLabel, destinationLabel, distanceKm, stopsCount, SUPABASE_URL, SUPABASE_ANON, getToken }) {
+    if (!SUPABASE_URL || !userId) return null;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/ai_trips`, {
+        method:"POST",
+        headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json", Prefer:"return=representation" },
+        body: JSON.stringify({ user_id:userId, vehicle_id:vehicleId||null, origin_label:originLabel, destination_label:destinationLabel, distance_km:distanceKm, stops_count:stopsCount, status:"in_progress" }),
+      });
+      const data = await res.json();
+      return Array.isArray(data) ? data[0] : null;
+    } catch(e) { return null; }
+  },
+  // arrived=true only when GPS confirms proximity to the destination — no
+  // points are awarded for simply tapping "End Trip" from somewhere else.
+  async finish({ tripId, userId, arrived, SUPABASE_URL, SUPABASE_ANON, getToken }) {
+    if (!SUPABASE_URL || !tripId) return null;
+    const status = arrived ? "completed" : "ended_early";
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/ai_trips?id=eq.${tripId}`, {
+        method:"PATCH",
+        headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json", Prefer:"return=minimal" },
+        body: JSON.stringify({ status, completed_at:new Date().toISOString() }),
+      });
+      if (arrived && userId) {
+        await fetch(`${SUPABASE_URL}/rest/v1/rpc/award_points`, {
+          method:"POST",
+          headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json" },
+          body: JSON.stringify({ p_user_id:userId, p_action_key:"trip_completed", p_source_type:"trip", p_source_id:tripId }),
+        });
+      }
+    } catch(e) {}
+    return null;
+  },
+};
+
 // ── NOTIFICATION SERVICE (writes to the same `notifications` table the rest of the app uses) ──
 const NotificationService = {
   _readLog() {
@@ -986,10 +1023,10 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
   const [error, setError] = useState("");
   const [trip, setTrip] = useState(null);
   const [walletBal, setWalletBal] = useState(null);
-  const [currentPos, setCurrentPos] = useState(null);
+   const [currentPos, setCurrentPos] = useState(null);
   const [nextStopIdx, setNextStopIdx] = useState(0);
+  const [tripRecordId, setTripRecordId] = useState(null);
   const watchIdRef = useRef(null);
-
   useEffect(()=>{
     if (!user?.id) return;
     WalletService.getBalance(user.id, SUPABASE_URL, SUPABASE_ANON, getToken).then(setWalletBal);
@@ -1021,15 +1058,28 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
     }
   };
 
-  const startTrip = () => {
+   const startTrip = () => {
     setStep("trip");
     setNextStopIdx(0);
     watchIdRef.current = GoogleMapsService.watchPosition((pos) => setCurrentPos(pos), () => {});
+    TripLogService.start({
+      userId: user?.id, vehicleId: selectedVehicle?.id,
+      originLabel: fromPlace?.label, destinationLabel: toPlace?.label,
+      distanceKm: trip?.distanceKm, stopsCount: trip?.stops?.length || 0,
+      SUPABASE_URL, SUPABASE_ANON, getToken,
+    }).then(row => { if (row) setTripRecordId(row.id); });
   };
 
-  const endTrip = () => {
+   const endTrip = () => {
     GoogleMapsService.clearWatch(watchIdRef.current);
     watchIdRef.current = null;
+    if (tripRecordId) {
+      const arrivedAtDestination = currentPos && toPlace
+        ? haversine(currentPos.lat, currentPos.lng, toPlace.lat, toPlace.lng) <= 2
+        : false;
+      TripLogService.finish({ tripId: tripRecordId, userId: user?.id, arrived: arrivedAtDestination, SUPABASE_URL, SUPABASE_ANON, getToken });
+      setTripRecordId(null);
+    }
     setStep("results");
   };
 
