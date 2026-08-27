@@ -3075,7 +3075,7 @@ function Profile({ go,user,setUser,onMenu }) {
       <div style={{ flex:1,overflowY:"auto",padding:"18px 14px 100px" }}>
         {user ? (
           <>
-            <div className="fade" style={{ background:T.highlightGrad2,borderRadius:20,padding:"22px",marginBottom:18,border:`1px solid ${T.greenDim}` }}>
+            <div className="fade" style={{ background:T.highlightGrad2,borderRadius:20,padding:"22px",marginBottom:18,border:`1px solid ${T.greenDim}`,position:"relative" }}>
               <div style={{ display:"flex",alignItems:"flex-start",gap:16,marginBottom:18 }}>
                 <div style={{ position:"relative",flexShrink:0 }}>
                   <div style={{ width:78,height:78,borderRadius:"50%",overflow:"hidden",border:`2.5px solid ${T.green}` }}>
@@ -3091,7 +3091,7 @@ function Profile({ go,user,setUser,onMenu }) {
                   <input ref={fileRef} type="file" accept="image/*" onChange={handlePhoto} style={{ display:"none" }}/>
                 </div>
                 <div style={{ flex:1,minWidth:0,paddingTop:2 }}>
-                  <div style={{ fontWeight:800,fontSize:19,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{(user.name||user.email?.split("@")[0]||"").replace(/\s/g,"")}</div>
+                  <div style={{ fontWeight:800,fontSize:19,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user.name||user.email?.split("@")[0]||""}</div>
                   <div style={{ fontSize:13,color:T.muted,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user.email||user.phone}</div>
                   <div style={{ display:"inline-flex",alignItems:"center",gap:6,background:"rgba(34,197,94,0.15)",borderRadius:8,padding:"4px 10px",marginTop:10 }}>
                     <i className="fas fa-check-circle" style={{ fontSize:11,color:T.green }}/>
@@ -3100,7 +3100,7 @@ function Profile({ go,user,setUser,onMenu }) {
                 </div>
               </div>
               <div style={{ position:"absolute",top:22,right:22 }}>
-                <button className="tap" style={{ background:"none",border:`1px solid ${T.green}55`,borderRadius:10,padding:"8px 14px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:7 }}>
+                <button onClick={()=>go("editprofile")} className="tap" style={{ background:"none",border:`1px solid ${T.green}55`,borderRadius:10,padding:"8px 14px",fontSize:12,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:7 }}>
                   <i className="fas fa-pencil-alt" style={{ fontSize:11 }}/> Edit Profile
                 </button>
               </div>
@@ -4348,6 +4348,70 @@ function ReferAndEarnScreen({ go, user }) {
             <Badge label={r.status==="completed"?"Earned":"Awaiting first charge"} color={r.status==="completed"?T.green:T.yellow}/>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+function EditProfileScreen({ go, user, setUser }) {
+  const [name, setName] = useState(user?.name || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const submit = async () => {
+    if (!name.trim()) { setError("Enter your name"); return; }
+    setSaving(true); setError("");
+    try {
+      await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        method:"PUT",
+        headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json" },
+        body: JSON.stringify({ data:{ full_name:name.trim() } }),
+      });
+      await fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}`, {
+        method:"PATCH",
+        headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json", Prefer:"return=minimal" },
+        body: JSON.stringify({ full_name:name.trim() }),
+      });
+      setUser({ ...user, name:name.trim() });
+      setSuccess(true);
+    } catch(e) { setError("Could not update profile. Try again."); }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Edit Profile" sub="Update your account details" onBack={()=>go("profile")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 100px" }}>
+        {success ? (
+          <div style={{ textAlign:"center",padding:"40px 20px" }}>
+            <div style={{ width:64,height:64,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}>
+              <i className="fas fa-check" style={{ fontSize:26,color:"#000" }}/>
+            </div>
+            <div style={{ fontWeight:800,fontSize:16,color:T.green,marginBottom:8 }}>Profile Updated</div>
+            <button onClick={()=>go("profile")} className="tap" style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 24px",fontSize:13,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>Done</button>
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Full Name</div>
+            <input value={name} onChange={e=>{ setName(e.target.value); setError(""); }} placeholder="Your full name"
+              style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px 14px",color:T.text,fontSize:14,fontFamily:"inherit",marginBottom:16 }}/>
+
+            <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Email</div>
+            <div style={{ background:T.surfaceFaint,borderRadius:12,padding:"13px 14px",color:T.mutedLight,fontSize:14,marginBottom:6 }}>{user?.email || "—"}</div>
+            <div style={{ fontSize:11,color:T.muted,marginBottom:20,lineHeight:1.6 }}>Email changes require verification and aren't supported here yet — contact support to change your email.</div>
+
+            <div style={{ fontSize:11,color:T.muted,marginBottom:20,lineHeight:1.6 }}>
+              <i className="fas fa-camera" style={{ marginRight:6 }}/>To change your profile photo, tap the camera icon on your picture on the main Profile page.
+            </div>
+
+            {error && <div style={{ background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",borderRadius:10,padding:"11px 14px",marginBottom:14,color:T.red,fontSize:12 }}>{error}</div>}
+
+            <button onClick={submit} disabled={saving} className="tap"
+              style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+              {saving?"Saving…":"Save Changes"}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -8359,7 +8423,7 @@ function SettingsScreen({ go, user, setUser, onMenu }) {
               }
             </div>
             <div style={{ flex:1,minWidth:0 }}>
-              <div style={{ fontWeight:700,fontSize:15,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{(user.name||user.email?.split("@")[0]||"").replace(/\s/g,"")}</div>
+              <div style={{ fontWeight:700,fontSize:15,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user.name||user.email?.split("@")[0]||""}</div>
               <div style={{ fontSize:12,color:T.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user.email}</div>
               <div style={{ display:"inline-flex",alignItems:"center",gap:5,marginTop:8,background:"rgba(34,197,94,0.15)",borderRadius:7,padding:"3px 9px" }}>
                 <i className="fas fa-check-circle" style={{ fontSize:10,color:T.green }}/>
