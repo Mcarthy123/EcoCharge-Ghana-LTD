@@ -867,10 +867,12 @@ function ActiveBookingDashboard({ T, go, booking, station, user, ctx, stations, 
   useEffect(()=>{
     if (isExpired && !expiredRef.current) {
       expiredRef.current = true;
-      (async ()=>{
+           (async ()=>{
         await BookingService.expire(booking.reference, ctx);
         const result = await ReliabilityService.adjust(user.id, ReliabilityService.POINTS.noShow, "No-show — grace period expired", ctx);
         await NotificationService.send(user.id, "system", "Reservation Expired", `Your reservation at ${booking.station} expired after the grace period. Reliability score ${result.delta} → ${result.score}.`, { reference:booking.reference }, ctx);
+        const myEntry = await QueueService.getMyPosition(booking.charger_id, user.id, ctx);
+        if (myEntry) await QueueService.leave(myEntry.id, ctx);
         await QueueService.advanceNext(booking.charger_id, ctx);
         onExpired();
       })();
@@ -893,12 +895,16 @@ function ActiveBookingDashboard({ T, go, booking, station, user, ctx, stations, 
     }
   }, [canGoInHere]);
 
-  const cancelBooking = async () => {
+    const cancelBooking = async () => {
     setCancelling(true);
     await BookingService.cancel(booking.reference, "Cancelled by user", ctx);
     // Cancelling well before arrival is good behaviour — small score bump, no penalty.
     const early = now < arrivalTime.getTime() - 5*60000;
     if (early) await ReliabilityService.adjust(user.id, ReliabilityService.POINTS.earlyCancel, "Cancelled early", ctx);
+    // Remove OUR OWN queue entry (if any) before offering the charger to the next person —
+    // previously this was skipped, leaving cancelled/expired users stuck in the queue forever.
+    const myEntry = await QueueService.getMyPosition(booking.charger_id, user.id, ctx);
+    if (myEntry) await QueueService.leave(myEntry.id, ctx);
     await QueueService.advanceNext(booking.charger_id, ctx);
     setCancelling(false);
     onCancelled();
