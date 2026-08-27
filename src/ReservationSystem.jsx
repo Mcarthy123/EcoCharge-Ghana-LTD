@@ -1957,13 +1957,13 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
   };
   // Handoff from the AI Route Planner / Driver Assistant "Reserve" buttons —
   // jumps straight into the reservation form instead of the station list.
-  useEffect(()=>{
+   useEffect(()=>{
     if (!pendingReservation?.station || subLoading) return;
     (async()=>{
-                 <div style={{ fontWeight:800,fontSize:18,color:T.text,marginBottom:10 }}>Monthly Reservation Limit Reached</div>
-        <div style={{ fontSize:13,color:T.muted,lineHeight:1.8,marginBottom:28,maxWidth:320 }}>
-          Your free plan allows {FREE_TIER_RESERVATION_LIMIT} reservations per month. This resets at the start of next month — or upgrade to EcoCharge Pro for unlimited reservations right away.
-        </div>
+      if (!hasUnlimitedReservations) {
+        const count = await ReservationLimitService.monthlyCount(user.id, ctx);
+        if (count >= FREE_TIER_RESERVATION_LIMIT) { setStep("limit"); onPendingConsumed?.(); return; }
+      }
       const stationChargers = await StationService.loadChargers(pendingReservation.station.id, ctx);
       const available = stationChargers.find(c => StationService.chargerStatus(c) === "Available");
       const chosenCharger = available || stationChargers[0] || { id: "auto", price_per_kwh: DEFAULT_PRICE_PER_KWH, power_kw: DEFAULT_CHARGER_KW };
@@ -1986,7 +1986,7 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
     </div>
   );
 
-  if (step==="list") return <StationList T={T} go={go} stations={stations} onSelect={(s)=>{ setStation(s); setStep("detail"); }} onOpenFleet={()=>setStep("fleet")}/>;
+  if (step==="list") return <StationList T={T} go={go} stations={stations} onSelect={(s)=>{ setStation(s); setStep("detail"); }} onOpenFleet={()=>go("fleetdashboard")}/>;
 
   if (step==="limit") return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
@@ -1995,9 +1995,9 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
         <div style={{ width:72,height:72,borderRadius:"50%",background:`${T.green}18`,border:`2px solid ${T.green}44`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:20 }}>
           <i className="fas fa-calendar-check" style={{ fontSize:28,color:T.green }}/>
         </div>
-        <div style={{ fontWeight:800,fontSize:18,color:T.text,marginBottom:10 }}>Reservation Limit Reached</div>
+              <div style={{ fontWeight:800,fontSize:18,color:T.text,marginBottom:10 }}>Monthly Reservation Limit Reached</div>
         <div style={{ fontSize:13,color:T.muted,lineHeight:1.8,marginBottom:28,maxWidth:320 }}>
-          Your free plan allows {FREE_TIER_RESERVATION_LIMIT} active reservation at a time. Upgrade to EcoCharge Pro for unlimited reservations.
+          Your free plan allows {FREE_TIER_RESERVATION_LIMIT} reservations per month. This resets at the start of next month — or upgrade to EcoCharge Pro for unlimited reservations right away.
         </div>
         <button onClick={()=>go("subscription")} className="tap"
           style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px 32px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
@@ -2007,9 +2007,9 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
     </div>
   );
 
-  if (step==="fleet") return (
-    <FleetDashboard T={T} go={go} user={user} stations={stations} ctx={ctx} onBack={()=>setStep("list")}/>
-  );
+    // Fleet Dashboard is a separate, subscription-gated feature — the "Fleet"
+  // button below hands off to it directly rather than using the local
+  // ungated FleetDashboard defined earlier in this file.
 
   if (step==="detail" && station) return (
     <StationDetailPro T={T} go={go} station={station} ctx={ctx}
