@@ -718,10 +718,16 @@ function Auth({ mode, onBack, onSuccess }) {
   const [error,setErr]        = useState("");
   const [success,setSuccess]  = useState("");
   const [referralCode,setReferralCode] = useState(()=>{ try { return localStorage.getItem("eco_referral_code")||""; } catch(e){ return ""; } });
+  const [pendingLogin,setPendingLogin] = useState(null);
+  const [mfaCode,setMfaCode] = useState("");
   const call = async (ep,body) => {
     if (!SUPABASE_URL) return { access_token:"demo",id:"demo" };
     const r = await fetch(`${SUPABASE_URL}/auth/v1/${ep}`,{ method:"POST",headers:{ apikey:SUPABASE_ANON,"Content-Type":"application/json" },body:JSON.stringify(body) });
     return r.json();
+  };
+
+    const finalizeLogin = (tokens, userId) => {
+    onSuccess({ email,name:name||email.split("@")[0],token:tokens.access_token||"demo",refreshToken:tokens.refresh_token||null,expiresAt:tokens.expires_in?Date.now()+tokens.expires_in*1000:null,id:userId });
   };
 
   const submitEmail = async () => {
@@ -732,7 +738,7 @@ function Auth({ mode, onBack, onSuccess }) {
     const d = mode==="login"
       ? await call("token?grant_type=password",{ email,password })
       : await call("signup",{ email,password,data:{ full_name:name } });
-       if (d.access_token||d.id||d.user) {
+    if (d.access_token||d.id||d.user) {
       const newUserId = d.user?.id||"demo";
       if (mode==="register" && referralCode.trim() && newUserId!=="demo") {
         try {
@@ -740,8 +746,42 @@ function Auth({ mode, onBack, onSuccess }) {
           localStorage.removeItem("eco_referral_code");
         } catch(e) {}
       }
-      onSuccess({ email,name:name||email.split("@")[0],token:d.access_token||"demo",refreshToken:d.refresh_token||null,expiresAt:d.expires_in?Date.now()+d.expires_in*1000:null,id:newUserId });
+      // If this account has a verified 2FA factor, require the code before finishing sign-in.
+      if (mode==="login" && d.access_token) {
+        try {
+          const factorsRes = await fetch(`${SUPABASE_URL}/auth/v1/factors`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${d.access_token}` } });
+          const factorsData = await factorsRes.json();
+          const verifiedFactor = Array.isArray(factorsData) ? factorsData.find(f=>f.status==="verified") : null;
+          if (verifiedFactor) {
+            const challengeRes = await fetch(`${SUPABASE_URL}/auth/v1/factors/${verifiedFactor.id}/challenge`, {
+              method:"POST", headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${d.access_token}`, "Content-Type":"application/json" },
+            });
+            const challengeData = await challengeRes.json();
+            setPendingLogin({ factorId:verifiedFactor.id, challengeId:challengeData.id, baseTokens:d, userId:newUserId });
+            setLoad(false);
+            return;
+          }
+        } catch(e) {}
+      }
+      finalizeLogin(d, newUserId);
     } else { setErr(d.error_description||d.msg||"Something went wrong. Try again."); }
+    setLoad(false);
+  };
+
+  const verifyMfaLogin = async () => {
+    if (!pendingLogin || !mfaCode.trim()) { setErr("Enter your 6-digit code"); return; }
+    setLoad(true); setErr("");
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/factors/${pendingLogin.factorId}/verify`, {
+        method:"POST", headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${pendingLogin.baseTokens.access_token}`, "Content-Type":"application/json" },
+        body: JSON.stringify({ challenge_id: pendingLogin.challengeId, code: mfaCode.trim() }),
+      });
+      const data = await res.json();
+      if (data.access_token) {
+        finalizeLogin(data, pendingLogin.userId);
+        setPendingLogin(null); setMfaCode("");
+      } else { setErr(data.error_description||data.msg||"Invalid code. Try again."); }
+    } catch(e) { setErr("Network error verifying code."); }
     setLoad(false);
   };
 
@@ -792,6 +832,30 @@ function Auth({ mode, onBack, onSuccess }) {
       <i className={`fas ${icon}`} style={{ position:"absolute",left:16,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:14,zIndex:1 }}/>
       <input type={type} placeholder={ph} value={val} onChange={e=>{ set(e.target.value);setErr(""); }}
         style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 14px 14px 46px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+    </div>
+  );
+
+   if (pendingLogin) return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <div style={{ padding:"52px 18px 14px",display:"flex",alignItems:"center" }}>
+        <button onClick={()=>{ setPendingLogin(null); setMfaCode(""); setErr(""); }} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
+          <i className="fas fa-arrow-left" style={{ fontSize:20,color:T.text }}/>
+        </button>
+      </div>
+      <div style={{ flex:1,overflowY:"auto",padding:"0 24px 40px" }}>
+        <div style={{ textAlign:"center",marginBottom:28,marginTop:8 }}>
+          <i className="fas fa-shield-alt" style={{ fontSize:40,color:T.green,marginBottom:14,display:"block" }}/>
+          <div style={{ fontWeight:800,fontSize:22,color:T.text }}>Two-Factor Authentication</div>
+          <div style={{ fontSize:13,color:T.muted,marginTop:8 }}>Enter the 6-digit code from your authenticator app</div>
+        </div>
+        <input type="number" placeholder="000000" value={mfaCode} onChange={e=>{ setMfaCode(e.target.value); setErr(""); }}
+          style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"16px",color:T.text,fontSize:26,fontFamily:"monospace",letterSpacing:8,textAlign:"center",marginBottom:16 }}/>
+        {error && <div style={{ color:T.red,fontSize:12,marginBottom:14,background:"rgba(248,113,113,.08)",borderRadius:8,padding:"10px 14px" }}>{error}</div>}
+        <button onClick={verifyMfaLogin} disabled={loading} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:16,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+          {loading?"Verifying…":"Verify & Sign In"}
+        </button>
+      </div>
     </div>
   );
 
@@ -4412,6 +4476,282 @@ function EditProfileScreen({ go, user, setUser }) {
             </button>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+function ChangePasswordScreen({ go, user }) {
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const submit = async () => {
+    if (!currentPw || !newPw || !confirmPw) { setError("Fill in all fields"); return; }
+    if (newPw.length < 6) { setError("New password must be at least 6 characters"); return; }
+    if (newPw !== confirmPw) { setError("New passwords don't match"); return; }
+    setLoading(true); setError("");
+    try {
+      const reauth = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method:"POST", headers:{ apikey:SUPABASE_ANON, "Content-Type":"application/json" },
+        body: JSON.stringify({ email:user.email, password:currentPw }),
+      });
+      const reauthData = await reauth.json();
+      if (!reauthData.access_token) { setError("Current password is incorrect."); setLoading(false); return; }
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        method:"PUT", headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${reauthData.access_token}`, "Content-Type":"application/json" },
+        body: JSON.stringify({ password:newPw }),
+      });
+      const data = await res.json();
+      if (data.id) { setSuccess(true); setCurrentPw(""); setNewPw(""); setConfirmPw(""); }
+      else setError(data.error_description||data.msg||"Could not update password.");
+    } catch(e) { setError("Network error. Try again."); }
+    setLoading(false);
+  };
+
+  const inp = (ph,val,set) => (
+    <input type="password" placeholder={ph} value={val} onChange={e=>{ set(e.target.value); setError(""); }}
+      style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px 14px",color:T.text,fontSize:14,fontFamily:"inherit",marginBottom:12 }}/>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Change Password" sub="Update your account password" onBack={()=>go("settings")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 100px" }}>
+        {success ? (
+          <div style={{ textAlign:"center",padding:"40px 20px" }}>
+            <div style={{ width:64,height:64,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}>
+              <i className="fas fa-check" style={{ fontSize:26,color:"#000" }}/>
+            </div>
+            <div style={{ fontWeight:800,fontSize:16,color:T.green,marginBottom:8 }}>Password Updated</div>
+            <div style={{ fontSize:13,color:T.muted,marginBottom:20 }}>Use your new password next time you sign in.</div>
+            <button onClick={()=>go("settings")} className="tap" style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 24px",fontSize:13,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit" }}>Done</button>
+          </div>
+        ) : (
+          <>
+            {inp("Current password", currentPw, setCurrentPw)}
+            {inp("New password", newPw, setNewPw)}
+            {inp("Confirm new password", confirmPw, setConfirmPw)}
+            {error && <div style={{ background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",borderRadius:10,padding:"11px 14px",marginBottom:14,color:T.red,fontSize:12 }}>{error}</div>}
+            <button onClick={submit} disabled={loading} className="tap"
+              style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+              {loading?"Updating…":"Update Password"}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TwoFactorScreen({ go, getToken }) {
+  const [loading, setLoading] = useState(true);
+  const [factor, setFactor] = useState(null);
+  const [enrolling, setEnrolling] = useState(false);
+  const [pendingFactor, setPendingFactor] = useState(null);
+  const [challengeId, setChallengeId] = useState(null);
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [disabling, setDisabling] = useState(false);
+
+  const loadFactors = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/factors`, { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` } });
+      const data = await res.json();
+      setFactor(Array.isArray(data) ? data.find(f=>f.status==="verified")||null : null);
+    } catch(e) {}
+    setLoading(false);
+  };
+  useEffect(()=>{ loadFactors(); },[]);
+
+  const startEnroll = async () => {
+    setEnrolling(true); setError("");
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/factors`, {
+        method:"POST", headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json" },
+        body: JSON.stringify({ factor_type:"totp", friendly_name:"EcoCharge" }),
+      });
+      const data = await res.json();
+      if (data.id) setPendingFactor(data);
+      else setError(data.error_description||data.msg||"Could not start 2FA enrollment.");
+    } catch(e) { setError("Network error."); }
+    setEnrolling(false);
+  };
+
+  const confirmEnroll = async () => {
+    if (!code.trim()) { setError("Enter the 6-digit code from your app"); return; }
+    setVerifying(true); setError("");
+    try {
+      let cid = challengeId;
+      if (!cid) {
+        const chRes = await fetch(`${SUPABASE_URL}/auth/v1/factors/${pendingFactor.id}/challenge`, {
+          method:"POST", headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json" },
+        });
+        const chData = await chRes.json();
+        cid = chData.id;
+        setChallengeId(cid);
+      }
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/factors/${pendingFactor.id}/verify`, {
+        method:"POST", headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}`, "Content-Type":"application/json" },
+        body: JSON.stringify({ challenge_id: cid, code: code.trim() }),
+      });
+      const data = await res.json();
+      if (data.access_token) { setPendingFactor(null); setCode(""); setChallengeId(null); await loadFactors(); }
+      else setError(data.error_description||data.msg||"Incorrect code. Try again.");
+    } catch(e) { setError("Network error."); }
+    setVerifying(false);
+  };
+
+  const disable2FA = async () => {
+    if (!factor) return;
+    setDisabling(true);
+    try {
+      await fetch(`${SUPABASE_URL}/auth/v1/factors/${factor.id}`, { method:"DELETE", headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` } });
+      setFactor(null);
+    } catch(e) {}
+    setDisabling(false);
+  };
+
+  if (loading) return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Two-Factor Authentication" onBack={()=>go("settings")}/>
+      <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center" }}><Spinner/></div>
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Two-Factor Authentication" sub="Secure your account with an authenticator app" onBack={()=>go("settings")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"20px 16px 100px" }}>
+        {factor && !pendingFactor && (
+          <>
+            <div style={{ background:"rgba(34,197,94,0.08)",border:`1px solid ${T.green}44`,borderRadius:16,padding:"18px",marginBottom:20,textAlign:"center" }}>
+              <i className="fas fa-shield-alt" style={{ fontSize:28,color:T.green,marginBottom:10 }}/>
+              <div style={{ fontWeight:800,fontSize:15,color:T.green,marginBottom:6 }}>2FA is enabled</div>
+              <div style={{ fontSize:12,color:T.muted }}>Your account requires a code from your authenticator app to sign in.</div>
+            </div>
+            <button onClick={disable2FA} disabled={disabling} className="tap"
+              style={{ width:"100%",background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:14,padding:"14px",fontSize:14,fontWeight:700,color:T.red,cursor:"pointer",fontFamily:"inherit" }}>
+              {disabling?"Disabling…":"Disable Two-Factor Authentication"}
+            </button>
+          </>
+        )}
+        {!factor && !pendingFactor && (
+          <>
+            <div style={{ fontSize:13,color:T.muted,lineHeight:1.8,marginBottom:20 }}>
+              Add an extra layer of security. Once enabled, you'll need a 6-digit code from an authenticator app (Google Authenticator, Microsoft Authenticator, Authy) every time you sign in.
+            </div>
+            <button onClick={startEnroll} disabled={enrolling} className="tap"
+              style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+              {enrolling?"Starting…":"Enable Two-Factor Authentication"}
+            </button>
+          </>
+        )}
+        {pendingFactor && (
+          <>
+            <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}>1. Scan this QR code</div>
+            <div style={{ background:"#fff",borderRadius:16,padding:20,marginBottom:16,display:"flex",justifyContent:"center" }}
+              dangerouslySetInnerHTML={{ __html: pendingFactor.totp?.qr_code || "" }}/>
+            <div style={{ fontSize:11,color:T.muted,marginBottom:6 }}>Can't scan? Enter this code manually:</div>
+            <div style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",marginBottom:20,fontFamily:"monospace",fontSize:13,color:T.green,letterSpacing:1,wordBreak:"break-all" }}>
+              {pendingFactor.totp?.secret}
+            </div>
+            <div style={{ fontWeight:700,fontSize:14,color:T.text,marginBottom:12 }}>2. Enter the 6-digit code</div>
+            <input type="number" placeholder="000000" value={code} onChange={e=>{ setCode(e.target.value); setError(""); }}
+              style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px",color:T.text,fontSize:22,fontFamily:"monospace",letterSpacing:6,textAlign:"center",marginBottom:14 }}/>
+            {error && <div style={{ background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",borderRadius:10,padding:"11px 14px",marginBottom:14,color:T.red,fontSize:12 }}>{error}</div>}
+            <button onClick={confirmEnroll} disabled={verifying} className="tap"
+              style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",marginBottom:10 }}>
+              {verifying?"Verifying…":"Confirm & Enable"}
+            </button>
+            <button onClick={()=>{ setPendingFactor(null); setCode(""); setError(""); }} className="tap"
+              style={{ width:"100%",background:"none",border:"none",color:T.muted,fontSize:13,cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ActiveSessionsScreen({ go }) {
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [revoking, setRevoking] = useState(null);
+  const [signingOutOthers, setSigningOutOthers] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    const data = await sb("rpc/list_my_sessions", { method:"POST", body: JSON.stringify({}) });
+    setSessions(Array.isArray(data) ? data : []);
+    setLoading(false);
+  };
+  useEffect(()=>{ load(); },[]);
+
+  const revoke = async (id) => {
+    setRevoking(id);
+    await sb("rpc/revoke_my_session", { method:"POST", body: JSON.stringify({ p_session_id:id }) });
+    setSessions(prev => prev.filter(s=>s.id!==id));
+    setRevoking(null);
+  };
+
+  const signOutOthers = async () => {
+    setSigningOutOthers(true);
+    const count = await sb("rpc/revoke_other_sessions", { method:"POST", body: JSON.stringify({}) });
+    setMsg(`Signed out of ${count||0} other session${count===1?"":"s"}`);
+    setTimeout(()=>setMsg(""),3000);
+    load();
+    setSigningOutOthers(false);
+  };
+
+  const fmtWhen = (iso) => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff/60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins/60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return new Date(iso).toLocaleDateString("en-GH",{day:"numeric",month:"short"});
+  };
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Active Sessions" sub="Devices signed into your account" onBack={()=>go("settings")}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 16px 100px" }}>
+        {loading && <div style={{ textAlign:"center",padding:"40px 0" }}><Spinner/></div>}
+        {!loading && sessions.length===0 && (
+          <div style={{ textAlign:"center",padding:"40px 20px",color:T.muted,fontSize:13 }}>No session data available.</div>
+        )}
+        {sessions.length > 1 && (
+          <button onClick={signOutOthers} disabled={signingOutOthers} className="tap"
+            style={{ width:"100%",background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:12,padding:"13px",fontSize:13,fontWeight:700,color:T.red,cursor:"pointer",fontFamily:"inherit",marginBottom:16 }}>
+            {signingOutOthers?"Signing out…":"Sign Out All Other Sessions"}
+          </button>
+        )}
+        {msg && <div style={{ fontSize:12,color:T.green,marginBottom:14,fontWeight:700,textAlign:"center" }}>{msg}</div>}
+        {sessions.map(s=>(
+          <div key={s.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${s.is_current?T.green:T.border}`,padding:14,marginBottom:10,display:"flex",alignItems:"center",gap:12 }}>
+            <div style={{ width:38,height:38,borderRadius:10,background:s.is_current?`${T.green}18`:T.surfaceFaint,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+              <i className="fas fa-mobile-alt" style={{ fontSize:15,color:s.is_current?T.green:T.muted }}/>
+            </div>
+            <div style={{ flex:1,minWidth:0 }}>
+              <div style={{ fontWeight:700,fontSize:12,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+                {s.user_agent}{s.is_current && <span style={{ color:T.green,fontWeight:700 }}> · This device</span>}
+              </div>
+              <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>Last active {fmtWhen(s.updated_at)} · {s.ip}</div>
+            </div>
+            {!s.is_current && (
+              <button onClick={()=>revoke(s.id)} disabled={revoking===s.id} className="tap"
+                style={{ background:"none",border:"none",color:T.red,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0 }}>
+                {revoking===s.id?"…":"Sign Out"}
+              </button>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -8347,8 +8687,7 @@ function PickerModal({ T, title, options, value, onSelect, onClose }) {
 
 function SettingsScreen({ go, user, setUser, onMenu }) {
   const { mode, toggleTheme } = useTheme();
-  const [notifications, setNotifications] = useState(true);
-  const [twoFactor, setTwoFactor] = useState(true);
+   const [notifications, setNotifications] = useState(true);
   const [avatar, setAvatar] = useState(null);
   const [toast, setToast] = useState(null);
   const [showDelete, setShowDelete] = useState(false);
@@ -8445,10 +8784,10 @@ function SettingsScreen({ go, user, setUser, onMenu }) {
           <Row icon="fa-tachometer-alt" label="Units" sub="Choose measurement units" value={units} onPress={()=>setPicker("units")} last/>
         </Section>
 
-        <Section title="Account & Security">
-          <Row icon="fa-shield-alt" iconColor={T.blue} label="Security" sub="Change password, PIN & biometrics" onPress={()=>showToast("Security settings")}/>
-          <Row icon="fa-lock" iconColor={T.green} label="Two-Factor Authentication" sub="Add an extra layer of security" toggle toggleValue={twoFactor} onToggle={()=>setTwoFactor(v=>!v)} value={twoFactor?"Enabled":"Disabled"}/>
-          <Row icon="fa-mobile-alt" iconColor={T.yellow} label="Active Sessions" sub="Manage your active sessions" value="2 sessions" onPress={()=>showToast("Active session management")} last/>
+                <Section title="Account & Security">
+          <Row icon="fa-shield-alt" iconColor={T.blue} label="Security" sub="Change your password" onPress={()=>go("changepassword")}/>
+          <Row icon="fa-lock" iconColor={T.green} label="Two-Factor Authentication" sub="Add an extra layer of security" onPress={()=>go("twofactor")}/>
+          <Row icon="fa-mobile-alt" iconColor={T.yellow} label="Active Sessions" sub="Manage your active sessions" onPress={()=>go("activesessions")} last/>
         </Section>
 
         <Section title="App Settings">
@@ -8860,6 +9199,9 @@ useEffect(()=>{
     rewards:        <EcoRewardsScreen go={goSecure} user={user}/>,
     ecorewardsadmin:<AdminEcoRewards go={goSecure} user={user}/>,
     referrals:      <ReferAndEarnScreen go={goSecure} user={user}/>,
+    changepassword: <ChangePasswordScreen go={goSecure} user={user}/>,
+    twofactor:      <TwoFactorScreen go={goSecure} getToken={getToken}/>,
+    activesessions: <ActiveSessionsScreen go={goSecure}/>,
     home:           <Home {...props}/>,
     map:            <MapScreen {...props}/>,
     detail:         <Detail {...props}/>,
