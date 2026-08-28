@@ -349,13 +349,18 @@ const PulseDot = ({ color }) => (
 );
 
 // ── STATION LIST (entry picker) ────────────────────────────────
-function StationList({ T, go, stations, onSelect, onOpenFleet }) {
+function StationList({ T, go, stations, onSelect, onOpenFleet, reservationBadge }) {
   const [search, setSearch] = useState("");
   const filtered = search ? stations.filter(s=>s.name.toLowerCase().includes(search.toLowerCase())||s.city.toLowerCase().includes(search.toLowerCase())) : stations;
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header T={T} title="Reserve a Charger" sub="Commercial reservation platform" onBack={()=>go("home")}
-        right={<button onClick={onOpenFleet} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}><i className="fas fa-truck"/> Fleet</button>}/>
+        right={
+          <div style={{ display:"flex",alignItems:"center",gap:12 }}>
+            {reservationBadge && <Badge label={reservationBadge} color={T.yellow}/>}
+            <button onClick={onOpenFleet} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5 }}><i className="fas fa-truck"/> Fleet</button>
+          </div>
+        }/>
       <div style={{ padding:"14px 16px" }}>
         <div style={{ position:"relative" }}>
           <i className="fas fa-search" style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:13 }}/>
@@ -371,8 +376,8 @@ function StationList({ T, go, stations, onSelect, onOpenFleet }) {
                 <div style={{ fontWeight:700,fontSize:14,color:T.text }}>{s.name}</div>
                 <div style={{ fontSize:11,color:T.muted,marginTop:3 }}>{s.city} · {s.bays} bays</div>
               </div>
-              <div style={{ textAlign:"right" }}>
-                <div style={{ fontWeight:700,fontSize:13,color:s.open>0?T.green:T.red }}>{s.open}/{s.bays} open</div>
+                           <div style={{ textAlign:"right" }}>
+                <div style={{ fontWeight:700,fontSize:13,color:s.open>0?T.green:T.red }}>{Math.min(s.open, s.bays)}/{s.bays} open</div>
                 <div style={{ fontSize:10,color:T.muted,marginTop:2 }}>{s.time} wait</div>
               </div>
             </div>
@@ -384,7 +389,7 @@ function StationList({ T, go, stations, onSelect, onOpenFleet }) {
 }
 
 // ── STATION DETAIL (real-time charger status) ──────────────────
-function StationDetailPro({ T, go, station, onChargeNow, onReserve, ctx, onBack, onOpenHistory }) {
+function StationDetailPro({ T, go, station, onChargeNow, onReserve, ctx, onBack, onOpenHistory, subLoading }) {
   const [chargers, setChargers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [queueLengths, setQueueLengths] = useState({});
@@ -448,9 +453,9 @@ function StationDetailPro({ T, go, station, onChargeNow, onReserve, ctx, onBack,
                     <i className="fas fa-bolt" style={{ marginRight:6 }}/>Charge Now
                   </button>
                 )}
-                <button onClick={()=>onReserve(c)} className="tap"
-                  style={{ background: status==="Available" ? T.surface : `linear-gradient(135deg,${T.green},${T.greenDark})`, border: status==="Available" ? `1px solid ${T.border}` : "none", borderRadius:10,padding:"11px",fontSize:12,fontWeight:700, color: status==="Available" ? T.text : "#000", cursor:"pointer",fontFamily:"inherit" }}>
-                  <i className="fas fa-calendar-check" style={{ marginRight:6 }}/>{status==="Available" ? "Reserve for Later" : "Join Queue / Reserve"}
+                              <button onClick={()=>onReserve(c)} disabled={subLoading} className="tap"
+                  style={{ background: status==="Available" ? T.surface : `linear-gradient(135deg,${T.green},${T.greenDark})`, border: status==="Available" ? `1px solid ${T.border}` : "none", borderRadius:10,padding:"11px",fontSize:12,fontWeight:700, color: status==="Available" ? T.text : "#000", cursor:subLoading?"default":"pointer",fontFamily:"inherit",opacity:subLoading?0.6:1 }}>
+                  <i className="fas fa-calendar-check" style={{ marginRight:6 }}/>{subLoading ? "Checking your plan…" : status==="Available" ? "Reserve for Later" : "Join Queue / Reserve"}
                 </button>
               </div>
             </Card>
@@ -776,15 +781,40 @@ function ActiveBookingDashboard({ T, go, booking, station, user, ctx, stations, 
 
   useEffect(()=>{ const t=setInterval(()=>setNow(Date.now()), 1000); return ()=>clearInterval(t); }, []);
 
+   const locateAttempt = () => {
+    setLocStatus("locating");
+    // Try a quick high-accuracy fix first; if that fails or times out, fall back
+    // to a lower-accuracy fix (uses cell/wifi positioning) which resolves much
+    // faster indoors or with a weak GPS signal, instead of hanging forever.
+    navigator.geolocation?.getCurrentPosition(
+      pos => {
+        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setCurrentPos(p);
+        setLocStatus("ok");
+        if (station?.lat && station?.lng) setDistanceKm(haversine(p.lat, p.lng, station.lat, station.lng));
+      },
+      () => {
+        navigator.geolocation?.getCurrentPosition(
+          pos => {
+            const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            setCurrentPos(p);
+            setLocStatus("ok");
+            if (station?.lat && station?.lng) setDistanceKm(haversine(p.lat, p.lng, station.lat, station.lng));
+          },
+          () => setLocStatus("error"),
+          { enableHighAccuracy:false, timeout:8000, maximumAge:30000 }
+        );
+      },
+      { enableHighAccuracy:true, timeout:6000, maximumAge:0 }
+    );
+  };
+
   useEffect(()=>{
-    GeoService.getCurrentPosition().then(pos=>{
-      setCurrentPos(pos);
-      setLocStatus("ok");
-      if (station?.lat && station?.lng) setDistanceKm(haversine(pos.lat, pos.lng, station.lat, station.lng));
-    }).catch(()=>{ setLocStatus("error"); });
+    locateAttempt();
     if (station?.lat && station?.lng) {
       watchRef.current = GeoService.watchPosition(pos=>{
         setCurrentPos(pos);
+        setLocStatus("ok");
         setDistanceKm(haversine(pos.lat, pos.lng, station.lat, station.lng));
         gpsSamplesRef.current = [...gpsSamplesRef.current.slice(-4), { pos, t: Date.now() }];
         setSpeedKmh(AIAssistantService.estimateSpeedKmh(gpsSamplesRef.current));
@@ -986,7 +1016,12 @@ const ratedRangeKm = bookedVehicle?.estimated_range || FALLBACK_ESTIMATED_RANGE_
   {usingFallbackRange && " (Using a typical EV range estimate since this vehicle doesn't have one saved yet.)"}
 </div>
 {locStatus === "locating" && distanceKm == null && <div style={{ fontSize:11,color:T.blue,marginBottom:10 }}><i className="fas fa-location-crosshairs" style={{ marginRight:6 }}/>Locating you to check range…</div>}
-{locStatus === "error" && distanceKm == null && <div style={{ fontSize:11,color:T.red,marginBottom:10 }}><i className="fas fa-exclamation-triangle" style={{ marginRight:6 }}/>Location access is off or unavailable — enable location for this site/app so the range check can work.</div>}
+{locStatus === "error" && distanceKm == null && (
+  <div style={{ fontSize:11,color:T.red,marginBottom:10 }}>
+    <i className="fas fa-exclamation-triangle" style={{ marginRight:6 }}/>Location access is off or unavailable — enable location for this site/app so the range check can work.
+    <button onClick={locateAttempt} className="tap" style={{ display:"block",marginTop:8,background:"none",border:`1px solid ${T.red}55`,borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,color:T.red,cursor:"pointer",fontFamily:"inherit" }}>Try Again</button>
+  </div>
+)}
             <div style={{ display:"flex",gap:8 }}>
               <input type="number" min="0" max="100" placeholder="e.g. 35" value={batteryInput} onChange={e=>setBatteryInput(e.target.value)}
                 style={{ flex:1,background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 12px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
@@ -1932,13 +1967,19 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
   const [reservePrefill, setReservePrefill] = useState(null);
   const [subLoading, setSubLoading] = useState(true);
   const [hasUnlimitedReservations, setHasUnlimitedReservations] = useState(false);
-
-  const ctx = { SUPABASE_URL, SUPABASE_ANON, getToken };
+  const [monthlyUsed, setMonthlyUsed] = useState(0);
+   const ctx = { SUPABASE_URL, SUPABASE_ANON, getToken };
 
   useEffect(()=>{
     if (!user?.id || !SUPABASE_URL) return;
     sbGet(SUPABASE_URL, SUPABASE_ANON, getToken, `user_vehicles?user_id=eq.${user.id}&order=created_at.asc`).then(v=>setVehicles(Array.isArray(v)?v:[]));
   }, [user]);
+
+  const refreshMonthlyCount = () => {
+    if (!user?.id) return;
+    ReservationLimitService.monthlyCount(user.id, ctx).then(setMonthlyUsed);
+  };
+  useEffect(()=>{ refreshMonthlyCount(); }, [user?.id]);
 
   // Pro, Home+, and all Fleet tiers get unlimited reservations. Free tier is
   // capped at FREE_TIER_RESERVATION_LIMIT — see HONESTY NOTE at top of file.
@@ -1953,7 +1994,12 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
     })();
   }, [user?.id]);
 
-  const tryReserve = async (chosenCharger) => {
+    const tryReserve = async (chosenCharger) => {
+    // Guard against a race condition: if the subscription check hasn't finished
+    // yet, hasUnlimitedReservations is still its default (false) — evaluating the
+    // free-tier limit against that would wrongly block paid-tier users who tap
+    // Reserve the instant this screen opens.
+    if (subLoading) return;
     if (!hasUnlimitedReservations) {
       const count = await ReservationLimitService.monthlyCount(user.id, ctx);
       if (count >= FREE_TIER_RESERVATION_LIMIT) { setStep("limit"); return; }
@@ -1992,8 +2038,9 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
     </div>
   );
 
-  if (step==="list") return <StationList T={T} go={go} stations={stations} onSelect={(s)=>{ setStation(s); setStep("detail"); }} onOpenFleet={()=>go("fleetdashboard")}/>;
-
+  if (step==="list") return <StationList T={T} go={go} stations={stations} onSelect={(s)=>{ setStation(s); setStep("detail"); }} onOpenFleet={()=>go("fleetdashboard")}
+    reservationBadge={!subLoading && !hasUnlimitedReservations ? `${monthlyUsed}/${FREE_TIER_RESERVATION_LIMIT} this month` : null}
+  />;
   if (step==="limit") return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
       <Header T={T} title="Reserve a Charger" onBack={()=>setStep("list")}/>
@@ -2017,8 +2064,8 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
   // button below hands off to it directly rather than using the local
   // ungated FleetDashboard defined earlier in this file.
 
-  if (step==="detail" && station) return (
-    <StationDetailPro T={T} go={go} station={station} ctx={ctx}
+   if (step==="detail" && station) return (
+    <StationDetailPro T={T} go={go} station={station} ctx={ctx} subLoading={subLoading}
       onBack={()=>setStep("list")}
       onOpenHistory={()=>setStep("history")}
       onChargeNow={(c)=>{ setCharger(c); go("detail"); /* hands off to existing Charge Now flow */ }}
@@ -2029,7 +2076,7 @@ export default function ReservationSystem({ go, user, stations, T, getToken, SUP
   if (step==="reserve" && station && charger) return (
     <ReservationFlow T={T} go={go} station={station} charger={charger} user={user} vehicles={vehicles} ctx={ctx}
       onBack={()=>{ const cameFromHandoff = !!reservePrefill; setReservePrefill(null); setStep(cameFromHandoff?"list":"detail"); }}
-      onConfirmed={(b)=>{ setReservePrefill(null); setBooking(b); setStep("dashboard"); }}
+      onConfirmed={(b)=>{ setReservePrefill(null); setBooking(b); refreshMonthlyCount(); setStep("dashboard"); }}
       prefill={reservePrefill}
     />
   );
