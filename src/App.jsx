@@ -645,6 +645,7 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => {
     { icon:"fa-house-signal", label:"EcoCharge Home+", screen:"homeplus", color:T.green },
     { icon:"fa-star",             label:"Subscription",    screen:"subscription", color:T.green },
     { icon:"fa-layer-group",      label:"Fleet Dashboard", screen:"fleetdashboard", color:T.green },
+    { icon:"fa-building",         label:"For Station Owners", screen:"https://ecocharge-os.vercel.app", color:T.blue, external:true },
           { icon:"fa-info-circle",      label:"About EcoCharge", screen:"about"         },
           { icon:"fa-list-alt",         label:"Charging History", screen:"sessions",    color:T.green  },
           { icon:"fa-wallet",           label:"My Wallet",       screen:"wallet",       color:T.yellow },
@@ -656,7 +657,7 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => {
           { icon:"fa-car",              label:"Vehicle Registry", screen:"vehicleregistry", color:T.blue, adminOnly:true },
           { icon:"fa-gift",             label:"EcoRewards Admin", screen:"ecorewardsadmin", color:T.green, adminOnly:true },
         ].filter(item=>!item.adminOnly || user?.is_admin).map(item=>(
-          <div key={item.label} className="tap row" onClick={()=>{ go(item.screen);onClose(); }}
+          <div key={item.label} className="tap row" onClick={()=>{ if(item.external){ window.open(item.screen,"_blank"); } else { go(item.screen); } onClose(); }}
             style={{ display:"flex",alignItems:"center",gap:14,padding:"16px 20px",borderBottom:`1px solid ${T.border}20` }}>
             <i className={`fas ${item.icon}`} style={{ fontSize:16,color:item.color||T.mutedLight,width:20,textAlign:"center" }}/>
             <span style={{ color:T.text,fontSize:14,fontWeight:500,flex:1 }}>{item.label}</span>
