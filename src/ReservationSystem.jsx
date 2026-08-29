@@ -1113,7 +1113,7 @@ const ratedRangeKm = bookedVehicle?.estimated_range || FALLBACK_ESTIMATED_RANGE_
               { label:"Arrival Time", value:fmtTime(arrivalTime) },
               { label:"Est. Cost", value:`GH₵${booking.amount}` },
               { label:"Grace Period", value:`${booking.grace_period_min||GRACE_PERIOD_MIN} min` },
-              { label:"Distance", value: distanceKm!=null?`${distanceKm.toFixed(2)} km`:(locStatus==="error"?"Unavailable":"Locating…") },
+              { label:"Distance", value: distanceKm!=null ? `${distanceKm.toFixed(2)} km` : locStatus==="error" ? "Unavailable" : (!station?.lat || !station?.lng) ? "Station location unknown" : "Locating…" },
             ].map(r=>(
               <div key={r.label} style={{ background:T.surfaceFaint,borderRadius:10,padding:"10px 12px" }}>
                 <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase" }}>{r.label}</div>
