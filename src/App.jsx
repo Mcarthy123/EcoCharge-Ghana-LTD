@@ -645,7 +645,7 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => {
     { icon:"fa-house-signal", label:"EcoCharge Home+", screen:"homeplus", color:T.green },
     { icon:"fa-star",             label:"Subscription",    screen:"subscription", color:T.green },
     { icon:"fa-layer-group",      label:"Fleet Dashboard", screen:"fleetdashboard", color:T.green },
-    { icon:"fa-store",            label:"For Station Owners", screen:"https://ecocharge-os.vercel.app", color:T.blue, external:true },
+    { icon:"fa-users",            label:"For Station Owners", screen:"https://ecocharge-os.vercel.app", color:T.blue, external:true },
           { icon:"fa-info-circle",      label:"About EcoCharge", screen:"about"         },
           { icon:"fa-list-alt",         label:"Charging History", screen:"sessions",    color:T.green  },
           { icon:"fa-wallet",           label:"My Wallet",       screen:"wallet",       color:T.yellow },
