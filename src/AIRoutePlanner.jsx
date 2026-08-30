@@ -1186,15 +1186,43 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
     </div>
   );
 
-  if (step === "results" && trip) {
+   if (step === "results" && trip) {
     const recs = AIEngine.tripRecommendations(trip, walletBal);
+
+    // Real per-leg distance/time, derived from the stops already computed by
+    // TripPlannerService — no invented numbers, just reshaped for the timeline.
+    const legs = trip.feasible ? (() => {
+      let prevKm = 0;
+      const arr = trip.stops.map(s => {
+        const leg = { km: s.alongKm - prevKm, min: s.driveMinToReach };
+        prevKm = s.alongKm;
+        return leg;
+      });
+      const lastKm = trip.distanceKm - prevKm;
+      const usedMin = trip.stops.reduce((a,s)=>a+(s.driveMinToReach||0),0);
+      const lastMin = Math.max(0, trip.driveDurationMin - usedMin);
+      return { arr, lastKm, lastMin };
+    })() : null;
+
+    const batteryColor = (pct) => pct <= 15 ? T.red : pct <= 35 ? T.yellow : T.green;
+
     return (
       <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
         <div style={{ padding:"calc(14px + env(safe-area-inset-top,34px)) 18px 14px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${T.border}` }}>
           <button onClick={onBack} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
             <i className="fas fa-arrow-left" style={{ fontSize:20,color:T.text }}/>
           </button>
-          <div style={{ fontWeight:800,fontSize:16,color:T.text }}>Trip Plan</div>
+          <div style={{ flex:1 }}>
+            <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+              <div style={{ fontWeight:800,fontSize:16,color:T.text }}>AI Route Planner</div>
+              <Badge label="BETA" color={T.green}/>
+            </div>
+            <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Optimized charging stops for your trip</div>
+          </div>
+          <button onClick={()=>setStep("input")} className="tap"
+            style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"8px 12px",fontSize:11,fontWeight:700,color:T.text,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}>
+            <i className="fas fa-sliders-h"/> Edit
+          </button>
         </div>
 
         <div style={{ flex:1,overflowY:"auto",padding:"14px 14px 110px" }}>
@@ -1206,16 +1234,30 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
             </GlassCard>
           ) : (
             <>
+              {/* From / To summary */}
+              <GlassCard T={T} style={{ padding:14, marginBottom:14 }}>
+                <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:10 }}>
+                  <i className="fas fa-circle" style={{ fontSize:9,color:T.green }}/>
+                  <span style={{ fontSize:13,color:T.text,fontWeight:600,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{fromPlace?.label||"Origin"}</span>
+                </div>
+                <div style={{ width:1,height:14,background:T.border,marginLeft:4,marginBottom:6 }}/>
+                <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                  <i className="fas fa-map-marker-alt" style={{ fontSize:11,color:T.red }}/>
+                  <span style={{ fontSize:13,color:T.text,fontWeight:600,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{toPlace?.label||"Destination"}</span>
+                </div>
+              </GlassCard>
+
               <div style={{ height:220,borderRadius:18,overflow:"hidden",marginBottom:14,border:`1px solid ${T.border}` }}>
                 <RouteMap T={T} route={trip.route} stops={trip.stops} destination={toPlace} origin={fromPlace}/>
               </div>
 
-             <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:14 }}>
+              {/* Summary stats — matches the 4-metric row from the mockup */}
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:14 }}>
                 {[
-                  { label:"Total Distance",   value:`${trip.distanceKm.toFixed(0)} km`, icon:"fa-road" },
-                  { label:"Total Time",       value:`${Math.floor(trip.durationMin/60)}h ${Math.round(trip.durationMin%60)}m`, icon:"fa-clock" },
-                  { label:"Total Charge Time",value: trip.totalChargingTime>0?`${trip.totalChargingTime} min`:"0 min", icon:"fa-bolt" },
-                  { label:"Est. Total Cost",  value:`GH₵${trip.totalChargingCost.toFixed(2)}`, icon:"fa-wallet" },
+                  { label:"Total Distance",     value:`${trip.distanceKm.toFixed(0)} km`, icon:"fa-road" },
+                  { label:"Est. Travel Time",    value:`${Math.floor(trip.driveDurationMin/60)}h ${Math.round(trip.driveDurationMin%60)}m`, icon:"fa-clock" },
+                  { label:"Est. Charging Time",  value: trip.totalChargingTime>0?`${trip.totalChargingTime} min`:"0 min", icon:"fa-bolt" },
+                  { label:"Total Stops",         value: trip.stops.length, icon:"fa-map-marker-alt" },
                 ].map(s=>(
                   <div key={s.label} style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"12px 6px",textAlign:"center" }}>
                     <i className={`fas ${s.icon}`} style={{ fontSize:14,color:T.green,marginBottom:6,display:"block" }}/>
@@ -1225,34 +1267,102 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
                 ))}
               </div>
 
-              <GlassCard T={T} style={{ padding:16, marginBottom:14, display:"flex", gap:14, alignItems:"center" }}>
-                <div style={{ width:56,height:56,borderRadius:12,overflow:"hidden",flexShrink:0,background:T.surfaceFaint,display:"flex",alignItems:"center",justifyContent:"center" }}>
-                  {selectedVehicle?.image_url
-                    ? <img src={selectedVehicle.image_url} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} onError={e=>e.target.style.display="none"}/>
-                    : <i className="fas fa-car" style={{ fontSize:22,color:T.green,opacity:0.5 }}/>}
-                </div>
-                <div style={{ flex:1,minWidth:0 }}>
-                  <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:3 }}>Vehicle</div>
-                  <div style={{ fontWeight:700,fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{selectedVehicle?.nickname||"—"}</div>
-                  <div style={{ fontSize:10,color:T.muted,marginTop:1 }}>{selectedVehicle?.manufacturer} {selectedVehicle?.model}</div>
-                </div>
-                <div style={{ display:"flex",flexDirection:"column",gap:6,flexShrink:0 }}>
-                  <div style={{ display:"flex",alignItems:"center",gap:6,justifyContent:"flex-end" }}>
-                    <i className="fas fa-battery-three-quarters" style={{ fontSize:11,color:T.green }}/>
-                    <span style={{ fontSize:11,color:T.muted }}>Start</span>
-                    <span style={{ fontSize:12,fontWeight:800,color:T.green }}>{batteryPct}%</span>
+              {/* Route Overview — vertical timeline with real battery levels at each point */}
+              <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:10 }}>Route Overview</div>
+              <GlassCard T={T} style={{ padding:16, marginBottom:14 }}>
+                <div style={{ display:"flex",alignItems:"flex-start",gap:10,marginBottom:6 }}>
+                  <div style={{ width:22,height:22,borderRadius:"50%",border:`2px solid ${T.green}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1 }}>
+                    <div style={{ width:8,height:8,borderRadius:"50%",background:T.green }}/>
                   </div>
-                  <div style={{ display:"flex",alignItems:"center",gap:6,justifyContent:"flex-end" }}>
-                    <i className="fas fa-battery-quarter" style={{ fontSize:11,color: trip.batteryAtArrivalPct<15?T.red:T.yellow }}/>
-                    <span style={{ fontSize:11,color:T.muted }}>Arrival</span>
-                    <span style={{ fontSize:12,fontWeight:800,color: trip.batteryAtArrivalPct<15?T.red:T.yellow }}>{trip.batteryAtArrivalPct}%</span>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ fontWeight:700,fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{fromPlace?.label||"Origin"}</div>
+                  </div>
+                  <div style={{ display:"flex",alignItems:"center",gap:5,flexShrink:0 }}>
+                    <i className="fas fa-battery-full" style={{ fontSize:11,color:batteryColor(batteryPct) }}/>
+                    <span style={{ fontSize:12,fontWeight:800,color:batteryColor(batteryPct) }}>{batteryPct}%</span>
+                  </div>
+                </div>
+
+                {trip.stops.map((s,i)=>(
+                  <div key={s.id}>
+                    <div style={{ display:"flex",alignItems:"center",gap:10,padding:"6px 0 6px 10px" }}>
+                      <div style={{ width:1,height:20,background:T.border }}/>
+                      <div style={{ fontSize:11,color:T.muted }}>
+                        <i className="fas fa-car-side" style={{ marginRight:6 }}/>Drive {legs.arr[i].km.toFixed(0)} km · {Math.round(legs.arr[i].min)} min
+                      </div>
+                    </div>
+                    <div style={{ display:"flex",alignItems:"flex-start",gap:10,marginBottom:6 }}>
+                      <div style={{ width:22,height:22,borderRadius:"50%",background:T.green,color:"#000",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:10,fontWeight:800 }}>{i+1}</div>
+                      <div style={{ flex:1,minWidth:0 }}>
+                        <div style={{ display:"flex",alignItems:"center",gap:8,flexWrap:"wrap" }}>
+                          <span style={{ fontWeight:700,fontSize:13,color:T.text }}>{s.name}</span>
+                          <Badge label="Fast Charger" color={T.green}/>
+                        </div>
+                        <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Charge for {s.chargeMinutes} min ({s.arrivalBatteryPct}% → {s.chargeToPct}%)</div>
+                      </div>
+                      <div style={{ display:"flex",alignItems:"center",gap:5,flexShrink:0 }}>
+                        <i className="fas fa-battery-three-quarters" style={{ fontSize:11,color:batteryColor(s.chargeToPct) }}/>
+                        <span style={{ fontSize:12,fontWeight:800,color:batteryColor(s.chargeToPct) }}>{s.chargeToPct}%</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <div style={{ display:"flex",alignItems:"center",gap:10,padding:"6px 0 6px 10px" }}>
+                  <div style={{ width:1,height:20,background:T.border }}/>
+                  <div style={{ fontSize:11,color:T.muted }}>
+                    <i className="fas fa-car-side" style={{ marginRight:6 }}/>Drive {legs.lastKm.toFixed(0)} km · {Math.round(legs.lastMin)} min
+                  </div>
+                </div>
+                <div style={{ display:"flex",alignItems:"flex-start",gap:10 }}>
+                  <div style={{ width:22,height:22,borderRadius:"50%",background:T.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                    <i className="fas fa-flag-checkered" style={{ fontSize:9,color:"#fff" }}/>
+                  </div>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ fontWeight:700,fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{toPlace?.label||"Destination"}</div>
+                  </div>
+                  <div style={{ display:"flex",alignItems:"center",gap:5,flexShrink:0 }}>
+                    <i className="fas fa-battery-quarter" style={{ fontSize:11,color:batteryColor(trip.batteryAtArrivalPct) }}/>
+                    <span style={{ fontSize:12,fontWeight:800,color:batteryColor(trip.batteryAtArrivalPct) }}>{trip.batteryAtArrivalPct}%</span>
                   </div>
                 </div>
               </GlassCard>
 
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14 }}>
+              {/* Your Vehicle */}
+              <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:10 }}>Your Vehicle</div>
+              <GlassCard T={T} style={{ padding:16, marginBottom:14 }}>
+                <div style={{ display:"flex",alignItems:"center",gap:14,marginBottom:14 }}>
+                  <div style={{ width:64,height:64,borderRadius:14,overflow:"hidden",flexShrink:0,background:T.surfaceFaint,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                    {selectedVehicle?.image_url
+                      ? <img src={selectedVehicle.image_url} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} onError={e=>e.target.style.display="none"}/>
+                      : <i className="fas fa-car" style={{ fontSize:26,color:T.green,opacity:0.5 }}/>}
+                  </div>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ fontWeight:700,fontSize:14,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{selectedVehicle?.nickname||"—"}</div>
+                    <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{selectedVehicle?.manufacturer} {selectedVehicle?.model}</div>
+                  </div>
+                </div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12 }}>
+                  <div style={{ background:T.surfaceFaint,borderRadius:10,padding:"10px 12px" }}>
+                    <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase" }}>Est. Range</div>
+                    <div style={{ fontWeight:800,fontSize:15,color:T.text,marginTop:3 }}>{selectedVehicle?.estimated_range ? `${selectedVehicle.estimated_range} km` : "—"}</div>
+                  </div>
+                  <div style={{ background:T.surfaceFaint,borderRadius:10,padding:"10px 12px" }}>
+                    <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase" }}>Consumption</div>
+                    <div style={{ fontWeight:800,fontSize:15,color:T.text,marginTop:3 }}>{Math.round(trip.consumptionPerKm*1000)} Wh/km</div>
+                  </div>
+                </div>
+                <div style={{ fontSize:11,color:T.muted,marginBottom:6,display:"flex",justifyContent:"space-between" }}>
+                  <span>Battery (at trip start)</span><span style={{ fontWeight:700,color:batteryColor(batteryPct) }}>{batteryPct}%</span>
+                </div>
+                <div style={{ height:8,borderRadius:4,background:T.track,overflow:"hidden" }}>
+                  <div style={{ height:"100%",width:`${batteryPct}%`,background:batteryColor(batteryPct),borderRadius:4 }}/>
+                </div>
+              </GlassCard>
+
+              {/* Wallet + Traffic — kept, just re-homed below the new sections */}
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14 }}>
                 {[
-                  { label:"Charging Stops", value: trip.stops.length },
                   { label:"Wallet Balance", value: walletBal!=null?`GH₵${(walletBal/100).toFixed(0)}`:"—" },
                   { label:"Traffic", value: trip.traffic.label, color: trip.traffic.label==="Heavy"?T.yellow:T.green },
                 ].map(r=>(
@@ -1262,6 +1372,7 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
                   </div>
                 ))}
               </div>
+
               {recs.length>0 && (
                 <GlassCard T={T} style={{ padding:16, marginBottom:14, background:T.highlightGrad2 }}>
                   <div style={{ fontWeight:800,fontSize:13,color:T.green,marginBottom:10 }}><i className="fas fa-brain" style={{ marginRight:8 }}/>Smart Recommendations</div>
@@ -1276,7 +1387,7 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
                 </GlassCard>
               ) : (
                 <>
-                  <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:10 }}>Charging Stops</div>
+                  <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:10 }}>Charging Stop Details</div>
                   {trip.stops.map((s,i)=>(
                     <GlassCard key={s.id} T={T} style={{ padding:16, marginBottom:10 }}>
                       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
@@ -1328,6 +1439,22 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
               </div>
             </>
           )}
+        </div>
+
+        <div style={{ position:"fixed",bottom:0,left:0,right:0,display:"flex",justifyContent:"space-around",padding:"10px 0 calc(10px + env(safe-area-inset-bottom,0px))",borderTop:`1px solid ${T.border}`,background:T.bg,zIndex:50 }}>
+          {[
+            { label:"Home",      icon:"fa-home",          action:()=>go("home") },
+            { label:"Stations",  icon:"fa-map-marker-alt", action:()=>go("map") },
+            { label:"AI Planner",icon:"fa-route",          action:()=>{}, active:true },
+            { label:"Bookings",  icon:"fa-calendar-alt",   action:()=>go("reservations") },
+            { label:"Account",   icon:"fa-user",           action:()=>go("profile") },
+          ].map(item=>(
+            <button key={item.label} onClick={item.action} className="tap"
+              style={{ background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,fontFamily:"inherit",minWidth:56 }}>
+              <i className={`fas ${item.icon}`} style={{ fontSize:18,color:item.active?T.green:T.muted }}/>
+              <span style={{ fontSize:10,fontWeight:item.active?700:500,color:item.active?T.green:T.muted }}>{item.label}</span>
+            </button>
+          ))}
         </div>
       </div>
     );
