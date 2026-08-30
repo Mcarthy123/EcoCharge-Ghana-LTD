@@ -5698,9 +5698,33 @@ function SessionManager({ go, user }) {
   );
 }
 
+// ── MULTI-MARKET CURRENCY SYSTEM ──────────────────────────────
+// Each country EcoCharge operates in is a self-contained "market" with its
+// own currency — no cross-border conversion (by design). To add a new
+// country later, add one line here; nothing else in this file needs to
+// change for that market's own users/stations to work correctly.
+const MARKETS = {
+  GH: { name:"Ghana", currency:"GHS", symbol:"GH₵", locale:"en-GH" },
+  // NG: { name:"Nigeria",       currency:"NGN", symbol:"₦",   locale:"en-NG" },
+  // KE: { name:"Kenya",         currency:"KES", symbol:"KSh", locale:"en-KE" },
+  // ZA: { name:"South Africa",  currency:"ZAR", symbol:"R",   locale:"en-ZA" },
+};
+// Set once at login from the signed-in user's own country (see AppInner).
+// Defaults to Ghana for guests and any user with no country on record.
+let ACTIVE_MARKET = "GH";
+const setActiveMarket = (countryCode) => { if (MARKETS[countryCode]) ACTIVE_MARKET = countryCode; };
+const getMarket = (countryCode) => MARKETS[countryCode] || MARKETS.GH;
+
 const toGHS    = (p) => p != null ? (p / 100).toFixed(2) : "0.00";
 const toPesewas = (g) => Math.round(parseFloat(g) * 100);
-const fmtGHS   = (p) => `GH₵${toGHS(p)}`;
+// fmtGHS keeps its historical name so the ~100 existing call sites across
+// this file don't need to change today — it's now market-aware underneath.
+// Pass a second arg only to show a DIFFERENT market's price than the
+// current user's own (e.g. an admin viewing another country's data).
+const fmtGHS   = (p, countryCode = ACTIVE_MARKET) => `${getMarket(countryCode).symbol}${toGHS(p)}`;
+// Honestly-named alias — prefer this in any NEW code, since "GHS" is
+// misleading once other markets exist.
+const fmtMoney = fmtGHS;
 
 const TOP_UP_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000];
 
