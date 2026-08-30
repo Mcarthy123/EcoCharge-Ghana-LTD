@@ -708,7 +708,8 @@ function Splash({ onLogin, onRegister, onGuest }) {
 
 function Auth({ mode, onBack, onSuccess }) {
   const [tab,setTab]          = useState("email");
-  const [name,setPname]       = useState("");
+   const [name,setPname]       = useState("");
+  const [country,setCountry]  = useState("GH");
   const [email,setEmail]      = useState("");
   const [password,setPass]    = useState("");
   const [showPass,setShowPass]= useState(false);
@@ -739,8 +740,14 @@ function Auth({ mode, onBack, onSuccess }) {
     const d = mode==="login"
       ? await call("token?grant_type=password",{ email,password })
       : await call("signup",{ email,password,data:{ full_name:name } });
-    if (d.access_token||d.id||d.user) {
+       if (d.access_token||d.id||d.user) {
       const newUserId = d.user?.id||"demo";
+      if (mode==="register" && newUserId!=="demo") {
+        try {
+          await sb(`users?auth_id=eq.${newUserId}`,{ method:"PATCH",headers:{ Prefer:"return=minimal" },body:JSON.stringify({ country }) });
+          setActiveMarket(country);
+        } catch(e) {}
+      }
       if (mode==="register" && referralCode.trim() && newUserId!=="demo") {
         try {
           await sb("rpc/redeem_referral_code",{ method:"POST", body:JSON.stringify({ p_new_user_id:newUserId, p_code:referralCode.trim(), p_email:email }) });
@@ -874,7 +881,16 @@ function Auth({ mode, onBack, onSuccess }) {
         </div>
                 {tab==="email" && (
           <>
-            {mode==="register" && inp("Full name",name,setPname,"text","fa-user")}
+                       {mode==="register" && inp("Full name",name,setPname,"text","fa-user")}
+            {mode==="register" && (
+              <div style={{ position:"relative",marginBottom:14 }}>
+                <i className="fas fa-globe" style={{ position:"absolute",left:16,top:"50%",transform:"translateY(-50%)",color:T.muted,fontSize:14,zIndex:1 }}/>
+                <select value={country} onChange={e=>setCountry(e.target.value)}
+                  style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 14px 14px 46px",color:T.text,fontSize:14,fontFamily:"inherit",appearance:"none" }}>
+                  {Object.entries(MARKETS).map(([code,m])=>(<option key={code} value={code}>{m.name} ({m.currency})</option>))}
+                </select>
+              </div>
+            )}
             {mode==="register" && inp("Referral code (optional)",referralCode,setReferralCode,"text","fa-gift")}
             {inp("Email address",email,setEmail,"email","fa-envelope")}
             <div style={{ position:"relative",marginBottom:14 }}>
@@ -5792,7 +5808,7 @@ function WalletScreen({ go, user }) {
         const initRes = await fetch(OCPP_URL + '/api/payment/initialize', {
           method: 'POST',
           headers: { 'x-api-key': OCPP_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: user.email, amount_pesewas: amount, type: 'wallet_topup', metadata: { user_id: user.id, wallet_id: wallet?.id, type: 'wallet_topup' } })
+          body: JSON.stringify({ email: user.email, amount_pesewas: amount, currency: getMarket(ACTIVE_MARKET).currency, type: 'wallet_topup', metadata: { user_id: user.id, wallet_id: wallet?.id, type: 'wallet_topup' } })
         });
         const initData = await initRes.json();
         if (initData.reference && initData.authorization_url) {
@@ -9075,9 +9091,10 @@ useEffect(()=>{
     if (!user?.id || !SUPABASE_URL || user.is_admin !== undefined) return;
     (async()=>{
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}&select=is_admin`,
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/users?auth_id=eq.${user.id}&select=is_admin,country`,
           { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` }});
         const data = await res.json();
+        setActiveMarket(data?.[0]?.country || "GH");
         setUser({ ...user, is_admin: !!data?.[0]?.is_admin });
       } catch(e) { setUser({ ...user, is_admin:false }); }
     })();
