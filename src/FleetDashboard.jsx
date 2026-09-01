@@ -87,7 +87,17 @@ const SubHeader = ({ T, title, sub, onBack, right }) => (
 // Legacy alias — some earlier callers in this file used `Header`.
 const Header = SubHeader;
 
-const fmtGHS = (p) => p != null ? `GH₵${(p/100).toFixed(2)}` : "GH₵0.00";
+// ── MULTI-MARKET CURRENCY (mirrors App.jsx's system — this file is
+// self-contained per its own architecture, so it keeps its own copy) ──
+const MARKETS_FD = {
+  GH: { name:"Ghana", currency:"GHS", symbol:"GH₵", locale:"en-GH" },
+  // Add new markets here to match App.jsx's MARKETS as you launch them.
+};
+let ACTIVE_MARKET_FD = "GH";
+const setActiveMarketFD = (code) => { if (MARKETS_FD[code]) ACTIVE_MARKET_FD = code; };
+const getMarketFD = (code) => MARKETS_FD[code] || MARKETS_FD.GH;
+
+const fmtGHS = (p, countryCode = ACTIVE_MARKET_FD) => p != null ? `${getMarketFD(countryCode).symbol}${(p/100).toFixed(2)}` : `${getMarketFD(countryCode).symbol}0.00`;
 const toPesewas = (g) => Math.round(parseFloat(g) * 100);
 
 const sbGet = async (SUPABASE_URL, SUPABASE_ANON, getToken, path) => {
@@ -137,6 +147,12 @@ export default function FleetDashboard({ go, user, T, getToken, SUPABASE_URL, SU
   const [subLoading, setSubLoading] = useState(true);
   const [hasFleetSub, setHasFleetSub] = useState(false);
 
+  // Keep this module's currency in sync with the fleet owner's own market.
+  useEffect(()=>{
+    if (!user?.id || !SUPABASE_URL) return;
+    sbGet(...[SUPABASE_URL, SUPABASE_ANON, getToken], `users?auth_id=eq.${user.id}&select=country`)
+      .then(d => setActiveMarketFD(Array.isArray(d) && d[0]?.country || "GH"));
+  }, [user?.id]);
   const [fleet, setFleet] = useState(null);
   const [fleetName, setFleetName] = useState("");
   const [creating, setCreating] = useState(false);
