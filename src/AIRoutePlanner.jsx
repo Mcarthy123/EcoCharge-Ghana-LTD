@@ -567,6 +567,9 @@ const Spinner = ({ color }) => (
 const GlassCard = ({ T, children, style }) => (
   <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:18, backdropFilter:"blur(10px)", ...style }}>{children}</div>
 );
+const Badge = ({ label, color }) => (
+  <span style={{ background:`${color}1f`,color,fontSize:10,fontWeight:700,borderRadius:20,padding:"4px 10px",border:`1px solid ${color}44`,whiteSpace:"nowrap" }}>{label}</span>
+);
 
 const TONE_COLOR = (T, tone) => tone==="urgent" ? T.red : tone==="caution" ? T.yellow : tone==="good" ? T.green : T.blue;
 
