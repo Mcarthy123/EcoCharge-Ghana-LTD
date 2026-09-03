@@ -1097,14 +1097,18 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
 
   if (step === "input") return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <div style={{ padding:"calc(14px + env(safe-area-inset-top,34px)) 18px 14px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${T.border}`,background:T.bg }}>
+           <div style={{ padding:"calc(14px + env(safe-area-inset-top,34px)) 18px 14px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${T.border}`,background:T.bg }}>
         <button onClick={onBack} className="tap" style={{ background:"none",border:"none",cursor:"pointer",padding:4 }}>
           <i className="fas fa-arrow-left" style={{ fontSize:20,color:T.text }}/>
         </button>
-        <div>
+        <div style={{ flex:1 }}>
           <div style={{ fontWeight:800,fontSize:16,color:T.text }}>Plan a Trip</div>
           <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Smart trip planning with charging stops</div>
         </div>
+        <button onClick={()=>go("__assistant_mode")} className="tap"
+          style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:10,padding:"8px 12px",fontSize:11,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6 }}>
+          <i className="fas fa-robot"/> Driver Assistant
+        </button>
       </div>
 
       <div style={{ flex:1,overflowY:"auto",padding:"18px 16px 100px" }}>
@@ -1557,8 +1561,12 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
 }
 
 // ── TOP-LEVEL ENTRY — routes between Mode 2 (default) and Mode 1 ─────
-export default function AIRoutePlanner({ go, user, stations, T, getToken, SUPABASE_URL, SUPABASE_ANON, onReserve }) {
-  const [mode, setMode] = useState("assistant"); // assistant | planner
+export default function AIRoutePlanner({ go: goApp, user, stations, T, getToken, SUPABASE_URL, SUPABASE_ANON, onReserve }) {
+  const [mode, setMode] = useState("planner"); // assistant | planner — planner (trip input) is now the default landing screen
+  // Intercepts the "__assistant_mode" pseudo-screen used by the Driver
+  // Assistant toggle button, so it switches modes locally instead of
+  // trying to navigate the whole app to a screen that doesn't exist.
+  const go = (screen) => screen === "__assistant_mode" ? setMode("assistant") : goApp(screen);
   const [vehicles, setVehicles] = useState([]);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
 
