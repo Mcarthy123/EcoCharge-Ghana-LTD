@@ -5805,30 +5805,65 @@ function WalletScreen({ go, user }) {
     setPaying(true); setPayError('');
     try {
       if (OCPP_URL) {
-        const initRes = await fetch(OCPP_URL + '/api/payment/initialize', {
-          method: 'POST',
-          headers: { 'x-api-key': OCPP_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: user.email, amount_pesewas: amount, currency: getMarket(ACTIVE_MARKET).currency, type: 'wallet_topup', metadata: { user_id: user.id, wallet_id: wallet?.id, type: 'wallet_topup' } })
-        });
-        const initData = await initRes.json();
+         const initiateTopUp = async () => {
+    const amount = customAmt ? toPesewas(customAmt) : topupAmt;
+    if (amount < 500) { setPayError('Minimum top-up is GH₵5.00'); return; }
+    if (!user?.email) { setPayError('Email required for payment'); return; }
+    setPaying(true); setPayError('');
+    try {
+      if (OCPP_URL) {
+        let initRes;
+        try {
+          initRes = await fetch(OCPP_URL + '/api/payment/initialize', {
+            method: 'POST',
+            headers: { 'x-api-key': OCPP_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: user.email, amount_pesewas: amount, currency: getMarket(ACTIVE_MARKET).currency, type: 'wallet_topup', metadata: { user_id: user.id, wallet_id: wallet?.id, type: 'wallet_topup' } })
+          });
+        } catch(networkErr) {
+          setPayError('Could not reach payment server (network error): ' + String(networkErr));
+          setPaying(false);
+          return;
+        }
+        const rawText = await initRes.text();
+        if (!initRes.ok) {
+          setPayError(`Payment server error (${initRes.status}): ${rawText.slice(0,200)}`);
+          setPaying(false);
+          return;
+        }
+        let initData;
+        try { initData = JSON.parse(rawText); }
+        catch(parseErr) {
+          setPayError('Payment server returned an unexpected response: ' + rawText.slice(0,200));
+          setPaying(false);
+          return;
+        }
         if (initData.reference && initData.authorization_url) {
           try { localStorage.setItem('eco_topup', JSON.stringify({ ref: initData.reference, amount, userId: user.id })); } catch(e) {}
           window.location.href = initData.authorization_url;
           return;
         }
+        setPayError('Payment server did not return a checkout link: ' + JSON.stringify(initData).slice(0,200));
+        setPaying(false);
+        return;
       }
       const ref = 'WALLET-' + Date.now() + '-' + Math.random().toString(36).slice(2,7).toUpperCase();
       if (SUPABASE_URL) {
-        await fetch(SUPABASE_URL + '/rest/v1/topup_requests', {
+        const trRes = await fetch(SUPABASE_URL + '/rest/v1/topup_requests', {
           method: 'POST',
           headers: { apikey: SUPABASE_ANON, Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ wallet_id: wallet?.id, user_id: user.id, email: user.email, amount_pesewas: amount, payment_ref: ref, status: 'Pending' })
         });
+        if (!trRes.ok) {
+          const errText = await trRes.text().catch(()=>"");
+          setPayError(`Could not record top-up request (${trRes.status}): ${errText.slice(0,200)}`);
+          setPaying(false);
+          return;
+        }
       }
       try { localStorage.setItem('eco_topup', JSON.stringify({ ref, amount, userId: user.id })); } catch(e) {}
       window.location.href = 'https://paystack.shop/pay/bldaqwywt5?email=' + encodeURIComponent(user.email) + '&amount=' + amount + '&reference=' + ref;
     } catch(e) {
-      setPayError('Payment initiation failed. Please try again.');
+      setPayError('Payment initiation failed: ' + String(e));
     }
     setPaying(false);
   };
