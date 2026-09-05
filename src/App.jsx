@@ -1167,7 +1167,22 @@ function SolarWidget() {
 }
 
 function Home({ go,stations,setStation,user,onMenu }) {
-  const [search,setSearch] = useState("");
+    const [search,setSearch] = useState("");
+  const [vehicleReminder, setVehicleReminder] = useState(null);
+  useEffect(()=>{
+    if (!user?.id || !SUPABASE_URL) return;
+    (async()=>{
+      try {
+        const dismissedAt = parseInt(localStorage.getItem("eco_vreminder_dismissed")||"0");
+        if (Date.now() - dismissedAt < 3*24*60*60*1000) return; // dismissed within last 3 days
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/user_vehicles?user_id=eq.${user.id}&is_default=eq.true&limit=1`,
+          { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` }});
+        const data = await res.json();
+        const v = Array.isArray(data) ? data[0] : null;
+        if (v) { const c = calcVehicleCompletion(v); if (c.pct < 100) setVehicleReminder(c); }
+      } catch(e) {}
+    })();
+  }, [user?.id]);
   const hour=new Date().getHours();
   const greeting=hour<12?"Good morning":hour<17?"Good afternoon":"Good evening";
   const displayName=user?.name||user?.email?.split("@")[0]||"Welcome";
@@ -1268,11 +1283,23 @@ function Home({ go,stations,setStation,user,onMenu }) {
         </div>
       </div>
 
-      <div style={{ margin:"0 14px 16px",position:"relative" }}>
+           <div style={{ margin:"0 14px 16px",position:"relative" }}>
         <i className="fas fa-search" style={{ position:"absolute",left:16,top:"50%",transform:"translateY(-50%)",color:T.mutedLight,fontSize:14 }}/>
         <input placeholder="Search station or location" value={search} onChange={e=>setSearch(e.target.value)}
           style={{ width:"100%",background:T.card,border:`1.5px solid ${T.border}`,borderRadius:14,padding:"14px 16px 14px 44px",fontSize:14,fontFamily:"inherit",color:T.text }}/>
       </div>
+
+      {vehicleReminder && (
+        <div style={{ margin:"0 14px 16px",background:T.highlightAmber,borderRadius:16,padding:"14px 16px",border:`1px solid rgba(251,191,36,0.25)`,display:"flex",alignItems:"center",gap:12 }}>
+          <i className="fas fa-car" style={{ fontSize:18,color:T.yellow }}/>
+          <div style={{ flex:1 }}>
+            <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:2 }}>Complete your vehicle profile</div>
+            <div style={{ fontSize:11,color:T.muted,lineHeight:1.5 }}>{vehicleReminder.pct}% complete — add the rest for better recommendations.</div>
+          </div>
+          <button onClick={()=>go("myvehicles")} className="tap" style={{ background:T.yellow,border:"none",borderRadius:8,padding:"7px 12px",fontSize:11,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",flexShrink:0 }}>Complete</button>
+          <button onClick={()=>{ localStorage.setItem("eco_vreminder_dismissed", Date.now().toString()); setVehicleReminder(null); }} className="tap" style={{ background:"none",border:"none",color:T.muted,cursor:"pointer",padding:4,flexShrink:0 }}><i className="fas fa-times"/></button>
+        </div>
+      )}
 
       {user&&(
         <div style={{ margin:"0 14px 16px",...card,padding:"18px",borderColor:T.border }}>
@@ -4773,6 +4800,163 @@ function ActiveSessionsScreen({ go }) {
     </div>
   );
 }
+function VehicleOnboardingScreen({ go, user }) {
+  const [phase, setPhase] = useState("welcome"); // welcome | vehicle | ready
+  const [vehicleType, setVehicleType] = useState("");
+  const [manufacturer, setManufacturer] = useState("");
+  const [model, setModel] = useState("");
+  const [year, setYear] = useState("");
+  const [regNum, setRegNum] = useState("");
+  const [nickname, setNickname] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookedUp, setLookedUp] = useState(null);
+
+  const models = getModels(manufacturer, vehicleType, []);
+  const years  = getYears(manufacturer, model);
+
+  useEffect(()=>{ setModel(""); setYear(""); }, [manufacturer]);
+  useEffect(()=>{ setYear(""); }, [model]);
+
+  useEffect(()=>{
+    if (!manufacturer || !model || !year) return;
+    setLookupLoading(true);
+    getVehicleInfo(manufacturer, model, year).then(info=>{ setLookupLoading(false); setLookedUp(info); });
+  }, [manufacturer, model, year]);
+
+  const finish = async () => {
+    if (!vehicleType) { setError("Select your vehicle type"); return; }
+    if (!manufacturer) { setError("Select the manufacturer"); return; }
+    if (!model.trim()) { setError("Enter the model"); return; }
+    if (!year) { setError("Select the year"); return; }
+    if (!regNum.trim()) { setError("Registration number is required"); return; }
+    setSaving(true); setError("");
+    const payload = {
+      user_id: user.id,
+      nickname: nickname.trim() || `${manufacturer} ${model}`,
+      vehicle_type: vehicleType, manufacturer, model: model.trim(), year: parseInt(year),
+      registration_number: regNum.trim(),
+      battery_capacity: lookedUp?.battery || null,
+      connector_type: lookedUp?.connector || null,
+      estimated_range: lookedUp?.range || null,
+      max_charging_power: lookedUp?.maxPower || null,
+      image_url: lookedUp?.imageUrl || null,
+      is_default: true,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    };
+    const result = await saveVehicle(payload);
+    if (result) {
+      try {
+        await sb("rpc/award_points",{ method:"POST", body:JSON.stringify({
+          p_user_id:user.id, p_action_key:"vehicle_registered", p_source_type:"vehicle", p_source_id:result.id
+        })});
+      } catch(e) {}
+    }
+    setSaving(false);
+    setPhase("ready");
+  };
+
+  if (phase === "welcome") return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,padding:"0 24px" }}>
+      <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center" }}>
+        <div style={{ width:84,height:84,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:24,boxShadow:`0 8px 32px rgba(34,197,94,0.35)` }}>
+          <i className="fas fa-car-side" style={{ fontSize:34,color:"#000" }}/>
+        </div>
+        <div style={{ fontWeight:900,fontSize:24,color:T.text,marginBottom:12 }}>Let's add your vehicle</div>
+        <div style={{ fontSize:14,color:T.muted,lineHeight:1.8,maxWidth:320 }}>Your vehicle helps EcoCharge provide accurate charging, range, and route recommendations. This takes less than a minute.</div>
+      </div>
+      <button onClick={()=>setPhase("vehicle")} className="tap"
+        style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"17px",fontSize:16,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",marginBottom:40 }}>
+        Get Started
+      </button>
+    </div>
+  );
+
+  if (phase === "ready") return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,padding:"0 24px" }}>
+      <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center" }}>
+        <div style={{ width:84,height:84,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:24 }}>
+          <i className="fas fa-check" style={{ fontSize:34,color:"#000" }}/>
+        </div>
+        <div style={{ fontWeight:900,fontSize:24,color:T.text,marginBottom:12 }}>You're ready to go!</div>
+        <div style={{ fontSize:14,color:T.muted,lineHeight:1.8,maxWidth:320 }}>You can add battery health, mileage, and other details anytime from My Vehicles.</div>
+      </div>
+      <button onClick={()=>go("home")} className="tap"
+        style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"17px",fontSize:16,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",marginBottom:40 }}>
+        Enter EcoCharge
+      </button>
+    </div>
+  );
+
+  const sel = (label, val, onChange, options, placeholder="Select…") => (
+    <div style={{ marginBottom:14 }}>
+      <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>{label}</div>
+      <select value={val} onChange={e=>{ onChange(e.target.value); setError(""); }}
+        style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px 14px",color:val?T.text:T.muted,fontSize:14,fontFamily:"inherit" }}>
+        <option value="">{placeholder}</option>
+        {options.map(o=>(<option key={o} value={o}>{o}</option>))}
+      </select>
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <div style={{ padding:"calc(20px + env(safe-area-inset-top,34px)) 20px 16px" }}>
+        <div style={{ fontSize:11,color:T.green,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8 }}>Vehicle Setup</div>
+        <div style={{ fontWeight:800,fontSize:20,color:T.text }}>Tell us about your vehicle</div>
+      </div>
+      <div style={{ flex:1,overflowY:"auto",padding:"0 20px 24px" }}>
+        <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8 }}>Vehicle Type</div>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16 }}>
+          {VEHICLE_TYPES.map(vt=>(
+            <button key={vt.value} onClick={()=>setVehicleType(vt.value)} className="tap"
+              style={{ background:vehicleType===vt.value?`${T.green}18`:T.card,border:`2px solid ${vehicleType===vt.value?T.green:T.border}`,borderRadius:12,padding:"12px 6px",display:"flex",flexDirection:"column",alignItems:"center",gap:6,cursor:"pointer",fontFamily:"inherit" }}>
+              <i className={`fas ${vt.icon}`} style={{ fontSize:18,color:vehicleType===vt.value?T.green:T.muted }}/>
+              <span style={{ fontSize:9,fontWeight:700,color:vehicleType===vt.value?T.green:T.muted,textAlign:"center",lineHeight:1.2 }}>{vt.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {sel("Manufacturer", manufacturer, setManufacturer, getManufacturers(vehicleType, []), "Select manufacturer")}
+        {models.length > 0
+          ? sel("Model", model, setModel, models, "Select model")
+          : manufacturer && (
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Model</div>
+              <input value={model} onChange={e=>{ setModel(e.target.value); setError(""); }} placeholder="e.g. Model 3"
+                style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px 14px",color:T.text,fontSize:14,fontFamily:"inherit" }}/>
+            </div>
+          )
+        }
+        {(manufacturer && model) && sel("Year", year, setYear, years.map(String), "Select year")}
+
+        {lookupLoading && <div style={{ fontSize:12,color:T.blue,marginBottom:14 }}><Spinner/> Looking up specs…</div>}
+        {lookedUp && !lookupLoading && (lookedUp.battery || lookedUp.range) && (
+          <div style={{ background:"rgba(34,197,94,0.08)",border:`1px solid ${T.green}33`,borderRadius:12,padding:"12px 14px",marginBottom:16,fontSize:12,color:T.green }}>
+            <i className="fas fa-check-circle" style={{ marginRight:8 }}/>
+            Specs found{lookedUp.battery?` · ${lookedUp.battery} kWh battery`:""}{lookedUp.range?` · ${lookedUp.range} km range`:""}
+          </div>
+        )}
+
+        <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Registration Number</div>
+        <input value={regNum} onChange={e=>{ setRegNum(e.target.value); setError(""); }} placeholder="e.g. GR-1234-21"
+          style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px 14px",color:T.text,fontSize:14,fontFamily:"inherit",marginBottom:14 }}/>
+
+        <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Nickname (optional)</div>
+        <input value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="e.g. My Tesla"
+          style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px 14px",color:T.text,fontSize:14,fontFamily:"inherit",marginBottom:16 }}/>
+
+        {error && <div style={{ background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",borderRadius:10,padding:"11px 14px",marginBottom:14,color:T.red,fontSize:12 }}>{error}</div>}
+
+        <button onClick={finish} disabled={saving} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"16px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+          {saving?"Saving…":"Continue"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function StationReview({go,station,user,onClose}){
   const[rating,setRating]=useState(0);
@@ -7321,6 +7505,21 @@ const EV_DATABASE = {
   Other:   { models:{ "Custom EV":{ years:[2020,2021,2022,2023,2024], battery:40, connector:"Type 2 (AC)", range:300, maxPower:50, type:"Other" } } },
 };
 
+// ── VEHICLE COMPLETION SCORING ────────────────────────────────
+// Weighted, not a naive field count. Required fields (which already gate
+// onboarding) total 60 points; meaningful optional fields make up the
+// remaining 40 — matches the exact fields called out in the spec
+// (VIN, mileage, battery health), not arbitrary ones.
+const VEHICLE_REQUIRED_FIELDS = ["vehicle_type","manufacturer","model","year","registration_number"];
+const VEHICLE_OPTIONAL_WEIGHTS = { vin:15, mileage_km:10, battery_health_pct:15 };
+const calcVehicleCompletion = (v) => {
+  const requiredDone = VEHICLE_REQUIRED_FIELDS.filter(f=>v?.[f]);
+  const requiredPct = (requiredDone.length / VEHICLE_REQUIRED_FIELDS.length) * 60;
+  let optionalPct = 0;
+  Object.entries(VEHICLE_OPTIONAL_WEIGHTS).forEach(([field,weight])=>{ if (v?.[field]) optionalPct += weight; });
+  return { pct: Math.round(requiredPct + optionalPct), requiredComplete: requiredDone.length===VEHICLE_REQUIRED_FIELDS.length };
+};
+
 const VEHICLE_TYPE_ICON = {
   "Electric Car":        "fa-car",
   "Electric Motorcycle": "fa-motorcycle",
@@ -9135,6 +9334,23 @@ useEffect(()=>{
     })();
   },[user?.id]);
 
+  // Vehicle onboarding guard — reads REAL vehicle data from Supabase every
+  // time (never localStorage), so it can't be spoofed and re-checks on
+  // fresh login, session restore, and app restart alike.
+  const checkVehicleOnboarding = async (u) => {
+    if (!u?.id || u.id==="demo" || !SUPABASE_URL) return true; // fail open — never trap a user due to missing config/demo mode
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/user_vehicles?user_id=eq.${u.id}&select=vehicle_type,manufacturer,model,year,registration_number`,
+        { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` }});
+      const data = await res.json();
+      return Array.isArray(data) && data.some(v => calcVehicleCompletion(v).requiredComplete);
+    } catch(e) { return true; } // fail open on network error
+  };
+  useEffect(()=>{
+    if (!user?.id || user.id==="demo") return;
+    checkVehicleOnboarding(user).then(complete => { if (!complete) setScreen("vehicleonboarding"); });
+  },[user?.id]);
+
   useEffect(()=>{
     if (SUPABASE_URL) sb("stations?select=*&order=id").then(d=>{ if(d?.length) setStations(d); });
     const hash=window.location.hash;
@@ -9256,7 +9472,7 @@ useEffect(()=>{
  const props={ go:goSecure,stations,station:station||stations[0],setStation,user,setUser,vehicle,setVehicle,bookingMode,setBookingMode,booking,setBooking,selectedCharger,setSelectedCharger,selectedBooking,setSelectedBooking,onMenu:()=>setDrawer(true) };
 
   if (screen==="splash") return <><style>{CSS}</style><Splash onLogin={()=>{ setAuthMode("login");go("auth"); }} onRegister={()=>{ setAuthMode("register");go("auth"); }} onGuest={()=>go("home")}/></>;
-  if (screen==="auth")   return <><style>{CSS}</style><Auth mode={authMode} onBack={(mode)=>{ if(mode){ setAuthMode(mode); } else { go("splash"); } }} onSuccess={(u)=>{ setUser(u);go("home"); }}/></>;
+  if (screen==="auth")   return <><style>{CSS}</style><Auth mode={authMode} onBack={(mode)=>{ if(mode){ setAuthMode(mode); } else { go("splash"); } }} onSuccess={(u)=>{ setUser(u); checkVehicleOnboarding(u).then(complete=>go(complete?"home":"vehicleonboarding")); }}/></>;
 
   const views={
     chargers:       <ChargerAdmin go={goSecure}/>,
