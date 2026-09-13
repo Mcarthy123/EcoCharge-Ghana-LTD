@@ -4808,6 +4808,7 @@ function VehicleOnboardingScreen({ go, user }) {
   const [year, setYear] = useState("");
   const [regNum, setRegNum] = useState("");
   const [nickname, setNickname] = useState("");
+  const [otherManufacturer, setOtherManufacturer] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -4918,7 +4919,26 @@ function VehicleOnboardingScreen({ go, user }) {
           ))}
         </div>
 
-        {sel("Manufacturer", manufacturer, setManufacturer, getManufacturers(vehicleType, []), "Select manufacturer")}
+               {otherManufacturer ? (
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Manufacturer</div>
+            <input value={manufacturer} onChange={e=>{ setManufacturer(e.target.value); setError(""); }} placeholder="Type your manufacturer"
+              style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px 14px",color:T.text,fontSize:14,fontFamily:"inherit",marginBottom:8 }}/>
+            <button onClick={()=>{ setOtherManufacturer(false); setManufacturer(""); }} className="tap" style={{ background:"none",border:"none",color:T.green,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",padding:0 }}>
+              ← Choose from list instead
+            </button>
+          </div>
+        ) : (
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Manufacturer</div>
+            <select value={manufacturer} onChange={e=>{ if (e.target.value==="__other__") { setOtherManufacturer(true); setManufacturer(""); } else { setManufacturer(e.target.value); } setError(""); }}
+              style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px 14px",color:manufacturer?T.text:T.muted,fontSize:14,fontFamily:"inherit" }}>
+              <option value="">Select manufacturer</option>
+              {getManufacturers(vehicleType, []).map(o=>(<option key={o} value={o}>{o}</option>))}
+              <option value="__other__">Other (not listed)</option>
+            </select>
+          </div>
+        )}
         {models.length > 0
           ? sel("Model", model, setModel, models, "Select model")
           : manufacturer && (
@@ -7905,8 +7925,10 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
   const [homeCharging,   setHomeCharging]   = useState(editVehicle?.home_charging_available ?? null);
   const [solarCharging,  setSolarCharging]  = useState(editVehicle?.solar_charging_available ?? null);
   const [dailyDistance,  setDailyDistance]  = useState(editVehicle?.daily_distance_km || "");
-  const [batteryHealthPct, setBatteryHealthPct] = useState(editVehicle?.battery_health_pct || "");
+   const [batteryHealthPct, setBatteryHealthPct] = useState(editVehicle?.battery_health_pct || "");
   const [lastServiceDate,  setLastServiceDate]  = useState(editVehicle?.last_service_date || "");
+  const [vin,      setVin]      = useState(editVehicle?.vin || "");
+  const [mileage,  setMileage]  = useState(editVehicle?.mileage_km || "");
   const [dcFastFreq,     setDcFastFreq]     = useState(editVehicle?.dc_fast_charge_frequency || "");
   const [chargeAbove90Freq, setChargeAbove90Freq] = useState(editVehicle?.charge_above_90_frequency || "");
   const [vehicleType,  setVehicleType]  = useState(editVehicle?.vehicle_type || "");
@@ -8022,6 +8044,8 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
       solar_charging_available: solarCharging,
       daily_distance_km: parseFloat(dailyDistance) || null,
       battery_health_pct: parseFloat(batteryHealthPct) || null,
+      vin: vin.trim() || null,
+      mileage_km: parseInt(mileage) || null,
       battery_health_source: batteryHealthPct ? "self_reported" : null,
       last_service_date: lastServiceDate || null,
       dc_fast_charge_frequency: dcFastFreq || null,
@@ -8428,7 +8452,7 @@ function VehicleDetail({ go, vehicle, user, onEdit, onDelete, onSetDefault, onSt
             <i className="fas fa-chevron-left" style={{ fontSize:15,color:"#fff" }}/>
           </button>
           <div style={{ display:"flex",gap:8 }}>
-            <button onClick={()=>onEdit?.(v)} className="tap"
+            <button onClick={()=>onEdit?.(vehicle)} className="tap"
               style={{ width:38,height:38,borderRadius:"50%",background:"rgba(0,0,0,0.55)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
               <i className="fas fa-pencil-alt" style={{ fontSize:13,color:"#fff" }}/>
             </button>
