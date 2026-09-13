@@ -9488,6 +9488,8 @@ useEffect(()=>{
     changepassword: <ChangePasswordScreen go={goSecure} user={user}/>,
     twofactor:      <TwoFactorScreen go={goSecure} getToken={getToken}/>,
     activesessions: <ActiveSessionsScreen go={goSecure}/>,
+    editprofile:    <EditProfileScreen go={goSecure} user={user} setUser={setUser}/>,
+    vehicleonboarding: <VehicleOnboardingScreen go={go} user={user}/>,
     home:           <Home {...props}/>,
     map:            <MapScreen {...props}/>,
     detail:         <Detail {...props}/>,
