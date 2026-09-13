@@ -5982,14 +5982,7 @@ function WalletScreen({ go, user }) {
 
   useEffect(()=>{ loadWallet(); },[user]);
 
-  const initiateTopUp = async () => {
-    const amount = customAmt ? toPesewas(customAmt) : topupAmt;
-    if (amount < 500) { setPayError('Minimum top-up is GH₵5.00'); return; }
-    if (!user?.email) { setPayError('Email required for payment'); return; }
-    setPaying(true); setPayError('');
-    try {
-      if (OCPP_URL) {
-         const initiateTopUp = async () => {
+   const initiateTopUp = async () => {
     const amount = customAmt ? toPesewas(customAmt) : topupAmt;
     if (amount < 500) { setPayError('Minimum top-up is GH₵5.00'); return; }
     if (!user?.email) { setPayError('Email required for payment'); return; }
