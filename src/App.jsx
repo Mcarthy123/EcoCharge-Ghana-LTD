@@ -8288,8 +8288,10 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
             <div style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:"14px 16px",marginTop:6 }}>
               <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:4 }}>Battery Health (Optional)</div>
               <div style={{ fontSize:11,color:T.muted,marginBottom:14,lineHeight:1.6 }}>All entries here are self-reported by you, not measured by EcoCharge.</div>
-              {inp("Battery Health % (if known)", batteryHealthPct, setBatteryHealthPct, "number", "e.g. 92")}
+               {inp("Battery Health % (if known)", batteryHealthPct, setBatteryHealthPct, "number", "e.g. 92")}
               {batteryHealthPct && <div style={{ fontSize:10,color:T.yellow,marginTop:-8,marginBottom:14 }}><i className="fas fa-info-circle" style={{marginRight:5}}/>Self-reported — not measured</div>}
+              {inp("VIN (Vehicle Identification Number)", vin, setVin, "text", "17-character VIN")}
+              {inp("Current Mileage (km)", mileage, setMileage, "number", "e.g. 12000")}
               {inp("Last Battery Service Date", lastServiceDate, setLastServiceDate, "date")}
               {sel("DC Fast Charging Frequency", dcFastFreq, setDcFastFreq, ["Rarely","Sometimes","Frequently"].map(o=>({value:o,label:o})), "Select frequency")}
               {sel("Charge Above 90% Frequency", chargeAbove90Freq, setChargeAbove90Freq, ["Rarely","Sometimes","Frequently"].map(o=>({value:o,label:o})), "Select frequency")}
