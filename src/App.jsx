@@ -1248,10 +1248,10 @@ function Home({ go,stations,setStation,user,onMenu }) {
   const [balVisible,setBalVisible]=useState(true);
 
   const quickActions=[
-    { icon:"fa-qrcode",label:"Scan to Charge",screen:"scan" },
+       { icon:"fa-qrcode",label:"Scan to Charge",screen:"scan" },
     { icon:"fa-map-marker-alt",label:"Find Stations",screen:"map" },
-    { icon:"fa-calendar",label:"My Bookings",screen:"bookings" },
-    { icon:"fa-list-alt",label:"Charging History",screen:"sessions" },
+    { icon:"fa-calendar-check",label:"My Bookings",screen:"bookings" },
+    { icon:"fa-history",label:"Charging History",screen:"sessions" },
   ];
 
   const card = { background:T.card,borderRadius:16,border:`1px solid ${T.border}` };
@@ -1289,15 +1289,27 @@ function Home({ go,stations,setStation,user,onMenu }) {
           style={{ width:"100%",background:T.card,border:`1.5px solid ${T.border}`,borderRadius:14,padding:"14px 16px 14px 44px",fontSize:14,fontFamily:"inherit",color:T.text }}/>
       </div>
 
-      {vehicleReminder && (
-        <div style={{ margin:"0 14px 16px",background:T.highlightAmber,borderRadius:16,padding:"14px 16px",border:`1px solid rgba(251,191,36,0.25)`,display:"flex",alignItems:"center",gap:12 }}>
-          <i className="fas fa-car" style={{ fontSize:18,color:T.yellow }}/>
-          <div style={{ flex:1 }}>
-            <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:2 }}>Complete your vehicle profile</div>
-            <div style={{ fontSize:11,color:T.muted,lineHeight:1.5 }}>{vehicleReminder.pct}% complete — add the rest for better recommendations.</div>
+          {vehicleReminder && (
+        <div style={{ margin:"0 14px 16px",borderRadius:20,overflow:"hidden",position:"relative",minHeight:220 }}>
+          <img src="/ecocharge-hero.jpg" alt="" style={{ position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover" }}
+            onError={e=>{ e.target.style.display="none"; }}/>
+          <div style={{ position:"absolute",inset:0,background:`linear-gradient(90deg, ${T.bg} 0%, ${T.bg}dd 35%, ${T.bg}66 65%, transparent 100%)` }}/>
+          <div style={{ position:"relative",zIndex:2,padding:"20px",maxWidth:"70%" }}>
+            <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:10 }}>
+              <i className="fas fa-car" style={{ fontSize:13,color:T.green }}/>
+              <span style={{ fontSize:11,fontWeight:800,color:T.green,letterSpacing:0.5,textTransform:"uppercase" }}>{vehicleReminder.pct}% Complete</span>
+            </div>
+            <div style={{ fontWeight:900,fontSize:22,color:T.text,marginBottom:8,lineHeight:1.2 }}>Complete Your Profile</div>
+            <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.6,marginBottom:16 }}>Add the rest of your vehicle details for better charging recommendations.</div>
+            <button onClick={()=>go("myvehicles")} className="tap"
+              style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:24,padding:"11px 20px",fontSize:13,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:8 }}>
+              <i className="fas fa-car"/> Complete <i className="fas fa-arrow-right" style={{ fontSize:11 }}/>
+            </button>
           </div>
-          <button onClick={()=>go("myvehicles")} className="tap" style={{ background:T.yellow,border:"none",borderRadius:8,padding:"7px 12px",fontSize:11,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",flexShrink:0 }}>Complete</button>
-          <button onClick={()=>{ localStorage.setItem("eco_vreminder_dismissed", Date.now().toString()); setVehicleReminder(null); }} className="tap" style={{ background:"none",border:"none",color:T.muted,cursor:"pointer",padding:4,flexShrink:0 }}><i className="fas fa-times"/></button>
+          <button onClick={()=>{ localStorage.setItem("eco_vreminder_dismissed", Date.now().toString()); setVehicleReminder(null); }} className="tap"
+            style={{ position:"absolute",top:14,right:14,zIndex:3,width:30,height:30,borderRadius:"50%",background:"rgba(0,0,0,0.4)",border:"none",color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
+            <i className="fas fa-times" style={{ fontSize:12 }}/>
+          </button>
         </div>
       )}
 
@@ -1348,7 +1360,7 @@ function Home({ go,stations,setStation,user,onMenu }) {
         </div>
       )}
 
-      <div style={{ margin:"0 14px 16px",...card,padding:"18px 8px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr" }}>
+              <div style={{ margin:"0 14px 16px",...card,padding:"18px 8px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr" }}>
         {quickActions.map((a,i)=>(
           <button key={a.label} onClick={()=>go(a.screen)} className="tap"
             style={{ background:"none",border:"none",cursor:"pointer",padding:"4px 4px",display:"flex",flexDirection:"column",alignItems:"center",gap:9,fontFamily:"inherit",borderRight:i<3?`1px solid ${T.border}`:"none" }}>
@@ -1359,7 +1371,6 @@ function Home({ go,stations,setStation,user,onMenu }) {
           </button>
         ))}
       </div>
-
       <div style={{ margin:"0 14px 16px",...card,padding:"20px" }}>
         <div style={{ fontSize:15,fontWeight:800,color:T.text,marginBottom:18 }}>Your Impact</div>
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
@@ -4846,6 +4857,11 @@ function VehicleOnboardingScreen({ go, user }) {
       is_default: true,
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     };
+    // Clear any existing default before inserting the new one — required now
+    // that user_vehicles enforces one default per user at the database level.
+    try {
+      await sb(`user_vehicles?user_id=eq.${user.id}&is_default=eq.true`, { method:"PATCH", body: JSON.stringify({ is_default:false }) });
+    } catch(e) {}
     const result = await saveVehicle(payload);
     if (result) {
       try {
@@ -4858,26 +4874,53 @@ function VehicleOnboardingScreen({ go, user }) {
     setPhase("ready");
   };
 
-  if (phase === "welcome") return (
-    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,padding:"0 24px" }}>
-      <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center" }}>
-        <div style={{ width:84,height:84,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:24,boxShadow:`0 8px 32px rgba(34,197,94,0.35)` }}>
-          <i className="fas fa-car-side" style={{ fontSize:34,color:"#000" }}/>
-        </div>
-        <div style={{ fontWeight:900,fontSize:24,color:T.text,marginBottom:12 }}>Let's add your vehicle</div>
-        <div style={{ fontSize:14,color:T.muted,lineHeight:1.8,maxWidth:320 }}>Your vehicle helps EcoCharge provide accurate charging, range, and route recommendations. This takes less than a minute.</div>
-      </div>
-      <button onClick={()=>setPhase("vehicle")} className="tap"
-        style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"17px",fontSize:16,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",marginBottom:40 }}>
-        Get Started
-      </button>
+   const ProgressDots = ({ current }) => (
+    <div style={{ display:"flex",gap:8,justifyContent:"center",marginBottom:28 }}>
+      {[1,2,3].map(n=>(
+        <div key={n} style={{ width: n===current?28:8, height:8, borderRadius:4, background: n===current?T.green:T.border, transition:"width .2s" }}/>
+      ))}
     </div>
   );
 
-  if (phase === "ready") return (
+  if (phase === "welcome") return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,padding:"0 24px" }}>
+      <div style={{ paddingTop:"calc(20px + env(safe-area-inset-top,34px))" }}>
+        <ProgressDots current={1}/>
+      </div>
       <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center" }}>
-        <div style={{ width:84,height:84,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:24 }}>
+                <div style={{ width:"100%",maxWidth:320,borderRadius:20,overflow:"hidden",marginBottom:24,boxShadow:"0 12px 40px rgba(0,0,0,0.4)" }}>
+          <img src="/ecocharge-hero.jpg" alt="" style={{ width:"100%",height:180,objectFit:"cover",display:"block" }}
+            onError={e=>{ e.target.parentElement.style.display="none"; }}/>
+        </div>
+        <div style={{ background:`${T.green}18`,color:T.green,fontSize:12,fontWeight:700,borderRadius:20,padding:"5px 14px",marginBottom:16 }}>Step 1 of 3</div>
+        <div style={{ fontWeight:900,fontSize:26,color:T.text,marginBottom:14,lineHeight:1.2 }}>Add Your <span style={{ color:T.green }}>Vehicle</span></div>
+        <div style={{ fontSize:14,color:T.muted,lineHeight:1.8,maxWidth:320,marginBottom:28 }}>Tell us about your vehicle so we can give you accurate charging recommendations, range estimates, and a better experience on the road.</div>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,width:"100%" }}>
+          {[
+            { icon:"fa-charging-station", label:"Find compatible chargers" },
+            { icon:"fa-route",            label:"Get better route planning" },
+            { icon:"fa-battery-three-quarters", label:"See your range & battery status" },
+            { icon:"fa-shield-alt",       label:"Keep your vehicle info secure" },
+          ].map(b=>(
+            <div key={b.label} style={{ background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"16px 10px",display:"flex",flexDirection:"column",alignItems:"center",gap:10 }}>
+              <i className={`fas ${b.icon}`} style={{ fontSize:18,color:T.green }}/>
+              <div style={{ fontSize:11,color:T.mutedLight,textAlign:"center",lineHeight:1.4 }}>{b.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <button onClick={()=>setPhase("vehicle")} className="tap"
+        style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"17px",fontSize:16,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",marginBottom:40,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+        Add Your Vehicle <i className="fas fa-arrow-right" style={{ fontSize:14 }}/>
+      </button>
+    </div>
+  );
+   if (phase === "ready") return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg,padding:"0 24px" }}>
+      <div style={{ paddingTop:"calc(20px + env(safe-area-inset-top,34px))" }}>
+        <ProgressDots current={3}/>
+      </div>
+      <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center" }}>
           <i className="fas fa-check" style={{ fontSize:34,color:"#000" }}/>
         </div>
         <div style={{ fontWeight:900,fontSize:24,color:T.text,marginBottom:12 }}>You're ready to go!</div>
@@ -4903,7 +4946,8 @@ function VehicleOnboardingScreen({ go, user }) {
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
-      <div style={{ padding:"calc(20px + env(safe-area-inset-top,34px)) 20px 16px" }}>
+           <div style={{ padding:"calc(20px + env(safe-area-inset-top,34px)) 20px 16px" }}>
+        <ProgressDots current={2}/>
         <div style={{ fontSize:11,color:T.green,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8 }}>Vehicle Setup</div>
         <div style={{ fontWeight:800,fontSize:20,color:T.text }}>Tell us about your vehicle</div>
       </div>
@@ -8203,7 +8247,7 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
                     "Select year")
             )}
 
-            {inp("Registration Number (optional)", regNum, setRegNum, "text", "e.g. GR-1234-21", "Ghana vehicle registration plate")}
+            {inp("Registration Number", regNum, setRegNum, "text", "e.g. GR-1234-21", "Needed for a 100% complete vehicle profile")}
           </>
         )}
 
