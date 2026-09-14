@@ -4920,7 +4920,8 @@ function VehicleOnboardingScreen({ go, user }) {
       <div style={{ paddingTop:"calc(20px + env(safe-area-inset-top,34px))" }}>
         <ProgressDots current={3}/>
       </div>
-      <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center" }}>
+            <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center" }}>
+        <div style={{ width:64,height:64,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:24 }}>
           <i className="fas fa-check" style={{ fontSize:34,color:"#000" }}/>
         </div>
         <div style={{ fontWeight:900,fontSize:24,color:T.text,marginBottom:12 }}>You're ready to go!</div>
