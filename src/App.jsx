@@ -4819,11 +4819,27 @@ function VehicleOnboardingScreen({ go, user }) {
   const [year, setYear] = useState("");
   const [regNum, setRegNum] = useState("");
   const [nickname, setNickname] = useState("");
-  const [otherManufacturer, setOtherManufacturer] = useState(false);
+   const [otherManufacturer, setOtherManufacturer] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookedUp, setLookedUp] = useState(null);
+  const [vin, setVin] = useState("");
+  const [vinResult, setVinResult] = useState(null); // null | 'detected' | 'unknown'
+
+  const tryDetectVin = (v) => {
+    setVin(v);
+    if (v.trim().length !== 17) { setVinResult(null); return; }
+    const decoded = decodeVin(v);
+    const validBrands = getManufacturers(vehicleType, []);
+    if (decoded.manufacturer && validBrands.includes(decoded.manufacturer)) {
+      setManufacturer(decoded.manufacturer);
+      if (decoded.year) setYear(String(decoded.year));
+      setVinResult("detected");
+    } else {
+      setVinResult("unknown");
+    }
+  };
 
   const models = getModels(manufacturer, vehicleType, []);
   const years  = getYears(manufacturer, model);
@@ -4852,8 +4868,9 @@ function VehicleOnboardingScreen({ go, user }) {
       battery_capacity: lookedUp?.battery || null,
       connector_type: lookedUp?.connector || null,
       estimated_range: lookedUp?.range || null,
-      max_charging_power: lookedUp?.maxPower || null,
+           max_charging_power: lookedUp?.maxPower || null,
       image_url: lookedUp?.imageUrl || null,
+      vin: vin.trim().length === 17 ? vin.trim().toUpperCase() : null,
       is_default: true,
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     };
@@ -4964,7 +4981,19 @@ function VehicleOnboardingScreen({ go, user }) {
           ))}
         </div>
 
-               {otherManufacturer ? (
+                    <div style={{ marginBottom:14 }}>
+          <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>VIN (optional — auto-fills manufacturer & year)</div>
+          <input value={vin} onChange={e=>tryDetectVin(e.target.value)} placeholder="17-character VIN" maxLength={17}
+            style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px 14px",color:T.text,fontSize:14,fontFamily:"inherit",letterSpacing:1 }}/>
+          {vinResult==="detected" && (
+            <div style={{ fontSize:11,color:T.green,marginTop:6 }}><i className="fas fa-check-circle" style={{marginRight:6}}/>Detected — manufacturer and year filled in below.</div>
+          )}
+          {vinResult==="unknown" && (
+            <div style={{ fontSize:11,color:T.muted,marginTop:6 }}><i className="fas fa-info-circle" style={{marginRight:6}}/>Couldn't auto-detect from this VIN — select your manufacturer below.</div>
+          )}
+        </div>
+
+        {otherManufacturer ? (
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Manufacturer</div>
             <input value={manufacturer} onChange={e=>{ setManufacturer(e.target.value); setError(""); }} placeholder="Type your manufacturer"
@@ -7570,6 +7599,48 @@ const EV_DATABASE = {
 // (VIN, mileage, battery health), not arbitrary ones.
 const VEHICLE_REQUIRED_FIELDS = ["vehicle_type","manufacturer","model","year","registration_number"];
 const VEHICLE_OPTIONAL_WEIGHTS = { vin:15, mileage_km:10, battery_health_pct:15 };
+
+// ── VIN DECODER — self-owned, no third-party API ─────────────────
+// WMI (World Manufacturer Identifier = first 3 VIN characters) is a public
+// ISO 3780 standard, not proprietary — only the deeper model/trim encoding
+// (VIN positions 4-8) is manufacturer-proprietary and NOT something we can
+// honestly decode ourselves. This table only covers manufacturer + year,
+// cross-referenced against multiple public WMI registries. Any brand not
+// listed here simply won't auto-detect — no guessing.
+const WMI_TABLE = {
+  "5YJ":"Tesla", "7SA":"Tesla", "7G2":"Tesla", "LRW":"Tesla",
+  "WBA":"BMW", "WBS":"BMW", "WBX":"BMW", "WBY":"BMW", "5UX":"BMW", "4US":"BMW", "5YM":"BMW",
+  "WDB":"Mercedes", "WDC":"Mercedes", "WDD":"Mercedes", "WDF":"Mercedes", "4JG":"Mercedes",
+  "WVW":"Volkswagen", "3VW":"Volkswagen", "1VW":"Volkswagen",
+  "WAU":"Audi", "WA1":"Audi", "WUA":"Audi", "TRU":"Audi",
+  "KNA":"Kia", "KND":"Kia", "5XX":"Kia", "5XY":"Kia", "3KP":"Kia",
+  "KMH":"Hyundai", "KM8":"Hyundai", "5NP":"Hyundai", "5NM":"Hyundai", "2HM":"Hyundai",
+  "1N4":"Nissan", "3N1":"Nissan", "JN1":"Nissan", "JN8":"Nissan",
+  "YV1":"Volvo", "YV4":"Volvo",
+  "LGX":"BYD", "LC0":"BYD",
+  "LJN":"NIO",
+  "L6T":"Zeekr",
+  "LPS":"Polestar", "YSM":"Polestar", "7SY":"Polestar", "YSR":"Polestar",
+  "50E":"Lucid",
+  "MCV":"Mahindra", "MCU":"Mahindra",
+};
+
+// Public standard (49 CFR §565.15 / ISO 3779) — 10th VIN character = model year.
+// We resolve to the 2010–2039 cycle, since EVs realistically only exist in that range.
+const VIN_YEAR_CODES = {
+  A:2010,B:2011,C:2012,D:2013,E:2014,F:2015,G:2016,H:2017,J:2018,K:2019,
+  L:2020,M:2021,N:2022,P:2023,R:2024,S:2025,T:2026,V:2027,W:2028,X:2029,
+  Y:2030,1:2031,2:2032,3:2033,4:2034,5:2035,6:2036,7:2037,8:2038,9:2039,
+};
+
+const decodeVin = (vinStr) => {
+  const v = (vinStr||"").trim().toUpperCase();
+  if (v.length !== 17) return { valid:false };
+  const wmi = v.slice(0,3);
+  const manufacturer = WMI_TABLE[wmi] || null;
+  const year = VIN_YEAR_CODES[v[9]] || null;
+  return { valid:true, manufacturer, year };
+};
 const calcVehicleCompletion = (v) => {
   const requiredDone = VEHICLE_REQUIRED_FIELDS.filter(f=>v?.[f]);
   const requiredPct = (requiredDone.length / VEHICLE_REQUIRED_FIELDS.length) * 60;
@@ -7989,11 +8060,25 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
   const [isDefault,    setIsDefault]    = useState(editVehicle?.is_default   || false);
   const [imageUrl,     setImageUrl]     = useState(editVehicle?.image_url    || "");
 
-  const [saving,  setSaving]  = useState(false);
+    const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
   const [autoFilled, setAutoFilled] = useState(false);
   const [dbVehicles, setDbVehicles] = useState([]);
-  useEffect(()=>{
+  const [vinResult, setVinResult] = useState(null); // null | 'detected' | 'unknown'
+
+  const tryDetectVin = (v) => {
+    setVin(v);
+    if (v.trim().length !== 17) { setVinResult(null); return; }
+    const decoded = decodeVin(v);
+    const validBrands = getManufacturers(vehicleType, dbVehicles);
+    if (decoded.manufacturer && validBrands.includes(decoded.manufacturer)) {
+      setManufacturer(decoded.manufacturer);
+      if (decoded.year) setYear(String(decoded.year));
+      setVinResult("detected");
+    } else {
+      setVinResult("unknown");
+    }
+  };
     if (!SUPABASE_URL) return;
     fetch(`${SUPABASE_URL}/rest/v1/vehicle_registry?select=brand,model,type,battery_capacity_kwh,connector_type,estimated_range_km,max_charging_power_kw`,
       { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` } })
@@ -8290,7 +8375,17 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
               <div style={{ fontSize:11,color:T.muted,marginBottom:14,lineHeight:1.6 }}>All entries here are self-reported by you, not measured by EcoCharge.</div>
                {inp("Battery Health % (if known)", batteryHealthPct, setBatteryHealthPct, "number", "e.g. 92")}
               {batteryHealthPct && <div style={{ fontSize:10,color:T.yellow,marginTop:-8,marginBottom:14 }}><i className="fas fa-info-circle" style={{marginRight:5}}/>Self-reported — not measured</div>}
-              {inp("VIN (Vehicle Identification Number)", vin, setVin, "text", "17-character VIN")}
+                            <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>VIN (Vehicle Identification Number)</div>
+                <input value={vin} onChange={e=>tryDetectVin(e.target.value)} placeholder="17-character VIN" maxLength={17}
+                  style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px 14px",color:T.text,fontSize:14,fontFamily:"inherit",letterSpacing:1 }}/>
+                {vinResult==="detected" && (
+                  <div style={{ fontSize:11,color:T.green,marginTop:6 }}><i className="fas fa-check-circle" style={{marginRight:6}}/>Detected — manufacturer and year updated above.</div>
+                )}
+                {vinResult==="unknown" && (
+                  <div style={{ fontSize:11,color:T.muted,marginTop:6 }}><i className="fas fa-info-circle" style={{marginRight:6}}/>Couldn't auto-detect from this VIN.</div>
+                )}
+              </div>
               {inp("Current Mileage (km)", mileage, setMileage, "number", "e.g. 12000")}
               {inp("Last Battery Service Date", lastServiceDate, setLastServiceDate, "date")}
               {sel("DC Fast Charging Frequency", dcFastFreq, setDcFastFreq, ["Rarely","Sometimes","Frequently"].map(o=>({value:o,label:o})), "Select frequency")}
