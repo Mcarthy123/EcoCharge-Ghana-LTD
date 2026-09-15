@@ -656,6 +656,7 @@ const Drawer = ({ open,onClose,go,user,onLogout }) => {
           { icon:"fa-shield-alt",       label:"Admin Dashboard", screen:"admin",        color:"#f87171", adminOnly:true },
           { icon:"fa-car",              label:"Vehicle Registry", screen:"vehicleregistry", color:T.blue, adminOnly:true },
           { icon:"fa-gift",             label:"EcoRewards Admin", screen:"ecorewardsadmin", color:T.green, adminOnly:true },
+          { icon:"fa-images",           label:"Vehicle Images", screen:"vehicleimageregistry", color:T.blue, adminOnly:true },
         ].filter(item=>!item.adminOnly || user?.is_admin).map(item=>(
           <div key={item.label} className="tap row" onClick={()=>{ if(item.external){ const a=document.createElement("a"); a.href=item.screen; a.target="_blank"; a.rel="noopener noreferrer"; document.body.appendChild(a); a.click(); document.body.removeChild(a); } else { go(item.screen); } onClose(); }}
             style={{ display:"flex",alignItems:"center",gap:14,padding:"16px 20px",borderBottom:`1px solid ${T.border}20` }}>
@@ -5051,6 +5052,129 @@ function VehicleOnboardingScreen({ go, user }) {
     </div>
   );
 }
+function AdminVehicleImageRegistry({ go }) {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null); // null | {} (new) | existing entry
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    const data = await sb(`vehicle_image_registry?order=brand.asc,model.asc`);
+    setEntries(Array.isArray(data) ? data : []);
+    setLoading(false);
+  };
+  useEffect(()=>{ load(); },[]);
+
+  const filtered = search
+    ? entries.filter(e => e.brand.toLowerCase().includes(search.toLowerCase()) || e.model.toLowerCase().includes(search.toLowerCase()))
+    : entries;
+
+  const startNew = () => setEditing({ brand:"", model:"", image_url:"" });
+
+  const handleUpload = (e, target) => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => setEditing(prev => ({ ...prev, image_url: ev.target.result }));
+    reader.readAsDataURL(file);
+  };
+
+  const save = async () => {
+    if (!editing.brand.trim() || !editing.model.trim()) { setError("Brand and model are required"); return; }
+    if (!editing.image_url.trim()) { setError("Add an image (upload or paste a URL)"); return; }
+    setSaving(true); setError("");
+    const payload = { brand: editing.brand.trim(), model: editing.model.trim(), image_url: editing.image_url.trim(), updated_at: new Date().toISOString() };
+    try {
+      if (editing.id) {
+        await sb(`vehicle_image_registry?id=eq.${editing.id}`, { method:"PATCH", headers:{ Prefer:"return=minimal" }, body: JSON.stringify(payload) });
+      } else {
+        await sb(`vehicle_image_registry`, { method:"POST", headers:{ Prefer:"return=minimal" }, body: JSON.stringify(payload) });
+      }
+      setEditing(null);
+      load();
+    } catch(e) {
+      setError("Could not save — check that this brand+model combination doesn't already exist.");
+    }
+    setSaving(false);
+  };
+
+  const remove = async (id) => {
+    await sb(`vehicle_image_registry?id=eq.${id}`, { method:"DELETE" });
+    setEntries(prev => prev.filter(e => e.id !== id));
+  };
+
+  if (editing) return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title={editing.id ? "Edit Vehicle Image" : "Add Vehicle Image"} sub="Vehicle Image Registry" onBack={()=>setEditing(null)}/>
+      <div style={{ flex:1,overflowY:"auto",padding:"16px 16px 100px" }}>
+        <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Brand</div>
+        <input value={editing.brand} onChange={e=>setEditing(p=>({...p,brand:e.target.value}))} placeholder="e.g. Zeekr — must match the manufacturer dropdown exactly"
+          style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px 14px",color:T.text,fontSize:14,fontFamily:"inherit",marginBottom:14 }}/>
+
+        <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Model</div>
+        <input value={editing.model} onChange={e=>setEditing(p=>({...p,model:e.target.value}))} placeholder="e.g. 001 — must match the model dropdown exactly"
+          style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px 14px",color:T.text,fontSize:14,fontFamily:"inherit",marginBottom:14 }}/>
+        <div style={{ fontSize:10,color:T.muted,marginBottom:18,lineHeight:1.6 }}>Brand and model must exactly match what appears in the vehicle registration dropdowns, or this image won't be found for users.</div>
+
+        <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6 }}>Image</div>
+        {editing.image_url && (
+          <div style={{ width:"100%",height:160,borderRadius:12,overflow:"hidden",marginBottom:10,background:T.surfaceFaint }}>
+            <img src={editing.image_url} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} onError={e=>{ e.target.style.display="none"; }}/>
+          </div>
+        )}
+        <label className="tap" style={{ display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:`${T.green}12`,border:`1px solid ${T.green}33`,borderRadius:12,padding:"13px",fontSize:13,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit",marginBottom:10 }}>
+          <i className="fas fa-camera"/> {editing.image_url ? "Replace Photo" : "Upload Photo"}
+          <input type="file" accept="image/*" style={{ display:"none" }} onChange={handleUpload}/>
+        </label>
+        <div style={{ fontSize:10,color:T.muted,marginBottom:14,textAlign:"center" }}>— or —</div>
+        <input value={editing.image_url?.startsWith("data:") ? "" : editing.image_url} onChange={e=>setEditing(p=>({...p,image_url:e.target.value}))} placeholder="Paste an image URL instead"
+          style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"13px 14px",color:T.text,fontSize:13,fontFamily:"inherit",marginBottom:16 }}/>
+
+        {error && <div style={{ background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",borderRadius:10,padding:"11px 14px",marginBottom:14,color:T.red,fontSize:12 }}>{error}</div>}
+
+        <button onClick={save} disabled={saving} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:14,padding:"15px",fontSize:15,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
+          {saving?"Saving…":"Save"}
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"100%",background:T.bg }}>
+      <Header title="Vehicle Image Registry" sub="Reference photos by brand & model" onBack={()=>go("home")}/>
+      <div style={{ padding:"14px 16px 0" }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search brand or model"
+          style={{ width:"100%",background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"11px 14px",color:T.text,fontSize:13,fontFamily:"inherit",marginBottom:12 }}/>
+        <button onClick={startNew} className="tap"
+          style={{ width:"100%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
+          <i className="fas fa-plus"/> Add Vehicle Image
+        </button>
+      </div>
+      <div style={{ flex:1,overflowY:"auto",padding:"0 16px 100px" }}>
+        {loading && <div style={{ textAlign:"center",padding:"30px 0" }}><Spinner/></div>}
+        {!loading && filtered.length===0 && (
+          <div style={{ textAlign:"center",padding:"40px 20px",color:T.muted,fontSize:13 }}>No entries yet. Add your first vehicle image above.</div>
+        )}
+        {filtered.map(e=>(
+          <div key={e.id} style={{ background:T.card,borderRadius:14,border:`1px solid ${T.border}`,padding:12,marginBottom:10,display:"flex",alignItems:"center",gap:12 }}>
+            <div style={{ width:56,height:56,borderRadius:10,overflow:"hidden",flexShrink:0,background:T.surfaceFaint }}>
+              <img src={e.image_url} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} onError={ev=>{ ev.target.style.display="none"; }}/>
+            </div>
+            <div style={{ flex:1,minWidth:0 }}>
+              <div style={{ fontWeight:700,fontSize:13,color:T.text }}>{e.brand}</div>
+              <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{e.model}</div>
+            </div>
+            <button onClick={()=>setEditing(e)} className="tap" style={{ background:T.surfaceFaint,border:`1px solid ${T.border}`,borderRadius:8,padding:"6px 10px",fontSize:11,fontWeight:700,color:T.green,cursor:"pointer",fontFamily:"inherit" }}>Edit</button>
+            <button onClick={()=>remove(e.id)} className="tap" style={{ background:"none",border:"none",color:T.red,cursor:"pointer",padding:6 }}><i className="fas fa-trash-alt" style={{fontSize:13}}/></button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function StationReview({go,station,user,onClose}){
   const[rating,setRating]=useState(0);
@@ -8075,10 +8199,11 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
       setManufacturer(decoded.manufacturer);
       if (decoded.year) setYear(String(decoded.year));
       setVinResult("detected");
-    } else {
-      setVinResult("unknown");
+          setVinResult("unknown");
     }
   };
+
+  useEffect(()=>{
     if (!SUPABASE_URL) return;
     fetch(`${SUPABASE_URL}/rest/v1/vehicle_registry?select=brand,model,type,battery_capacity_kwh,connector_type,estimated_range_km,max_charging_power_kw`,
       { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` } })
@@ -9473,7 +9598,7 @@ function AppInner() {
     window.addEventListener("eco:auth-expired", handler);
     return ()=>window.removeEventListener("eco:auth-expired", handler);
   },[]);
-  const ADMIN_SCREENS = ["admin","chargers","pricing","vehicleregistry","verify","ecorewardsadmin"];
+  const ADMIN_SCREENS = ["admin","chargers","pricing","vehicleregistry","verify","ecorewardsadmin","vehicleimageregistry"];
   const goSecure=(s)=>{
     const open=["splash","auth","about","home","detail","map","privacypolicy","terms","refund","zeroemissions"];
     if(!user&&!open.includes(s)){ setAuthMode("login");go("auth");return; }
@@ -9650,6 +9775,7 @@ useEffect(()=>{
     promotions:     <PromotionsScreen go={goSecure}/>,
     rewards:        <EcoRewardsScreen go={goSecure} user={user}/>,
     ecorewardsadmin:<AdminEcoRewards go={goSecure} user={user}/>,
+    vehicleimageregistry: <AdminVehicleImageRegistry go={goSecure}/>,
     referrals:      <ReferAndEarnScreen go={goSecure} user={user}/>,
     changepassword: <ChangePasswordScreen go={goSecure} user={user}/>,
     twofactor:      <TwoFactorScreen go={goSecure} getToken={getToken}/>,
