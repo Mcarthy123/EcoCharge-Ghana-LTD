@@ -9621,11 +9621,12 @@ useEffect(()=>{
   // Vehicle onboarding guard — reads REAL vehicle data from Supabase every
   // time (never localStorage), so it can't be spoofed and re-checks on
   // fresh login, session restore, and app restart alike.
-  const checkVehicleOnboarding = async (u) => {
+   const checkVehicleOnboarding = async (u) => {
     if (!u?.id || u.id==="demo" || !SUPABASE_URL) return true; // fail open — never trap a user due to missing config/demo mode
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/user_vehicles?user_id=eq.${u.id}&select=vehicle_type,manufacturer,model,year,registration_number`,
         { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` }});
+      if (!res.ok) return true; // e.g. token not yet refreshed at app launch — don't block the user on a transient auth hiccup
       const data = await res.json();
       return Array.isArray(data) && data.some(v => calcVehicleCompletion(v).requiredComplete);
     } catch(e) { return true; } // fail open on network error
