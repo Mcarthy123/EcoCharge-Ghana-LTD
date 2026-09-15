@@ -4833,7 +4833,7 @@ function VehicleOnboardingScreen({ go, user }) {
     if (v.trim().length !== 17) { setVinResult(null); return; }
     const decoded = decodeVin(v);
     const validBrands = getManufacturers(vehicleType, []);
-        if (decoded.manufacturer && validBrands.includes(decoded.manufacturer)) {
+       if (decoded.manufacturer && validBrands.includes(decoded.manufacturer)) {
       setManufacturer(decoded.manufacturer);
       if (decoded.year) setYear(String(decoded.year));
       setVinResult("detected");
