@@ -8199,14 +8199,14 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
       setManufacturer(decoded.manufacturer);
       if (decoded.year) setYear(String(decoded.year));
       setVinResult("detected");
-    } else {
+       } else {
       setVinResult("unknown");
     }
+  };
 
   useEffect(()=>{
     if (!SUPABASE_URL) return;
     fetch(`${SUPABASE_URL}/rest/v1/vehicle_registry?select=brand,model,type,battery_capacity_kwh,connector_type,estimated_range_km,max_charging_power_kw`,
-      { headers:{ apikey:SUPABASE_ANON, Authorization:`Bearer ${getToken()}` } })
       .then(r=>r.json()).then(d=>{ if(Array.isArray(d)) setDbVehicles(d); }).catch(()=>{});
   }, []);
 
