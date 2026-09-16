@@ -8199,9 +8199,9 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
       setManufacturer(decoded.manufacturer);
       if (decoded.year) setYear(String(decoded.year));
       setVinResult("detected");
-          setVinResult("unknown");
+    } else {
+      setVinResult("unknown");
     }
-  };
 
   useEffect(()=>{
     if (!SUPABASE_URL) return;
