@@ -7945,20 +7945,32 @@ const lookupSupabaseRegistryVariants = async (make, model, year) => {
   } catch(e) { return []; }
 };
 
-const lookupSupabaseRegistry = async (make, model, year) => {
-  const variants = await lookupSupabaseRegistryVariants(make, model, year);
-  return variants[0] || null; // single-result callers (existing behavior, unchanged)
-};
-const lookupSupabaseImage = async (make, model) => {
-  if (!SUPABASE_URL) return null;
+const lookupSupabaseRegistryVariants = async (make, model, year) => {
+  if (!SUPABASE_URL) return [];
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/vehicle_image_registry?brand=eq.${encodeURIComponent(make)}&model=eq.${encodeURIComponent(model)}&select=image_url`,
+      `${SUPABASE_URL}/rest/v1/vehicle_registry?brand=eq.${encodeURIComponent(make)}&model=eq.${encodeURIComponent(model)}&select=*`,
       { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` } }
     );
     const data = await res.json();
-    return data?.[0]?.image_url || null;
-  } catch(e) { return null; }
+    if (!Array.isArray(data) || data.length === 0) return [];
+    const yearNum = year ? parseInt(year) : null;
+    const exact = yearNum ? data.filter(r => r.year === yearNum) : [];
+    const rows = exact.length > 0 ? exact : data.filter(r => r.year == null);
+    const verified = exact.length > 0;
+    return rows.map(row => ({
+      source: "supabase_registry", make, model, year, variant: row.variant || null,
+      battery: row.battery_capacity_kwh, connector: row.connector_type,
+      range: row.estimated_range_km, maxPower: row.max_charging_power_kw,
+      type: row.type, imageUrl: null,
+      verificationStatus: verified ? "VERIFIED" : "ESTIMATED",
+    }));
+  } catch(e) { return []; }
+};
+
+const lookupSupabaseRegistry = async (make, model, year) => {
+  const variants = await lookupSupabaseRegistryVariants(make, model, year);
+  return variants[0] || null;
 };
 
 const getStaticImage = (make, model, year) => {
