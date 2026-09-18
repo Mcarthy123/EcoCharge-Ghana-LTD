@@ -7917,25 +7917,38 @@ const VEHICLE_PHOTO_MAP = {
 };
 
 
-const lookupSupabaseRegistry = async (make, model, year) => {
-  if (!SUPABASE_URL) return null;
+// Returns ALL matching rows for a brand+model, so the caller can detect
+// real multiple variants (point 11) rather than silently picking one.
+// Exact year matches are tagged VERIFIED; a model-only fallback (no
+// year-specific row exists yet) is tagged ESTIMATED — never presented
+// as if it were year-accurate.
+const lookupSupabaseRegistryVariants = async (make, model, year) => {
+  if (!SUPABASE_URL) return [];
   try {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/vehicle_registry?brand=eq.${encodeURIComponent(make)}&model=eq.${encodeURIComponent(model)}&select=*`,
       { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` } }
     );
     const data = await res.json();
-    const row = Array.isArray(data) ? data[0] : null;
-    if (!row) return null;
-    return {
-      source: "supabase_registry", make, model, year,
+    if (!Array.isArray(data) || data.length === 0) return [];
+    const yearNum = year ? parseInt(year) : null;
+    const exact = yearNum ? data.filter(r => r.year === yearNum) : [];
+    const rows = exact.length > 0 ? exact : data.filter(r => r.year == null);
+    const verified = exact.length > 0;
+    return rows.map(row => ({
+      source: "supabase_registry", make, model, year, variant: row.variant || null,
       battery: row.battery_capacity_kwh, connector: row.connector_type,
       range: row.estimated_range_km, maxPower: row.max_charging_power_kw,
       type: row.type, imageUrl: null,
-    };
-  } catch(e) { return null; }
+      verificationStatus: verified ? "VERIFIED" : "ESTIMATED",
+    }));
+  } catch(e) { return []; }
 };
 
+const lookupSupabaseRegistry = async (make, model, year) => {
+  const variants = await lookupSupabaseRegistryVariants(make, model, year);
+  return variants[0] || null; // single-result callers (existing behavior, unchanged)
+};
 const lookupSupabaseImage = async (make, model) => {
   if (!SUPABASE_URL) return null;
   try {
@@ -7975,26 +7988,28 @@ const lookupCarsXE = async (make, model, year) => {
   } catch(e) { return null; }
 };
 
-// Tier 2: EcoCharge Registry (local African EV database)
+// Tier 2: EcoCharge Registry (local African EV database) — this tier stores
+// one spec set per model with a valid-years list, not one row per year, so
+// it can never claim year-exact precision — always labeled ESTIMATED.
 const lookupRegistry = (make, model, year) => {
   const mfr = ECOCHARGE_REGISTRY[make];
   if (!mfr) return null;
   const m = mfr[model];
   if (!m) return null;
   if (year && !m.years.includes(parseInt(year))) return null;
-  return { source:"ecocharge_registry", make, model, year, ...m, imageUrl:null };
+  return { source:"ecocharge_registry", make, model, year, ...m, imageUrl:null, verificationStatus:"ESTIMATED" };
 };
 
-// Tier 3: Local fallback EV_DATABASE
+// Tier 3: Local fallback EV_DATABASE — generic spec set shared across a
+// whole year range for the model; always the least-precise tier, labeled accordingly.
 const lookupLocal = (make, model, year) => {
   const mfr = EV_DATABASE[make];
   if (!mfr) return null;
   const m = mfr.models?.[model];
   if (!m) return null;
   return { source:"local", make, model, year, battery:m.battery, connector:m.connector,
-    range:m.range, maxPower:m.maxPower, type:m.type, imageUrl:null };
+    range:m.range, maxPower:m.maxPower, type:m.type, imageUrl:null, verificationStatus:"ESTIMATED" };
 };
-
 // Master lookup — tries all sources, returns first match
 const getVehicleInfo = async (make, model, year) => {
   if (!make || !model) return null;
@@ -8008,11 +8023,11 @@ const getVehicleInfo = async (make, model, year) => {
   // Always check static image map first — instant, no API call
   const staticImg = getStaticImage(make, model, year);
 
-  // 1. CarsXE API
+   // 1. CarsXE API — third-party, treated as verified for the exact make/model/year queried
   const api = await lookupCarsXE(make, model, year);
   if (api && (api.battery || api.range)) {
-    // Use static image as fallback if API didn't return one
     if (!api.imageUrl && staticImg) api.imageUrl = staticImg;
+    api.verificationStatus = "VERIFIED";
     return api;
   }
 
@@ -8030,13 +8045,27 @@ const getVehicleInfo = async (make, model, year) => {
     return local;
   }
 
-  // 4. Static image only (at least show the car photo)
+   // 4. Static image only (at least show the car photo) — no specs at all,
+  // every field must show "Not available" in the UI, never a guess.
   if (staticImg) {
     return { source:"static", make, model, year, imageUrl:staticImg,
-      battery:null, connector:null, range:null, maxPower:null, type:"Electric Car" };
+      battery:null, connector:null, range:null, maxPower:null, type:"Electric Car",
+      verificationStatus:"UNAVAILABLE" };
   }
 
   return null;
+};
+
+// Real duplicate-VIN check (point 15) — used by both registration screens.
+// Never returns or exposes another user's identity, only a status.
+const checkVinAvailability = async (vin, userId) => {
+  if (!SUPABASE_URL || !vin || vin.trim().length !== 17) return "available";
+  try {
+    const result = await sb("rpc/check_vin_availability", {
+      method:"POST", body: JSON.stringify({ p_vin: vin.trim().toUpperCase(), p_user_id: userId }),
+    });
+    return typeof result === "string" ? result.replace(/"/g,"") : "available";
+  } catch(e) { return "available"; } // fail open — never block registration on a network hiccup
 };
 
 // Submit unknown vehicle to admin review queue (builds the registry over time)
@@ -8183,6 +8212,9 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
   const [color,        setColor]        = useState(editVehicle?.color        || "#22C55E");
   const [isDefault,    setIsDefault]    = useState(editVehicle?.is_default   || false);
   const [imageUrl,     setImageUrl]     = useState(editVehicle?.image_url    || "");
+  const [lookupVerification, setLookupVerification] = useState(null); // "VERIFIED" | "ESTIMATED" | "UNAVAILABLE" | null
+  const [variantOptions, setVariantOptions] = useState([]); // populated when 2+ real variants exist (point 11)
+  const [vinDupError, setVinDupError] = useState("");
 
     const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
@@ -8218,10 +8250,29 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
   const [lookupFailed,  setLookupFailed]  = useState(false);
 
   const SOURCE_LABELS = {
+    supabase_registry:  { label:"EcoCharge Vehicle Database", color:T.green, icon:"fa-check-circle" },
     carsxe:             { label:"CarsXE API",           color:T.blue,   icon:"fa-cloud"    },
     ecocharge_registry: { label:"EcoCharge Registry",   color:T.green,  icon:"fa-leaf"     },
     local:              { label:"EcoCharge Local DB",   color:T.muted,  icon:"fa-database" },
     static:             { label:"Image Library",        color:T.yellow, icon:"fa-image"    },
+  };
+  const VERIFICATION_LABELS = {
+    VERIFIED:    { label:"Verified specification", color:T.green },
+    ESTIMATED:   { label:"EcoCharge estimate",      color:T.yellow },
+    UNAVAILABLE: { label:"Not available",           color:T.muted },
+  };
+
+  const applyLookupResult = (info) => {
+    if (info.battery)   setBattery(String(info.battery));
+    if (info.connector) setConnector(info.connector);
+    if (info.range)     setRange(String(info.range));
+    if (info.maxPower)  setMaxPower(String(info.maxPower));
+    if (info.type)      setVehicleType(info.type);
+    if (info.imageUrl)  setImageUrl(info.imageUrl);
+    setLookupSource(info.source);
+    setLookupVerification(info.verificationStatus || null);
+    setAutoFilled(true);
+    setTimeout(()=>setAutoFilled(false), 4000);
   };
 
   // Auto-fill when manufacturer+model+year selected
@@ -8230,20 +8281,24 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
     if (isEdit) return;
     setLookupLoading(true);
     setLookupSource(null);
+    setLookupVerification(null);
     setLookupFailed(false);
-    getVehicleInfo(manufacturer, model, year).then(info=>{
+    setVariantOptions([]);
+    (async () => {
+      // Check for real, distinct variants BEFORE auto-picking one (point 11) —
+      // only triggers when 2+ actually-different variant rows exist for this
+      // exact model+year; with 0 or 1 rows, behaves exactly as before.
+      const variants = await lookupSupabaseRegistryVariants(manufacturer, model, year);
+      const distinctVariants = variants.filter(v => v.variant);
+      if (distinctVariants.length > 1) {
+        setLookupLoading(false);
+        setVariantOptions(distinctVariants);
+        return;
+      }
+      const info = await getVehicleInfo(manufacturer, model, year);
       setLookupLoading(false);
       if (info) {
-        if (info.battery)   setBattery(String(info.battery));
-        if (info.connector) setConnector(info.connector);
-        if (info.range)     setRange(String(info.range));
-        if (info.maxPower)  setMaxPower(String(info.maxPower));
-        if (info.type)      setVehicleType(info.type);
-        if (info.imageUrl)  setImageUrl(info.imageUrl);
-        setLookupSource(info.source);
-        setAutoFilled(true);
-        setTimeout(()=>setAutoFilled(false), 4000);
-        // Submit to registry if from API so we grow our database
+        applyLookupResult(info);
         if (info.source === "carsxe") {
           submitVehicleToRegistry({ manufacturer, model, year, vehicle_type:info.type,
             battery_capacity:info.battery, connector_type:info.connector,
@@ -8252,9 +8307,13 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
       } else {
         setLookupFailed(true);
       }
-    });
+    })();
   }, [manufacturer, model, year]);
 
+  const chooseVariant = (v) => {
+    setVariantOptions([]);
+    applyLookupResult(v);
+  };
   // Reset model/year when manufacturer changes
   useEffect(()=>{ if (!isEdit) { setModel(""); setYear(""); setBattery(""); setConnector(""); setRange(""); setMaxPower(""); } },[manufacturer]);
   useEffect(()=>{ if (!isEdit) { setYear(""); } },[model]);
@@ -8266,7 +8325,20 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
     if (!model.trim())       { setError("Please enter the model"); return; }
     if (!year)               { setError("Please select the year"); return; }
 
-    setSaving(true); setError("");
+        setSaving(true); setError(""); setVinDupError("");
+    if (vin.trim().length === 17) {
+      const vinStatus = await checkVinAvailability(vin, user?.id);
+      if (vinStatus === "taken") {
+        setError("This vehicle cannot be registered to this account. Contact EcoCharge support if you believe this is an error.");
+        setSaving(false);
+        return;
+      }
+      if (vinStatus === "own" && !isEdit) {
+        setError("This vehicle is already registered.");
+        setSaving(false);
+        return;
+      }
+    }
     if (lookupFailed) {
       submitVehicleToRegistry({
         manufacturer, model, year,
@@ -8290,7 +8362,9 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
       max_charging_power: parseFloat(maxPower) || null,
       registration_number: regNum.trim() || null,
       color: color || "#22C55E",
-      image_url: imageUrl || null,
+          image_url: imageUrl || null,
+      spec_source: lookupSource || null,
+      spec_verification_status: lookupVerification || null,
       is_default: isDefault,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -8531,6 +8605,20 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
               </div>
             )}
 
+            {!lookupLoading && variantOptions.length > 1 && (
+              <div className="fade" style={{ background:T.highlightGrad2,borderRadius:14,padding:"14px",marginBottom:14,border:`1px solid ${T.greenDim}` }}>
+                <div style={{ fontWeight:700,fontSize:13,color:T.text,marginBottom:2 }}>We found your vehicle</div>
+                <div style={{ fontSize:12,color:T.muted,marginBottom:12 }}>{manufacturer} {model} {year} — select your variant:</div>
+                {variantOptions.map((v,i)=>(
+                  <button key={i} onClick={()=>chooseVariant(v)} className="tap"
+                    style={{ width:"100%",textAlign:"left",background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:"11px 14px",marginBottom:8,cursor:"pointer",fontFamily:"inherit",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                    <span style={{ fontSize:13,color:T.text,fontWeight:600 }}>{v.variant}</span>
+                    <span style={{ fontSize:11,color:T.muted }}>{v.battery?`${v.battery} kWh`:""}{v.range?` · ${v.range} km`:""}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {!lookupLoading && lookupSource && (()=>{
               const src = SOURCE_LABELS[lookupSource] || SOURCE_LABELS.local;
               return (
@@ -8538,10 +8626,12 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
                   <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:4 }}>
                     <i className={`fas ${src.icon}`} style={{ color:src.color,fontSize:13 }}/>
                     <span style={{ fontWeight:700,fontSize:12,color:src.color,textTransform:"uppercase",letterSpacing:0.4 }}>{src.label}</span>
-                    <span style={{ fontSize:11,color:T.muted }}>· Auto-detected</span>
+                                       <span style={{ fontSize:11,color:T.muted }}>· {lookupVerification==="VERIFIED" ? "Matched by database" : "Estimated match"}</span>
                   </div>
                   <div style={{ fontSize:12,color:T.muted,lineHeight:1.6 }}>
-                    Specs found for your {manufacturer} {model} {year}. Review and adjust if needed.
+                    {lookupVerification==="VERIFIED"
+                      ? <>Vehicle identified — <strong style={{color:T.text}}>{manufacturer} {model} {year}</strong>. Review and adjust if needed.</>
+                      : <>No exact {year} record yet — showing the closest known specs for {manufacturer} {model}. Please verify these against your vehicle.</>}
                   </div>
                 </div>
               );
@@ -8564,9 +8654,10 @@ function VehicleForm({ go, user, editVehicle=null, onSaved }) {
               </div>
             )}
 
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:4 }}>
+                       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:4 }}>
               <div>
                 {inp("Battery Capacity (kWh)", battery, setBattery, "number", "e.g. 75")}
+                {lookupVerification && <div style={{ fontSize:10,color:VERIFICATION_LABELS[lookupVerification]?.color,marginTop:-10,marginBottom:10 }}>{battery ? VERIFICATION_LABELS[lookupVerification]?.label : "Not available"}</div>}
               </div>
               <div>
                 {inp("Est. Range (km)", range, setRange, "number", "e.g. 560")}
