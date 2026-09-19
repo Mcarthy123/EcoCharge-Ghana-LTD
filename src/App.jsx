@@ -7922,30 +7922,9 @@ const VEHICLE_PHOTO_MAP = {
 // Exact year matches are tagged VERIFIED; a model-only fallback (no
 // year-specific row exists yet) is tagged ESTIMATED — never presented
 // as if it were year-accurate.
-const lookupSupabaseRegistryVariants = async (make, model, year) => {
-  if (!SUPABASE_URL) return [];
-  try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/vehicle_registry?brand=eq.${encodeURIComponent(make)}&model=eq.${encodeURIComponent(model)}&select=*`,
-      { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` } }
-    );
-    const data = await res.json();
-    if (!Array.isArray(data) || data.length === 0) return [];
-    const yearNum = year ? parseInt(year) : null;
-    const exact = yearNum ? data.filter(r => r.year === yearNum) : [];
-    const rows = exact.length > 0 ? exact : data.filter(r => r.year == null);
-    const verified = exact.length > 0;
-    return rows.map(row => ({
-      source: "supabase_registry", make, model, year, variant: row.variant || null,
-      battery: row.battery_capacity_kwh, connector: row.connector_type,
-      range: row.estimated_range_km, maxPower: row.max_charging_power_kw,
-      type: row.type, imageUrl: null,
-      verificationStatus: verified ? "VERIFIED" : "ESTIMATED",
-    }));
-  } catch(e) { return []; }
 };
 
-const lookupSupabaseRegistryVariants = async (make, model, year) => {
+const lookupSupabaseRegistry = async (make, model, year) => {
   if (!SUPABASE_URL) return [];
   try {
     const res = await fetch(
