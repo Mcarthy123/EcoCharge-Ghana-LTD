@@ -7924,7 +7924,7 @@ const VEHICLE_PHOTO_MAP = {
 // as if it were year-accurate.
 
 
-const lookupSupabaseRegistry = async (make, model, year) => {
+const lookupSupabaseRegistryVariants = async (make, model, year) => {
   if (!SUPABASE_URL) return [];
   try {
     const res = await fetch(
