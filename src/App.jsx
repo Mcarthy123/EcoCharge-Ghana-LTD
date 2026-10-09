@@ -7922,7 +7922,7 @@ const VEHICLE_PHOTO_MAP = {
 // Exact year matches are tagged VERIFIED; a model-only fallback (no
 // year-specific row exists yet) is tagged ESTIMATED — never presented
 // as if it were year-accurate.
-};
+
 
 const lookupSupabaseRegistry = async (make, model, year) => {
   if (!SUPABASE_URL) return [];
