@@ -613,6 +613,8 @@ export default function HomePlusDashboard({ go: goApp, user, T, getToken, SUPABA
   const [liveCharger, setLiveCharger] = useState(null); // real OCPP state for the linked charger, if any
   const [sendingCmd, setSendingCmd] = useState(false);
   const [chargerCmdError, setChargerCmdError] = useState(""); // surfaced when a charger's protocol isn't supported yet
+  const [showAssistant, setShowAssistant] = useState(false);
+  const [assistantTab, setAssistantTab] = useState("assistant"); // assistant | battery | tips
 
   const statusColor = STATUS_COLOR[session.status] || T.muted;
   const statusIcon = STATUS_ICON[session.status] || "fa-bolt";
@@ -931,80 +933,24 @@ export default function HomePlusDashboard({ go: goApp, user, T, getToken, SUPABA
           </div>
         </Card>
 
-        <Card T={T} style={{ padding:18, marginBottom:16 }}>
-          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4 }}>
-            <div style={{ fontWeight:800,fontSize:14,color:T.text }}><i className="fas fa-robot" style={{ marginRight:8,color:T.blue }}/>AI Assistant</div>
-            <Badge label="Rule-based" color={T.blue}/>
-          </div>
-          <div style={{ fontSize:11,color:T.muted,marginBottom:14,lineHeight:1.6 }}>Answers use your real wallet, vehicle, and schedule data — not a live conversational AI yet.</div>
-          {(loadingVehicle || loadingSchedules) ? (
-            <div style={{ textAlign:"center",padding:"14px 0",color:T.muted,fontSize:12 }}>Loading…</div>
-          ) : (
-            <>
-              {aiRecommendations.map((r,i)=>(
-                <div key={i} style={{ display:"flex",gap:10,alignItems:"flex-start",marginBottom:i<aiRecommendations.length-1?10:14 }}>
-                  <div style={{ width:6,height:6,borderRadius:"50%",background:TONE_COLOR(T,r.tone),marginTop:6,flexShrink:0 }}/>
-                  <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.7 }}>{r.text}</div>
-                </div>
-              ))}
-              <div style={{ height:1,background:T.surfaceBorder,margin:"4px 0 14px" }}/>
-              <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,marginBottom:10 }}>Ask a question</div>
-              <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:activeQuestion?14:0 }}>
-                {PRESET_QUESTIONS.map(q=>(
-                  <button key={q.key} onClick={()=>askQuestion(q.key)} className="tap"
-                    style={{ background:activeQuestion===q.key?`${T.blue}22`:T.inputBg,border:`1px solid ${activeQuestion===q.key?T.blue:T.border}`,borderRadius:20,padding:"8px 14px",fontSize:11,fontWeight:700,color:activeQuestion===q.key?T.blue:T.mutedLight,cursor:"pointer",fontFamily:"inherit" }}>
-                    {q.label}
-                  </button>
-                ))}
-              </div>
-              {activeQuestion && (
-                <div className="fade" style={{ background:"rgba(56,189,248,0.06)",border:`1px solid ${T.blue}33`,borderRadius:12,padding:"12px 14px" }}>
-                  <div style={{ fontSize:12,color:T.text,lineHeight:1.7 }}>{answerText}</div>
-                </div>
-              )}
-            </>
-          )}
-        </Card>
-
-        <Card T={T} style={{ padding:18, marginBottom:16 }}>
-          <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:4 }}><i className="fas fa-shield-alt" style={{ marginRight:8,color:T.green }}/>Battery Protection</div>
-          {!vehicle && !loadingVehicle && (
-            <div style={{ fontSize:12,color:T.muted,marginBottom:14 }}>Add a vehicle to save a personal charge limit. Using 80% as a default for now.</div>
-          )}
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:12,marginBottom:12 }}>
-            {[80,90,100].map(p=>(
-              <button key={p} onClick={()=>changeChargeLimit(p)} disabled={savingLimit} className="tap"
-                style={{ background:chargeLimit===p?T.green:T.inputBg,border:`1px solid ${chargeLimit===p?T.green:T.border}`,borderRadius:12,padding:"14px 4px",fontSize:15,fontWeight:800,color:chargeLimit===p?"#000":T.muted,cursor:"pointer",fontFamily:"inherit" }}>
-                {p}%
-              </button>
-            ))}
-          </div>
-          <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.7,marginBottom:16 }}>{CHARGE_LIMIT_EXPLANATIONS[chargeLimit]}</div>
-          <div style={{ height:1,background:T.surfaceBorder,marginBottom:16 }}/>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
-            <div style={{ background:T.surfaceFaint,borderRadius:12,padding:"12px 14px" }}>
-              <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:5 }}>Battery Health</div>
-              <div style={{ fontWeight:700,fontSize:14,color:hasBatteryHealth?T.text:T.muted }}>
-                {hasBatteryHealth ? `${vehicle.battery_health_pct}%` : "Not available from your vehicle"}
-              </div>
-              {hasBatteryHealth && <div style={{ fontSize:9,color:T.muted,marginTop:3 }}>Self-reported</div>}
+        <div style={{ display:"flex",gap:10,marginBottom:16 }}>
+          <button onClick={()=>{ setAssistantTab("battery"); setShowAssistant(true); }} className="tap"
+            style={{ flex:1,background:T.surface,border:`1px solid ${T.surfaceBorder}`,borderRadius:14,padding:"12px 14px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:10,textAlign:"left" }}>
+            <i className="fas fa-shield-alt" style={{ fontSize:14,color:T.green }}/>
+            <div style={{ flex:1 }}>
+              <div style={{ fontWeight:700,fontSize:12,color:T.text }}>Charge Limit</div>
+              <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>{chargeLimit}%</div>
             </div>
-            <div style={{ background:T.surfaceFaint,borderRadius:12,padding:"12px 14px" }}>
-              <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:5 }}>Battery Stress</div>
-              <div style={{ fontWeight:700,fontSize:14,color:T.muted }}>Not available</div>
+          </button>
+          <button onClick={()=>{ setAssistantTab("assistant"); setShowAssistant(true); }} className="tap"
+            style={{ flex:1,background:T.surface,border:`1px solid ${T.surfaceBorder}`,borderRadius:14,padding:"12px 14px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:10,textAlign:"left" }}>
+            <i className="fas fa-robot" style={{ fontSize:14,color:T.blue }}/>
+            <div style={{ flex:1 }}>
+              <div style={{ fontWeight:700,fontSize:12,color:T.text }}>Assistant</div>
+              <div style={{ fontSize:11,color:T.muted,marginTop:2 }}>Tips &amp; answers</div>
             </div>
-          </div>
-        </Card>
-
-        <Card T={T} style={{ padding:18, marginBottom:16 }}>
-          <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:12 }}><i className="fas fa-lightbulb" style={{ marginRight:8,color:T.yellow }}/>Battery Tips</div>
-          {tips.map((tip,i)=>(
-            <div key={i} style={{ display:"flex",gap:10,alignItems:"flex-start",marginBottom:i<tips.length-1?10:0 }}>
-              <div style={{ width:6,height:6,borderRadius:"50%",background:T.green,marginTop:6,flexShrink:0 }}/>
-              <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.7 }}>{tip}</div>
-            </div>
-          ))}
-        </Card>
+          </button>
+        </div>
 
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10 }}>
           <div style={{ fontWeight:800,fontSize:14,color:T.text }}>Charging Schedules</div>
@@ -1081,6 +1027,112 @@ export default function HomePlusDashboard({ go: goApp, user, T, getToken, SUPABA
           ))}
         </div>
       </div>
+
+      {/* Floating assistant button */}
+      {!showAssistant && (
+        <button onClick={()=>setShowAssistant(true)} className="tap" aria-label="Open assistant"
+          style={{ position:"fixed",right:18,bottom:96,width:54,height:54,borderRadius:"50%",background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",boxShadow:"0 8px 24px rgba(0,0,0,0.35)",cursor:"pointer",zIndex:60,display:"flex",alignItems:"center",justifyContent:"center" }}>
+          <i className="fas fa-robot" style={{ fontSize:22,color:"#000" }}/>
+        </button>
+      )}
+
+      {/* Assistant bottom sheet */}
+      {showAssistant && (
+        <div onClick={()=>setShowAssistant(false)} style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center" }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:T.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,maxHeight:"82%",display:"flex",flexDirection:"column",border:`1px solid ${T.border}` }}>
+            <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 18px 10px" }}>
+              <div style={{ fontWeight:800,fontSize:16,color:T.text }}><i className="fas fa-robot" style={{ marginRight:8,color:T.blue }}/>Charging Assistant</div>
+              <button onClick={()=>setShowAssistant(false)} className="tap" style={{ background:"none",border:"none",color:T.muted,fontSize:18,cursor:"pointer" }}><i className="fas fa-times"/></button>
+            </div>
+            <div style={{ display:"flex",gap:8,padding:"0 18px 12px" }}>
+              {[{k:"assistant",l:"Assistant"},{k:"battery",l:"Battery"},{k:"tips",l:"Tips"}].map(t=>(
+                <button key={t.k} onClick={()=>setAssistantTab(t.k)} className="tap"
+                  style={{ flex:1,background:assistantTab===t.k?T.green:T.inputBg,border:`1px solid ${assistantTab===t.k?T.green:T.border}`,borderRadius:20,padding:"8px 4px",fontSize:12,fontWeight:700,color:assistantTab===t.k?"#000":T.mutedLight,cursor:"pointer",fontFamily:"inherit" }}>{t.l}</button>
+              ))}
+            </div>
+            <div style={{ overflowY:"auto",padding:"0 16px calc(24px + env(safe-area-inset-bottom,0px))" }}>
+        {assistantTab==="assistant" && (
+        <Card T={T} style={{ padding:18, marginBottom:16 }}>
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4 }}>
+            <div style={{ fontWeight:800,fontSize:14,color:T.text }}><i className="fas fa-robot" style={{ marginRight:8,color:T.blue }}/>AI Assistant</div>
+            <Badge label="Rule-based" color={T.blue}/>
+          </div>
+          <div style={{ fontSize:11,color:T.muted,marginBottom:14,lineHeight:1.6 }}>Answers use your real wallet, vehicle, and schedule data — not a live conversational AI yet.</div>
+          {(loadingVehicle || loadingSchedules) ? (
+            <div style={{ textAlign:"center",padding:"14px 0",color:T.muted,fontSize:12 }}>Loading…</div>
+          ) : (
+            <>
+              {aiRecommendations.map((r,i)=>(
+                <div key={i} style={{ display:"flex",gap:10,alignItems:"flex-start",marginBottom:i<aiRecommendations.length-1?10:14 }}>
+                  <div style={{ width:6,height:6,borderRadius:"50%",background:TONE_COLOR(T,r.tone),marginTop:6,flexShrink:0 }}/>
+                  <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.7 }}>{r.text}</div>
+                </div>
+              ))}
+              <div style={{ height:1,background:T.surfaceBorder,margin:"4px 0 14px" }}/>
+              <div style={{ fontSize:11,color:T.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,marginBottom:10 }}>Ask a question</div>
+              <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:activeQuestion?14:0 }}>
+                {PRESET_QUESTIONS.map(q=>(
+                  <button key={q.key} onClick={()=>askQuestion(q.key)} className="tap"
+                    style={{ background:activeQuestion===q.key?`${T.blue}22`:T.inputBg,border:`1px solid ${activeQuestion===q.key?T.blue:T.border}`,borderRadius:20,padding:"8px 14px",fontSize:11,fontWeight:700,color:activeQuestion===q.key?T.blue:T.mutedLight,cursor:"pointer",fontFamily:"inherit" }}>
+                    {q.label}
+                  </button>
+                ))}
+              </div>
+              {activeQuestion && (
+                <div className="fade" style={{ background:"rgba(56,189,248,0.06)",border:`1px solid ${T.blue}33`,borderRadius:12,padding:"12px 14px" }}>
+                  <div style={{ fontSize:12,color:T.text,lineHeight:1.7 }}>{answerText}</div>
+                </div>
+              )}
+            </>
+          )}
+        </Card>
+        )}
+        {assistantTab==="battery" && (
+        <Card T={T} style={{ padding:18, marginBottom:16 }}>
+          <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:4 }}><i className="fas fa-shield-alt" style={{ marginRight:8,color:T.green }}/>Battery Protection</div>
+          {!vehicle && !loadingVehicle && (
+            <div style={{ fontSize:12,color:T.muted,marginBottom:14 }}>Add a vehicle to save a personal charge limit. Using 80% as a default for now.</div>
+          )}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:12,marginBottom:12 }}>
+            {[80,90,100].map(p=>(
+              <button key={p} onClick={()=>changeChargeLimit(p)} disabled={savingLimit} className="tap"
+                style={{ background:chargeLimit===p?T.green:T.inputBg,border:`1px solid ${chargeLimit===p?T.green:T.border}`,borderRadius:12,padding:"14px 4px",fontSize:15,fontWeight:800,color:chargeLimit===p?"#000":T.muted,cursor:"pointer",fontFamily:"inherit" }}>
+                {p}%
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.7,marginBottom:16 }}>{CHARGE_LIMIT_EXPLANATIONS[chargeLimit]}</div>
+          <div style={{ height:1,background:T.surfaceBorder,marginBottom:16 }}/>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+            <div style={{ background:T.surfaceFaint,borderRadius:12,padding:"12px 14px" }}>
+              <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:5 }}>Battery Health</div>
+              <div style={{ fontWeight:700,fontSize:14,color:hasBatteryHealth?T.text:T.muted }}>
+                {hasBatteryHealth ? `${vehicle.battery_health_pct}%` : "Not available from your vehicle"}
+              </div>
+              {hasBatteryHealth && <div style={{ fontSize:9,color:T.muted,marginTop:3 }}>Self-reported</div>}
+            </div>
+            <div style={{ background:T.surfaceFaint,borderRadius:12,padding:"12px 14px" }}>
+              <div style={{ fontSize:9,color:T.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:5 }}>Battery Stress</div>
+              <div style={{ fontWeight:700,fontSize:14,color:T.muted }}>Not available</div>
+            </div>
+          </div>
+        </Card>
+        )}
+        {assistantTab==="tips" && (
+        <Card T={T} style={{ padding:18, marginBottom:16 }}>
+          <div style={{ fontWeight:800,fontSize:14,color:T.text,marginBottom:12 }}><i className="fas fa-lightbulb" style={{ marginRight:8,color:T.yellow }}/>Battery Tips</div>
+          {tips.map((tip,i)=>(
+            <div key={i} style={{ display:"flex",gap:10,alignItems:"flex-start",marginBottom:i<tips.length-1?10:0 }}>
+              <div style={{ width:6,height:6,borderRadius:"50%",background:T.green,marginTop:6,flexShrink:0 }}/>
+              <div style={{ fontSize:12,color:T.mutedLight,lineHeight:1.7 }}>{tip}</div>
+            </div>
+          ))}
+        </Card>
+        )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showScheduleModal && (
         <ScheduleModal T={T} saving={savingSchedule} onClose={()=>setShowScheduleModal(false)} onSave={saveSchedule}/>
