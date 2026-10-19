@@ -166,6 +166,19 @@ const HomeChargerService = {
     });
     return saved?.[0] || null;
   },
+  // Pairing-code link: the code is checked on the server (Supabase function
+  // link_home_charger), so it cannot be skipped from the browser.
+  async linkWithCode(chargerOcppId, code, nickname, ctx) {
+    try {
+      const res = await fetch(`${ctx.SUPABASE_URL}/rest/v1/rpc/link_home_charger`, {
+        method:"POST",
+        headers:{ apikey:ctx.SUPABASE_ANON, Authorization:`Bearer ${ctx.getToken()}`, "Content-Type":"application/json" },
+        body: JSON.stringify({ p_charger_id: chargerOcppId, p_code: code, p_nickname: nickname || null }),
+      });
+      if (!res.ok) return { ok:false, error:"server" };
+      return await res.json();
+    } catch(e) { return { ok:false, error:"network" }; }
+  },
   async rename(id, nickname, ctx) {
     return sbPatch(ctx.SUPABASE_URL, ctx.SUPABASE_ANON, ctx.getToken, `home_chargers?id=eq.${id}`, { nickname });
   },
@@ -266,6 +279,15 @@ const Header = ({ T, title, sub, onBack, right }) => (
 const STATUS_COLOR = { Charging:"#38bdf8", Scheduled:"#fbbf24", Completed:"#4ade80", Paused:"#f97316", Idle:"#9ca3af" };
 const STATUS_ICON  = { Charging:"fa-bolt", Scheduled:"fa-clock", Completed:"fa-check-circle", Paused:"fa-pause-circle", Idle:"fa-power-off" };
 const TONE_COLOR = (T, tone) => tone==="caution" ? T.yellow : tone==="good" ? T.green : T.blue;
+
+const PAIR_ERRORS = {
+  invalid_code:"That code isn't right. Check the code on your charger and try again.",
+  locked:"Too many wrong tries. Contact EcoCharge support for a new code.",
+  already_linked:"This charger is already linked to another account.",
+  not_signed_in:"Please sign in again and retry.",
+  server:"Couldn't reach the server. Try again.",
+  network:"No connection. Check your internet and try again.",
+};
 
 const fmtTime = (d) => new Date(d).toLocaleTimeString("en-GH",{ hour:"2-digit",minute:"2-digit" });
 
@@ -433,16 +455,22 @@ function ChargerManagement({ T, go, user, ctx, onBack, linkedChargers, onLinkedC
   const [renameValue, setRenameValue] = useState("");
   const [scanning, setScanning] = useState(false);
   const [scanMsg, setScanMsg] = useState("");
+  const [pairingFor, setPairingFor] = useState(null);   // charger id awaiting its pairing code
+  const [pairingCode, setPairingCode] = useState("");
+  const [pairingError, setPairingError] = useState("");
+  const [pairingBusy, setPairingBusy] = useState(false);
 
   const handleScanResult = async (text) => {
     setScanning(false);
-    const scannedId = text.startsWith("ECOCHARGER:") ? text.slice("ECOCHARGER:".length).trim() : text.trim();
+    const raw = text.startsWith("ECOCHARGER:") ? text.slice("ECOCHARGER:".length).trim() : text.trim();
+    const [scannedId, scannedCode] = raw.split(":");
     const match = ocppChargers.find(c => c.id === scannedId);
     if (!match) { setScanMsg(`No charger found matching "${scannedId}". Make sure it's powered on and try again.`); setTimeout(()=>setScanMsg(""),4000); return; }
     if (isLinked(match.id)) { setScanMsg(`"${scannedId}" is already linked.`); setTimeout(()=>setScanMsg(""),4000); return; }
-    const rec = await HomeChargerService.link(user.id, match.id, match.id, ctx);
-    if (rec) { setScanMsg("Charger linked! ✅"); onLinkedChanged(); }
-    else setScanMsg("Could not link charger. Try again.");
+    if (!scannedCode) { setPairingFor(match.id); setPairingCode(""); setPairingError(""); return; }
+    const r = await HomeChargerService.linkWithCode(match.id, scannedCode, match.id, ctx);
+    if (r?.ok) { setScanMsg("Charger linked! ✅"); onLinkedChanged(); }
+    else setScanMsg(PAIR_ERRORS[r?.error] || "Could not link charger. Try again.");
     setTimeout(()=>setScanMsg(""), 4000);
   };
 
@@ -458,9 +486,13 @@ function ChargerManagement({ T, go, user, ctx, onBack, linkedChargers, onLinkedC
   const isLinked = (id) => linkedIds.has(id);
   const linkedRecord = (id) => linkedChargers.find(c=>c.charger_ocpp_id===id);
 
-  const linkCharger = async (c) => {
-    const rec = await HomeChargerService.link(user.id, c.id, c.id, ctx);
-    if (rec) onLinkedChanged();
+  const submitPairing = async (c) => {
+    if (!pairingCode.trim()) { setPairingError("Enter the pairing code from your charger."); return; }
+    setPairingBusy(true); setPairingError("");
+    const r = await HomeChargerService.linkWithCode(c.id, pairingCode, c.id, ctx);
+    setPairingBusy(false);
+    if (r?.ok) { setPairingFor(null); setPairingCode(""); onLinkedChanged(); }
+    else setPairingError(PAIR_ERRORS[r?.error] || "Could not link charger. Try again.");
   };
   const unlinkCharger = async (id) => {
     const rec = linkedRecord(id);
@@ -558,7 +590,7 @@ function ChargerManagement({ T, go, user, ctx, onBack, linkedChargers, onLinkedC
 
               <div style={{ display:"grid",gridTemplateColumns:linked?"1fr 1fr 1fr":"1fr",gap:8 }}>
                 {!linked && (
-                  <button onClick={()=>linkCharger(c)} className="tap"
+                  <button onClick={()=>{ setPairingFor(c.id); setPairingCode(""); setPairingError(""); }} className="tap"
                     style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:10,padding:"10px",fontSize:12,fontWeight:700,color:"#000",cursor:"pointer",fontFamily:"inherit" }}>
                     <i className="fas fa-link" style={{ marginRight:6 }}/>Link as My Home Charger
                   </button>
@@ -580,6 +612,21 @@ function ChargerManagement({ T, go, user, ctx, onBack, linkedChargers, onLinkedC
                   </>
                 )}
               </div>
+              {!linked && pairingFor===c.id && (
+                <div style={{ marginTop:12,paddingTop:12,borderTop:`1px solid ${T.surfaceBorder}` }}>
+                  <div style={{ fontSize:11,color:T.muted,marginBottom:8,lineHeight:1.6 }}>Enter the pairing code printed on your charger or its box.</div>
+                  <div style={{ display:"flex",gap:8 }}>
+                    <input value={pairingCode} onChange={e=>setPairingCode(e.target.value.toUpperCase())} autoFocus maxLength={12} placeholder="e.g. K7M2-9QXA" autoCapitalize="characters" autoCorrect="off" spellCheck={false}
+                      style={{ flex:1,minWidth:0,background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 12px",color:T.text,fontSize:14,letterSpacing:2,fontFamily:"inherit" }}/>
+                    <button onClick={()=>submitPairing(c)} disabled={pairingBusy} className="tap"
+                      style={{ background:`linear-gradient(135deg,${T.green},${T.greenDark})`,border:"none",borderRadius:10,padding:"10px 16px",fontSize:13,fontWeight:800,color:"#000",cursor:"pointer",fontFamily:"inherit",opacity:pairingBusy?0.7:1 }}>
+                      {pairingBusy ? "…" : "Link"}
+                    </button>
+                  </div>
+                  {pairingError && <div style={{ fontSize:11,color:T.red,marginTop:8,lineHeight:1.5 }}>{pairingError}</div>}
+                  <button onClick={()=>setPairingFor(null)} className="tap" style={{ background:"none",border:"none",color:T.muted,fontSize:11,cursor:"pointer",fontFamily:"inherit",padding:"8px 0 0" }}>Cancel</button>
+                </div>
+              )}
             </Card>
           );
         })}
