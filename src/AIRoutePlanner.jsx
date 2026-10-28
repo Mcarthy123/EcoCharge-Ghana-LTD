@@ -21,7 +21,8 @@
 // - GoogleMapsService uses OSRM + Nominatim (no Google Maps key configured).
 // - All "AI recommendations" are rule-based off real numbers, not an LLM call.
 // ============================================================
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 
 // ── SHARED CONSTANTS ─────────────────────────────────────────
 const CONSUMPTION_DEFAULTS = {
@@ -164,18 +165,23 @@ const ChargingStationService = {
   },
 
   async chargerInfo(stationId, SUPABASE_URL, SUPABASE_ANON, getToken) {
-    if (!SUPABASE_URL) return { powerKw: DEFAULT_CHARGER_KW, pricePerKwh: 0.85 };
+    const fallback = { powerKw: DEFAULT_CHARGER_KW, pricePerKwh: 0.85, powerIsDefault: true, priceIsDefault: true };
+    if (!SUPABASE_URL) return fallback;
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/chargers?station_id=eq.${stationId}&select=power_kw,max_power_kw,price_per_kwh,rate_per_kwh&limit=1`, {
         headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${getToken()}` },
       });
       const data = await res.json();
       const c = data?.[0];
+      const kw = c?.power_kw || c?.max_power_kw;
+      const price = c?.price_per_kwh || c?.rate_per_kwh;
       return {
-        powerKw: c?.power_kw || c?.max_power_kw || DEFAULT_CHARGER_KW,
-        pricePerKwh: c?.price_per_kwh || c?.rate_per_kwh || 0.85,
+        powerKw: kw || DEFAULT_CHARGER_KW,
+        pricePerKwh: price || 0.85,
+        powerIsDefault: !kw,     // true = placeholder, not a real figure
+        priceIsDefault: !price,
       };
-    } catch(e) { return { powerKw: DEFAULT_CHARGER_KW, pricePerKwh: 0.85 }; }
+    } catch(e) { return fallback; }
   },
 
   // present-tense only — no queue history exists to predict trends
@@ -611,68 +617,422 @@ const loadLeaflet = () => new Promise((resolve) => {
   const s=document.createElement("script"); s.src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"; s.onload=resolve; document.head.appendChild(s);
 });
 
-const escHtml = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const MAP_BLUE = "#2563eb";
+// Key-free OpenStreetMap tiles by default. To use a keyed provider later (MapTiler,
+// Stadia, etc.) set VITE_MAP_TILE_URL in Vercel, e.g. https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=...
+const MAP_TILE_URL = (import.meta.env && import.meta.env.VITE_MAP_TILE_URL) || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const MAP_TILE_FILTER = (import.meta.env && import.meta.env.VITE_MAP_TILE_URL) ? "none" : "grayscale(0.9) contrast(0.9) brightness(1.07)";
 
-// Clean light map: bold blue road-following route, round pins, and a tap-to-open
-// station card at the bottom. Station numbers shown are only ones we really have
-// (no invented kW / minutes).
-function RouteMap({ T, route, stops, currentPos, destination, origin }) {
+const carSvg = `<svg width="44" height="22" viewBox="0 0 44 22"><ellipse cx="22" cy="20" rx="18" ry="2" fill="rgba(0,0,0,0.25)"/><path d="M3 15c0-3 1-4 4-5l5-4c1-1 3-2 5-2h8c3 0 5 1 7 3l5 2c3 1 4 2 4 5v2c0 1-1 2-2 2H5c-1 0-2-1-2-2z" fill="#f8fafc" stroke="#94a3b8" stroke-width="1"/><path d="M14 9l4-3h6c2 0 3 1 5 3z" fill="#334155"/><circle cx="12" cy="18" r="3" fill="#1e293b"/><circle cx="32" cy="18" r="3" fill="#1e293b"/></svg>`;
+const boltSvg = (fill) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="${fill}"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>`;
+const fmtGHS = (n) => `GH₵${Number(n).toFixed(2)}`;
+const timeAgo = (iso) => {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 3600) return `${Math.max(1, Math.round(s/60))} min ago`;
+  if (s < 86400) return `${Math.round(s/3600)} h ago`;
+  if (s < 86400*30) return `${Math.round(s/86400)} days ago`;
+  return new Date(iso).toLocaleDateString("en-GH", { day:"numeric", month:"short", year:"numeric" });
+};
+
+// ── STATION INFO (ratings, reviews, amenities, connectors) ──────
+// All real data from Supabase. If the tables don't exist yet the UI says so
+// instead of showing made-up numbers. SQL: station_reviews_amenities.sql
+const AMENITY_LABELS = {
+  wifi:"Free Wi-Fi", cafe:"Café", shop:"Shop", restroom:"Restroom", security:"24/7 Security",
+  parking:"Parking", solar:"Solar powered", lounge:"Waiting lounge", food:"Food",
+};
+const StationInfoService = {
+  headers(ctx) { return { apikey: ctx.SUPABASE_ANON, Authorization: `Bearer ${ctx.getToken()}` }; },
+  async _get(ctx, path) {
+    try {
+      const r = await fetch(`${ctx.SUPABASE_URL}/rest/v1/${path}`, { headers: this.headers(ctx) });
+      return r.ok ? await r.json() : null;
+    } catch(e) { return null; }
+  },
+  async summaries(ids, ctx) {
+    if (!ctx?.SUPABASE_URL || !ids?.length) return {};
+    const list = ids.map(i => `"${String(i).replace(/"/g, "")}"`).join(",");
+    const rows = await this._get(ctx, `station_rating_summary?station_id=in.(${encodeURIComponent(list)})`);
+    const out = {};
+    (Array.isArray(rows) ? rows : []).forEach(r => { out[String(r.station_id)] = r; });
+    return out;
+  },
+  async detail(stationId, ctx) {
+    const sid = encodeURIComponent(stationId);
+    const [reviews, amenities, chargers, summary] = await Promise.all([
+      this._get(ctx, `station_reviews?station_id=eq.${sid}&order=created_at.desc&limit=20&select=id,user_id,rating,comment,author_name,created_at`),
+      this._get(ctx, `station_amenities?station_id=eq.${sid}&select=amenity`),
+      this._get(ctx, `chargers?station_id=eq.${sid}&select=*`),
+      this._get(ctx, `station_rating_summary?station_id=eq.${sid}`),
+    ]);
+    return {
+      reviewsAvailable: Array.isArray(reviews),   // false = reviews table not set up yet
+      reviews: Array.isArray(reviews) ? reviews : [],
+      amenities: Array.isArray(amenities) ? amenities.map(a => a.amenity) : [],
+      chargers: Array.isArray(chargers) ? chargers : [],
+      summary: Array.isArray(summary) && summary[0] ? summary[0] : null,
+    };
+  },
+  async submitReview(stationId, userId, rating, comment, authorName, ctx) {
+    try {
+      const res = await fetch(`${ctx.SUPABASE_URL}/rest/v1/station_reviews?on_conflict=station_id,user_id`, {
+        method: "POST",
+        headers: { ...this.headers(ctx), "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ station_id: String(stationId), user_id: userId, rating, comment: (comment || "").trim() || null, author_name: authorName || null, updated_at: new Date().toISOString() }),
+      });
+      return { ok: res.ok };
+    } catch(e) { return { ok: false }; }
+  },
+  async deleteReview(id, ctx) {
+    try {
+      const res = await fetch(`${ctx.SUPABASE_URL}/rest/v1/station_reviews?id=eq.${id}`, { method: "DELETE", headers: this.headers(ctx) });
+      return res.ok;
+    } catch(e) { return false; }
+  },
+};
+
+// Real connector rows from the chargers table. Column names vary, so read what exists.
+const connectorRows = (chargers, station) => {
+  const rows = (chargers || []).map((c, i) => {
+    const type = c.connector_type || c.connector || c.plug_type || c.socket_type || null;
+    const kw = c.power_kw || c.max_power_kw || null;
+    const raw = String(c.status || "").toLowerCase();
+    let state = null;
+    if (/avail|idle|free/.test(raw)) state = "Available";
+    else if (/charg|busy|occup|prepar|reserv/.test(raw)) state = "Busy";
+    else if (/fault|unavail|offline|out/.test(raw)) state = "Unavailable";
+    else if (raw) state = c.status;
+    return { key: c.id ?? i, type: type || "Connector type not listed", kw, state };
+  });
+  if (rows.length) return rows;
+  return [];
+};
+const stateColor = (st) => st === "Available" ? "#16a34a" : st === "Busy" ? "#dc2626" : "#64748b";
+
+const Stars = ({ value, size = 13 }) => (
+  <span style={{ color:"#f59e0b", fontSize:size, letterSpacing:1 }}>
+    {[1,2,3,4,5].map(n => <span key={n} style={{ opacity: n <= Math.round(value) ? 1 : 0.25 }}>★</span>)}
+  </span>
+);
+
+function StationDetailSheet({ stop, onClose, data }) {
+  const [info, setInfo] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [myRating, setMyRating] = useState(0);
+  const [myComment, setMyComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const stopId = stop?.id;
+
+  const load = async () => {
+    if (!stopId || !data?.SUPABASE_URL) { setInfo(null); return; }
+    setLoading(true);
+    const d = await StationInfoService.detail(stopId, data);
+    setInfo(d);
+    const mine = d.reviews.find(r => r.user_id === data.user?.id);
+    if (mine) { setMyRating(mine.rating); setMyComment(mine.comment || ""); }
+    else { setMyRating(0); setMyComment(""); }
+    setLoading(false);
+  };
+  useEffect(() => { setMsg(""); load(); }, [stopId]);
+
+  if (!stop) return null;
+  const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}`;
+  const hasBays = Number.isFinite(stop.open) && Number.isFinite(stop.bays) && stop.bays > 0;
+  const connectors = connectorRows(info?.chargers, stop);
+  const sum = info?.summary;
+  const total = sum ? Number(sum.review_count) : 0;
+  const bars = sum ? [5,4,3,2,1].map(n => ({ n, c: Number(sum[["","one","two","three","four","five"][n]] || 0) })) : [];
+  const tripRows = [
+    Number.isFinite(stop.arrivalBatteryPct) && { l:"Battery on arrival", v:`${stop.arrivalBatteryPct}%`, est:true },
+    Number.isFinite(stop.chargeToPct) && { l:"Charge to", v:`${stop.chargeToPct}%` },
+    Number.isFinite(stop.chargeMinutes) && { l:"Charging time", v:`~${stop.chargeMinutes} min`, est:true },
+    Number.isFinite(stop.cost) && { l:"Estimated cost", v:fmtGHS(stop.cost), est:true },
+  ].filter(Boolean);
+
+  const submit = async () => {
+    if (!myRating) { setMsg("Tap a star to rate."); return; }
+    setBusy(true); setMsg("");
+    const first = String(data.user?.name || data.user?.full_name || data.user?.email?.split("@")[0] || "EcoCharge driver").split(" ")[0];
+    const r = await StationInfoService.submitReview(stop.id, data.user.id, myRating, myComment, first, data);
+    setBusy(false);
+    if (r.ok) { setMsg("Thanks — your review is saved."); load(); }
+    else setMsg("Couldn't save your review. Try again.");
+  };
+  const removeMine = async () => {
+    const mine = info?.reviews.find(r => r.user_id === data.user?.id);
+    if (!mine) return;
+    setBusy(true);
+    const ok = await StationInfoService.deleteReview(mine.id, data);
+    setBusy(false);
+    if (ok) { setMsg("Review removed."); setMyRating(0); setMyComment(""); load(); }
+  };
+
+  const section = { fontWeight:800, fontSize:15, margin:"20px 0 10px" };
+  return createPortal(
+    <div onClick={onClose} style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:5000,display:"flex",alignItems:"flex-end",justifyContent:"center" }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:"#fff",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:480,height:"90%",display:"flex",flexDirection:"column",color:"#0f172a",fontFamily:"inherit" }}>
+        <div style={{ display:"flex",alignItems:"center",gap:10,padding:"14px 16px 8px" }}>
+          <button onClick={onClose} aria-label="Back" style={{ background:"#f1f5f9",border:"none",borderRadius:20,padding:"7px 14px",fontSize:13,fontWeight:700,color:"#0f172a",cursor:"pointer" }}>← Details</button>
+        </div>
+        <div style={{ flex:1,overflowY:"auto",padding:"0 18px 12px" }}>
+          <div style={{ fontWeight:800,fontSize:20 }}>{stop.name}</div>
+          <div style={{ display:"flex",flexWrap:"wrap",gap:8,marginTop:10 }}>
+            {[
+              Number.isFinite(stop.alongKm) ? `${stop.alongKm.toFixed(1)} km along route` : Number.isFinite(stop.distanceKm) ? `${stop.distanceKm.toFixed(1)} km away` : null,
+              Number.isFinite(stop.driveMinToReach) ? `${stop.driveMinToReach} min drive` : null,
+              hasBays ? `${stop.open}/${stop.bays} plugs free` : null,
+              sum && total ? `★ ${Number(sum.avg_rating).toFixed(1)} (${total})` : null,
+            ].filter(Boolean).map(t => <span key={t} style={{ background:"#f1f5f9",borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:600 }}>{t}</span>)}
+          </div>
+
+          {tripRows.length > 0 && (<>
+            <div style={section}>Your trip here</div>
+            <div style={{ background:"#f8fafc",borderRadius:14,padding:"4px 14px" }}>
+              {tripRows.map((r,i)=>(
+                <div key={r.l} style={{ display:"flex",justifyContent:"space-between",padding:"10px 0",borderBottom:i<tripRows.length-1?"1px solid #e2e8f0":"none",fontSize:13 }}>
+                  <span style={{ color:"#64748b" }}>{r.l}</span>
+                  <span style={{ fontWeight:700 }}>{r.v}{r.est ? <span style={{ fontWeight:500,color:"#94a3b8" }}> (est.)</span> : null}</span>
+                </div>
+              ))}
+            </div>
+          </>)}
+
+          <div style={section}>Connectors</div>
+          {loading && <div style={{ fontSize:12,color:"#94a3b8" }}>Loading…</div>}
+          {!loading && connectors.length === 0 && (
+            <div style={{ background:"#f8fafc",borderRadius:14,padding:"12px 14px",fontSize:12,color:"#64748b",lineHeight:1.6 }}>
+              Connector details aren't listed for this station yet.{Number.isFinite(stop.powerKw) && !stop.powerIsDefault ? ` Rated power: ${stop.powerKw} kW.` : ""}
+            </div>
+          )}
+          {connectors.map(c => (
+            <div key={c.key} style={{ background:"#f8fafc",borderRadius:14,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12 }}>
+              <div style={{ width:36,height:36,borderRadius:10,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center" }}>{/* bolt */}<span dangerouslySetInnerHTML={{ __html: boltSvg(MAP_BLUE) }}/></div>
+              <div style={{ flex:1,minWidth:0 }}>
+                <div style={{ fontWeight:700,fontSize:14 }}>{c.type}</div>
+                <div style={{ fontSize:11,color:"#64748b",marginTop:2 }}>{c.kw ? `${c.kw} kW` : "Power not listed"}</div>
+              </div>
+              {c.state && <span style={{ fontSize:11,fontWeight:700,color:stateColor(c.state) }}>● {c.state}</span>}
+            </div>
+          ))}
+
+          <div style={section}>Amenities</div>
+          {info && info.amenities.length > 0 ? (
+            <div style={{ display:"flex",flexWrap:"wrap",gap:8 }}>
+              {info.amenities.map(a => <span key={a} style={{ background:"#f1f5f9",borderRadius:20,padding:"7px 14px",fontSize:12,fontWeight:600 }}>{AMENITY_LABELS[a] || a}</span>)}
+            </div>
+          ) : (
+            <div style={{ fontSize:12,color:"#94a3b8" }}>{loading ? "Loading…" : "No amenities listed for this station yet."}</div>
+          )}
+
+          <div style={section}>Reviews</div>
+          {info && !info.reviewsAvailable ? (
+            <div style={{ background:"#f8fafc",borderRadius:14,padding:"12px 14px",fontSize:12,color:"#64748b" }}>Reviews aren't available yet.</div>
+          ) : (<>
+            {sum && total > 0 ? (
+              <div style={{ background:"#f8fafc",borderRadius:16,padding:16,display:"flex",gap:18,alignItems:"center",marginBottom:12 }}>
+                <div style={{ textAlign:"center" }}>
+                  <div style={{ fontWeight:800,fontSize:34,lineHeight:1 }}>{Number(sum.avg_rating).toFixed(1)}</div>
+                  <Stars value={Number(sum.avg_rating)} size={12}/>
+                  <div style={{ fontSize:11,color:"#64748b",marginTop:4 }}>{total} review{total===1?"":"s"}</div>
+                </div>
+                <div style={{ flex:1 }}>
+                  {bars.map(b => (
+                    <div key={b.n} style={{ display:"flex",alignItems:"center",gap:8,marginBottom:4 }}>
+                      <span style={{ fontSize:10,color:"#64748b",width:8 }}>{b.n}</span>
+                      <div style={{ flex:1,height:5,borderRadius:3,background:"#e2e8f0" }}><div style={{ width:`${total ? (b.c/total)*100 : 0}%`,height:"100%",borderRadius:3,background:"#0f172a" }}/></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (!loading && <div style={{ fontSize:12,color:"#94a3b8",marginBottom:12 }}>No reviews yet. Be the first to review this station.</div>)}
+
+            {(info?.reviews || []).map(r => (
+              <div key={r.id} style={{ background:"#f8fafc",borderRadius:16,padding:"12px 14px",marginBottom:8 }}>
+                <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                  <div style={{ width:32,height:32,borderRadius:"50%",background:`${MAP_BLUE}1a`,color:MAP_BLUE,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:12 }}>{(r.author_name || "E").slice(0,1).toUpperCase()}</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:700,fontSize:13 }}>{r.author_name || "EcoCharge driver"}</div>
+                    <div style={{ fontSize:10,color:"#94a3b8" }}>{timeAgo(r.created_at)}</div>
+                  </div>
+                  <Stars value={r.rating} size={12}/>
+                </div>
+                {r.comment && <div style={{ fontSize:12,color:"#334155",lineHeight:1.6,marginTop:8 }}>{r.comment}</div>}
+              </div>
+            ))}
+
+            <div style={{ fontWeight:700,fontSize:13,margin:"14px 0 8px" }}>{info?.reviews.some(r=>r.user_id===data?.user?.id) ? "Your review" : "Rate this station"}</div>
+            {data?.user?.id ? (
+              <div style={{ background:"#f8fafc",borderRadius:16,padding:14 }}>
+                <div style={{ display:"flex",gap:6,marginBottom:10 }}>
+                  {[1,2,3,4,5].map(n => (
+                    <button key={n} onClick={()=>setMyRating(n)} aria-label={`${n} star`}
+                      style={{ background:"none",border:"none",fontSize:28,cursor:"pointer",padding:0,color:n<=myRating?"#f59e0b":"#cbd5e1" }}>★</button>
+                  ))}
+                </div>
+                <textarea value={myComment} onChange={e=>setMyComment(e.target.value)} maxLength={500} rows={3} placeholder="Share how charging went (optional)"
+                  style={{ width:"100%",boxSizing:"border-box",border:"1px solid #e2e8f0",borderRadius:12,padding:10,fontSize:13,fontFamily:"inherit",resize:"none",background:"#fff",color:"#0f172a" }}/>
+                <div style={{ display:"flex",gap:8,marginTop:10,alignItems:"center" }}>
+                  <button onClick={submit} disabled={busy} style={{ background:MAP_BLUE,color:"#fff",border:"none",borderRadius:20,padding:"10px 20px",fontWeight:800,fontSize:13,cursor:"pointer",opacity:busy?0.7:1 }}>{busy?"Saving…":"Submit"}</button>
+                  {info?.reviews.some(r=>r.user_id===data.user.id) && <button onClick={removeMine} disabled={busy} style={{ background:"none",border:"none",color:"#dc2626",fontSize:12,fontWeight:700,cursor:"pointer" }}>Delete</button>}
+                  {msg && <span style={{ fontSize:11,color:"#64748b" }}>{msg}</span>}
+                </div>
+              </div>
+            ) : <div style={{ fontSize:12,color:"#94a3b8" }}>Sign in to leave a review.</div>}
+          </>)}
+        </div>
+
+        <div style={{ borderTop:"1px solid #e2e8f0",padding:"12px 18px calc(14px + env(safe-area-inset-bottom,0px))",display:"flex",alignItems:"center",gap:12 }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontWeight:800,fontSize:20 }}>{Number.isFinite(stop.pricePerKwh) ? fmtGHS(stop.pricePerKwh) : "Price not listed"}{Number.isFinite(stop.pricePerKwh) && <span style={{ fontSize:12,fontWeight:500,color:"#64748b" }}> /kWh{stop.priceIsDefault ? " (est.)" : ""}</span>}</div>
+            {Number.isFinite(stop.cost) && <div style={{ fontSize:11,color:"#64748b" }}>≈ {fmtGHS(stop.cost)} for this charge (est.)</div>}
+          </div>
+          <a href={navUrl} target="_blank" rel="noopener noreferrer"
+            style={{ display:"flex",alignItems:"center",gap:8,background:MAP_BLUE,color:"#fff",borderRadius:30,padding:"13px 24px",fontWeight:800,fontSize:14,textDecoration:"none" }}>
+            Directions <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M3 11 21 3l-8 18-2-8z"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// Clean light map like the reference: bold blue road-following route, a car at the start,
+// bolt pins for stations, and a swipeable station-card carousel (tap a card for details).
+// Used for trip stops (route given) and for "nearest stations" (onSelectStop loads the route).
+function RouteMap({ T, route, stops, currentPos, destination, origin, data, title, onSelectStop }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
-  const [selected, setSelected] = useState(null);
+  const routeLayer = useRef(null);
+  const stopLayer = useRef(null);
+  const markersRef = useRef({});
+  const carouselRef = useRef(null);
+  const scrollTimer = useRef(null);
+  const lastRouteKey = useRef("");
+  const [ready, setReady] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [ratings, setRatings] = useState({});
+  const stopsKey = (stops || []).map(s => `${s.id}:${s.pricePerKwh}:${s.open}`).join("|");
 
+  const pinHtml = (st, active) => {
+    const lab = Number.isFinite(st.alongKm) ? st.alongKm : st.distanceKm;
+    const km = Number.isFinite(lab) ? `<div style="position:absolute;left:50%;top:-22px;transform:translateX(-50%);background:#0f172a;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap;font-family:inherit;">${lab < 10 ? lab.toFixed(1) : Math.round(lab)} km</div>` : "";
+    return `<div style="position:relative;width:34px;height:34px;">${km}<div style="width:34px;height:34px;border-radius:12px;background:${active?MAP_BLUE:"#fff"};border:2px solid ${MAP_BLUE};box-shadow:0 4px 12px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">${boltSvg(active?"#fff":MAP_BLUE)}</div></div>`;
+  };
+
+  // 1) create the map once
   useEffect(()=>{
     ensureAIStyles();
     let cancelled = false;
     loadLeaflet().then(()=>{
       if (cancelled || !mapRef.current || mapInst.current) return;
       const L = window.L;
-      const map = L.map(mapRef.current, { attributionControl:false, zoomControl:false });
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{ maxZoom:19 }).addTo(map);
+      const map = L.map(mapRef.current, { attributionControl:false, zoomControl:false, zoomSnap:0.25 });
+      const tiles = L.tileLayer(MAP_TILE_URL, { maxZoom:19 }).addTo(map);
+      if (tiles.getContainer && tiles.getContainer()) tiles.getContainer().style.filter = MAP_TILE_FILTER;
       L.control.zoom({ position:"topright" }).addTo(map);
-      L.control.attribution({ position:"bottomleft", prefix:false }).addAttribution("© OpenStreetMap · © CARTO").addTo(map);
+      L.control.attribution({ position:"bottomleft", prefix:false }).addAttribution("© OpenStreetMap contributors").addTo(map);
+      routeLayer.current = L.layerGroup().addTo(map);
+      stopLayer.current = L.layerGroup().addTo(map);
+      map.setView([5.6, -0.19], 11);
       mapInst.current = map;
-      map.on("click", ()=>setSelected(null));
-
-      if (route?.coords?.length) {
-        // white casing under a bold blue line so it reads clearly on any street colour
-        L.polyline(route.coords, { color:"#ffffff", weight:10, opacity:1, lineCap:"round", lineJoin:"round" }).addTo(map);
-        L.polyline(route.coords, { color:MAP_BLUE, weight:5, opacity:1, lineCap:"round", lineJoin:"round" }).addTo(map);
-        map.fitBounds(L.latLngBounds(route.coords), { padding:[40,40] });
-      }
-
-      if (origin) {
-        const oIcon = L.divIcon({ html:`<div style="width:18px;height:18px;border-radius:50%;background:#fff;border:4px solid ${MAP_BLUE};box-shadow:0 2px 8px rgba(0,0,0,0.35);"></div>`, className:"", iconSize:[18,18], iconAnchor:[9,9] });
-        L.marker([origin.lat,origin.lng],{ icon:oIcon, interactive:false }).addTo(map);
-      }
-
-      // Charging stops: white rounded pin with a blue bolt, plus a small "km along route" chip
-      stops?.forEach((st)=>{
-        const km = Number.isFinite(st.alongKm) ? `<div style="position:absolute;left:50%;top:-22px;transform:translateX(-50%);background:#0f172a;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap;font-family:inherit;">${Math.round(st.alongKm)} km</div>` : "";
-        const pin = L.divIcon({
-          html:`<div style="position:relative;width:34px;height:34px;">${km}
-                  <div style="width:34px;height:34px;border-radius:12px;background:#fff;border:2px solid ${MAP_BLUE};box-shadow:0 4px 12px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="${MAP_BLUE}"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
-                  </div></div>`,
-          className:"", iconSize:[34,34], iconAnchor:[17,17],
-        });
-        L.marker([st.lat,st.lng],{ icon:pin, zIndexOffset:500 })
-          .on("click", (e)=>{ if (e.originalEvent) L.DomEvent.stopPropagation(e); setSelected(st); })
-          .addTo(map);
-      });
-
-      if (destination) {
-        const dIcon = L.divIcon({ html:`<div style="width:28px;height:28px;border-radius:50%;background:${T.red};border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#fff;"></div></div>`, className:"", iconSize:[28,28], iconAnchor:[14,14] });
-        L.marker([destination.lat,destination.lng],{ icon:dIcon, zIndexOffset:600, interactive:false }).addTo(map);
-      }
+      setReady(true);
     });
-    return ()=>{ cancelled = true; if (mapInst.current) { mapInst.current.remove(); mapInst.current=null; } };
-  }, [route]);
+    return ()=>{ cancelled = true; if (mapInst.current) { mapInst.current.remove(); mapInst.current = null; } };
+  }, []);
 
+  // 2) route line, start car, destination dot
+  useEffect(()=>{
+    if (!ready) return;
+    const L = window.L, map = mapInst.current;
+    routeLayer.current.clearLayers();
+    if (route?.coords?.length) {
+      L.polyline(route.coords, { color:"#ffffff", weight:10, opacity:1, lineCap:"round", lineJoin:"round" }).addTo(routeLayer.current);
+      L.polyline(route.coords, { color:MAP_BLUE, weight:5, opacity:1, lineCap:"round", lineJoin:"round" }).addTo(routeLayer.current);
+      const key = `${route.coords.length}:${route.coords[0]}:${route.coords[route.coords.length-1]}`;
+      if (key !== lastRouteKey.current) {
+        lastRouteKey.current = key;
+        map.invalidateSize();
+        map.fitBounds(L.latLngBounds(route.coords), { paddingTopLeft:[40,50], paddingBottomRight:[40, stops?.length ? 150 : 40] });
+      }
+    }
+    const start = origin || (route?.coords?.length ? null : null);
+    if (start) L.marker([start.lat,start.lng],{ icon:L.divIcon({ html:carSvg, className:"", iconSize:[44,22], iconAnchor:[22,11] }), interactive:false, zIndexOffset:300 }).addTo(routeLayer.current);
+    if (destination) {
+      const dIcon = L.divIcon({ html:`<div style="width:28px;height:28px;border-radius:50%;background:${T.red};border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#fff;"></div></div>`, className:"", iconSize:[28,28], iconAnchor:[14,14] });
+      L.marker([destination.lat,destination.lng],{ icon:dIcon, zIndexOffset:600, interactive:false }).addTo(routeLayer.current);
+    }
+  }, [ready, route, origin?.lat, origin?.lng, destination?.lat, destination?.lng]);
+
+  // 3) station pins
+  useEffect(()=>{
+    if (!ready) return;
+    const L = window.L;
+    stopLayer.current.clearLayers();
+    markersRef.current = {};
+    (stops || []).forEach(st => {
+      const m = L.marker([st.lat, st.lng], { icon:L.divIcon({ html:pinHtml(st, false), className:"", iconSize:[34,34], iconAnchor:[17,17] }), zIndexOffset:500 })
+        .on("click", ()=>{ chooseStop(st.id, true); })
+        .addTo(stopLayer.current);
+      markersRef.current[st.id] = m;
+    });
+    if (stops?.length && !stops.some(s => s.id === selectedId)) chooseStop(stops[0].id, false);
+    updatePins(selectedId && stops?.some(s=>s.id===selectedId) ? selectedId : stops?.[0]?.id);
+  }, [ready, stopsKey]);
+
+  const updatePins = (activeId) => {
+    if (!window.L) return;
+    (stops || []).forEach(st => {
+      const m = markersRef.current[st.id];
+      if (m) m.setIcon(window.L.divIcon({ html:pinHtml(st, st.id===activeId), className:"", iconSize:[34,34], iconAnchor:[17,17] }));
+    });
+  };
+
+  const chooseStop = (id, scroll) => {
+    setSelectedId(id);
+    updatePins(id);
+    const st = (stops || []).find(s => s.id === id);
+    if (st && onSelectStop) onSelectStop(st);
+    if (scroll) {
+      const el = carouselRef.current?.querySelector(`[data-stop="${id}"]`);
+      if (el) el.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" });
+    }
+  };
+
+  // 4) station ratings for the cards
+  useEffect(()=>{
+    if (!data?.SUPABASE_URL || !stops?.length) return;
+    let off = false;
+    StationInfoService.summaries(stops.map(s => s.id), data).then(r => { if (!off) setRatings(r); });
+    return ()=>{ off = true; };
+  }, [stopsKey]);
+
+  // swipe the carousel → select the centred card
+  const onCarouselScroll = () => {
+    clearTimeout(scrollTimer.current);
+    scrollTimer.current = setTimeout(()=>{
+      const box = carouselRef.current; if (!box) return;
+      const mid = box.getBoundingClientRect().left + box.clientWidth/2;
+      let best=null, bestD=Infinity;
+      box.querySelectorAll("[data-stop]").forEach(el=>{
+        const r = el.getBoundingClientRect();
+        const d = Math.abs(r.left + r.width/2 - mid);
+        if (d < bestD) { bestD=d; best=el.getAttribute("data-stop"); }
+      });
+      const st = (stops||[]).find(x=>String(x.id)===best);
+      if (st && st.id !== selectedId) {
+        chooseStop(st.id, false);
+        if (mapInst.current && !route) mapInst.current.panTo([st.lat, st.lng], { animate:true });
+      }
+    }, 120);
+  };
+
+  // live position (trip in progress)
   const posMarker = useRef(null);
   useEffect(()=>{
-    if (!mapInst.current || !currentPos || !window.L) return;
+    if (!ready || !currentPos) return;
     const L = window.L;
     if (posMarker.current) posMarker.current.setLatLng([currentPos.lat,currentPos.lng]);
     else {
@@ -680,33 +1040,45 @@ function RouteMap({ T, route, stops, currentPos, destination, origin }) {
       posMarker.current = L.marker([currentPos.lat,currentPos.lng],{ icon, zIndexOffset:700 }).addTo(mapInst.current);
       mapInst.current.panTo([currentPos.lat,currentPos.lng]);
     }
-  }, [currentPos]);
-
-  const hasBays = selected && Number.isFinite(selected.open) && Number.isFinite(selected.bays) && selected.bays > 0;
-  const navUrl = selected ? `https://www.google.com/maps/dir/?api=1&destination=${selected.lat},${selected.lng}` : "#";
+  }, [ready, currentPos]);
 
   return (
     <div style={{ position:"relative",width:"100%",height:"100%" }}>
       <div ref={mapRef} style={{ width:"100%",height:"100%" }}/>
-      {selected && (
-        <div style={{ position:"absolute",left:10,right:10,bottom:10,zIndex:1000,background:"#fff",borderRadius:18,padding:"12px 12px 12px 14px",boxShadow:"0 10px 28px rgba(0,0,0,0.28)",display:"flex",alignItems:"center",gap:12 }}>
-          <div style={{ width:40,height:40,borderRadius:12,background:`${MAP_BLUE}14`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill={MAP_BLUE}><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
-          </div>
-          <div style={{ flex:1,minWidth:0 }}>
-            <div style={{ fontWeight:800,fontSize:14,color:"#0f172a",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{selected.name}</div>
-            <div style={{ fontSize:11,color:"#64748b",marginTop:3,lineHeight:1.5 }}>
-              {Number.isFinite(selected.powerKw) ? `${selected.powerKw} kW` : "Power not listed"}
-              {hasBays ? ` · ${selected.open}/${selected.bays} bays free` : ""}
-              {Number.isFinite(selected.chargeMinutes) ? ` · ~${selected.chargeMinutes} min charge (est.)` : ""}
-            </div>
-          </div>
-          <a href={navUrl} target="_blank" rel="noopener noreferrer" aria-label="Navigate"
-            style={{ width:42,height:42,borderRadius:"50%",background:MAP_BLUE,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,textDecoration:"none" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M3 11 21 3l-8 18-2-8z"/></svg>
-          </a>
+      {title && <div style={{ position:"absolute",top:10,left:10,zIndex:1000,background:"#fff",borderRadius:20,padding:"8px 14px",fontSize:12,fontWeight:700,color:"#0f172a",boxShadow:"0 4px 14px rgba(0,0,0,0.2)" }}>{title}</div>}
+      {stops?.length > 0 && (
+        <div ref={carouselRef} onScroll={onCarouselScroll}
+          style={{ position:"absolute",left:0,right:0,bottom:10,zIndex:1000,display:"flex",gap:10,overflowX:"auto",scrollSnapType:"x mandatory",padding:"0 10px",scrollbarWidth:"none" }}>
+          {stops.map((st, idx)=>{
+            const hasBays = Number.isFinite(st.open) && Number.isFinite(st.bays) && st.bays > 0;
+            const rt = ratings[String(st.id)];
+            const rc = rt ? Number(rt.review_count) : 0;
+            return (
+              <div key={st.id} data-stop={st.id} onClick={()=>{ chooseStop(st.id, false); setDetail(st); }}
+                style={{ flex:"0 0 86%",scrollSnapAlign:"center",background:"#fff",borderRadius:18,padding:"12px 12px 12px 14px",boxShadow:"0 10px 28px rgba(0,0,0,0.28)",display:"flex",alignItems:"center",gap:12,cursor:"pointer",border:st.id===selectedId?`2px solid ${MAP_BLUE}`:"2px solid transparent",boxSizing:"border-box" }}>
+                <div style={{ width:40,height:40,borderRadius:12,background:`${MAP_BLUE}14`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontWeight:800,color:MAP_BLUE,fontSize:15 }}>{idx+1}</div>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ fontWeight:800,fontSize:14,color:"#0f172a",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{st.name}</div>
+                  <div style={{ fontSize:11,color:"#475569",marginTop:3,lineHeight:1.5 }}>
+                    {Number.isFinite(st.pricePerKwh) && <span style={{ color:MAP_BLUE,fontWeight:700 }}>{fmtGHS(st.pricePerKwh)}/kWh{st.priceIsDefault?" (est.)":""}</span>}
+                    {hasBays ? `${Number.isFinite(st.pricePerKwh) ? " · " : ""}${st.open}/${st.bays} plugs` : ""}
+                  </div>
+                  <div style={{ fontSize:11,color:"#64748b",marginTop:1 }}>
+                    {rc > 0 ? <><span style={{ color:"#f59e0b" }}>★</span> {Number(rt.avg_rating).toFixed(1)} ({rc}) · </> : null}
+                    {Number.isFinite(st.driveMinToReach) ? `${st.driveMinToReach} min drive` : Number.isFinite(st.distanceKm) ? `${st.distanceKm.toFixed(1)} km away` : ""}
+                    {Number.isFinite(st.arrivalBatteryPct) ? ` · arrive ${st.arrivalBatteryPct}% (est.)` : ""}
+                  </div>
+                </div>
+                <a href={`https://www.google.com/maps/dir/?api=1&destination=${st.lat},${st.lng}`} target="_blank" rel="noopener noreferrer" aria-label="Navigate" onClick={e=>e.stopPropagation()}
+                  style={{ width:42,height:42,borderRadius:"50%",background:MAP_BLUE,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,textDecoration:"none" }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M3 11 21 3l-8 18-2-8z"/></svg>
+                </a>
+              </div>
+            );
+          })}
         </div>
       )}
+      <StationDetailSheet stop={detail} onClose={()=>setDetail(null)} data={data}/>
     </div>
   );
 }
@@ -778,6 +1150,17 @@ function DriverAssistantHub({ go, user, stations, T, getToken, SUPABASE_URL, SUP
   const [locError, setLocError] = useState("");
   const [nearby, setNearby] = useState([]);
   const [chargerInfoByStation, setChargerInfoByStation] = useState({});
+  const [nearRoute, setNearRoute] = useState(null);
+  const nearReq = useRef(0);
+  const nearStops = useMemo(()=> nearby.map(st => ({ ...st, ...(chargerInfoByStation[st.id] || {}) })), [nearby, chargerInfoByStation]);
+  const onSelectNearest = async (st) => {
+    if (!currentPos) return;
+    const id = ++nearReq.current;
+    try {
+      const r = await GoogleMapsService.getRoute(currentPos, { lat: st.lat, lng: st.lng });
+      if (id === nearReq.current) setNearRoute(r);
+    } catch(e) { if (id === nearReq.current) setNearRoute(null); }
+  };
   const [walletBal, setWalletBal] = useState(null);
   const [todayStats, setTodayStats] = useState({ sessions:0, kwh:0, costPesewas:0 });
  
@@ -798,7 +1181,7 @@ function DriverAssistantHub({ go, user, stations, T, getToken, SUPABASE_URL, SUP
     setNearby(near);
     (async ()=>{
       const infoMap = {};
-      for (const s of near.slice(0,3)) {
+      for (const s of near) {
         infoMap[s.id] = await ChargingStationService.chargerInfo(s.id, SUPABASE_URL, SUPABASE_ANON, getToken);
       }
       setChargerInfoByStation(infoMap);
@@ -955,6 +1338,12 @@ function DriverAssistantHub({ go, user, stations, T, getToken, SUPABASE_URL, SUP
             </div>
             {!currentPos && !locError && (
               <div style={{ textAlign:"center",padding:"14px 0",color:T.muted,fontSize:12 }}><Spinner color={T.green}/> Finding your location…</div>
+            )}
+            {nearStops.length > 0 && currentPos && (
+              <div style={{ height:340,borderRadius:18,overflow:"hidden",marginBottom:14,border:`1px solid ${T.border}` }}>
+                <RouteMap T={T} route={nearRoute} stops={nearStops} origin={currentPos} title="Nearest stations" onSelectStop={onSelectNearest}
+                  data={{ SUPABASE_URL, SUPABASE_ANON, getToken, user }}/>
+              </div>
             )}
             {nearby.map(s=>{
               const q = ChargingStationService.queueEstimate(s);
@@ -1280,7 +1669,7 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
               </GlassCard>
 
               <div style={{ height:320,borderRadius:18,overflow:"hidden",marginBottom:14,border:`1px solid ${T.border}` }}>
-                <RouteMap T={T} route={trip.route} stops={trip.stops} destination={toPlace} origin={fromPlace}/>
+                <RouteMap T={T} route={trip.route} stops={trip.stops} destination={toPlace} origin={fromPlace} data={{ SUPABASE_URL, SUPABASE_ANON, getToken, user }}/>
               </div>
 
               {/* Summary stats — matches the 4-metric row from the mockup */}
@@ -1505,7 +1894,7 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
         </div>
 
         <div style={{ height:340,flexShrink:0 }}>
-          <RouteMap T={T} route={trip.route} stops={trip.stops} currentPos={currentPos} destination={toPlace}/>
+          <RouteMap T={T} route={trip.route} stops={trip.stops} currentPos={currentPos} destination={toPlace} data={{ SUPABASE_URL, SUPABASE_ANON, getToken, user }}/>
         </div>
 
         <div style={{ flex:1,overflowY:"auto",padding:"16px 14px 100px" }}>
