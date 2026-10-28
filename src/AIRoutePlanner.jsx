@@ -611,9 +611,16 @@ const loadLeaflet = () => new Promise((resolve) => {
   const s=document.createElement("script"); s.src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"; s.onload=resolve; document.head.appendChild(s);
 });
 
+const escHtml = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const MAP_BLUE = "#2563eb";
+
+// Clean light map: bold blue road-following route, round pins, and a tap-to-open
+// station card at the bottom. Station numbers shown are only ones we really have
+// (no invented kW / minutes).
 function RouteMap({ T, route, stops, currentPos, destination, origin }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
+  const [selected, setSelected] = useState(null);
 
   useEffect(()=>{
     ensureAIStyles();
@@ -622,50 +629,42 @@ function RouteMap({ T, route, stops, currentPos, destination, origin }) {
       if (cancelled || !mapRef.current || mapInst.current) return;
       const L = window.L;
       const map = L.map(mapRef.current, { attributionControl:false, zoomControl:false });
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{ maxZoom:18 }).addTo(map);
-      L.control.zoom({ position:"bottomright" }).addTo(map);
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{ maxZoom:19 }).addTo(map);
+      L.control.zoom({ position:"topright" }).addTo(map);
+      L.control.attribution({ position:"bottomleft", prefix:false }).addAttribution("© OpenStreetMap · © CARTO").addTo(map);
       mapInst.current = map;
+      map.on("click", ()=>setSelected(null));
 
       if (route?.coords?.length) {
-        // glow underlay + animated dashed line on top, like a "live" route
-        L.polyline(route.coords, { color:T.green, weight:9, opacity:0.18 }).addTo(map);
-        L.polyline(route.coords, { color:T.green, weight:4, opacity:0.9 }).addTo(map);
-        const dashLine = L.polyline(route.coords, { color:"#eaffef", weight:2, opacity:0.9, dashArray:"1,11", className:"ai-dash-line" }).addTo(map);
-        if (dashLine._path) { dashLine._path.style.animation = "aiDash 1s linear infinite"; }
-        map.fitBounds(L.latLngBounds(route.coords), { padding:[30,30] });
+        // white casing under a bold blue line so it reads clearly on any street colour
+        L.polyline(route.coords, { color:"#ffffff", weight:10, opacity:1, lineCap:"round", lineJoin:"round" }).addTo(map);
+        L.polyline(route.coords, { color:MAP_BLUE, weight:5, opacity:1, lineCap:"round", lineJoin:"round" }).addTo(map);
+        map.fitBounds(L.latLngBounds(route.coords), { padding:[40,40] });
       }
 
-      // Origin marker
       if (origin) {
-        const oIcon = L.divIcon({ html:`<div style="width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid ${T.green};box-shadow:0 0 8px rgba(0,0,0,0.5);"></div>`, className:"", iconSize:[16,16] });
-        L.marker([origin.lat,origin.lng],{ icon:oIcon }).addTo(map);
+        const oIcon = L.divIcon({ html:`<div style="width:18px;height:18px;border-radius:50%;background:#fff;border:4px solid ${MAP_BLUE};box-shadow:0 2px 8px rgba(0,0,0,0.35);"></div>`, className:"", iconSize:[18,18], iconAnchor:[9,9] });
+        L.marker([origin.lat,origin.lng],{ icon:oIcon, interactive:false }).addTo(map);
       }
 
-      // Stop markers — permanent floating info card, like Image 1's bubbles
-      stops?.forEach((s,i)=>{
-        const bolt = L.divIcon({
-          html:`<div class="ai-pulse-wrap"><div class="ai-stop-pulse" style="position:absolute;inset:0;border-radius:50%;background:${T.yellow}66;"></div><div style="position:absolute;inset:0;margin:auto;width:26px;height:26px;border-radius:50%;background:${T.yellow};display:flex;align-items:center;justify-content:center;border:2px solid #000;font-size:12px;">⚡</div></div>`,
-          className:"", iconSize:[26,26], iconAnchor:[13,13],
+      // Charging stops: white rounded pin with a blue bolt, plus a small "km along route" chip
+      stops?.forEach((st)=>{
+        const km = Number.isFinite(st.alongKm) ? `<div style="position:absolute;left:50%;top:-22px;transform:translateX(-50%);background:#0f172a;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap;font-family:inherit;">${Math.round(st.alongKm)} km</div>` : "";
+        const pin = L.divIcon({
+          html:`<div style="position:relative;width:34px;height:34px;">${km}
+                  <div style="width:34px;height:34px;border-radius:12px;background:#fff;border:2px solid ${MAP_BLUE};box-shadow:0 4px 12px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="${MAP_BLUE}"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
+                  </div></div>`,
+          className:"", iconSize:[34,34], iconAnchor:[17,17],
         });
-        L.marker([s.lat,s.lng],{ icon:bolt, zIndexOffset:500 }).addTo(map);
-
-        const card = L.divIcon({
-          html:`<div style="background:rgba(10,14,20,0.92);border:1px solid ${T.green}55;border-radius:10px;padding:8px 12px;min-width:150px;box-shadow:0 6px 18px rgba(0,0,0,0.5);font-family:inherit;">
-                  <div style="color:#fff;font-weight:700;font-size:12px;margin-bottom:4px;">${s.name}</div>
-                  <div style="display:flex;align-items:center;gap:8px;">
-                    <span style="color:${T.green};font-size:11px;font-weight:700;">⚡ ${s.powerKw||60} kW</span>
-                    <span style="color:#9ca3af;font-size:11px;">${s.open}/${s.bays}</span>
-                  </div>
-                  <div style="color:#9ca3af;font-size:10px;margin-top:3px;">~${s.chargeMinutes||15} min charge</div>
-                </div>`,
-          className:"", iconSize:[0,0], iconAnchor:[-16,40],
-        });
-        L.marker([s.lat,s.lng],{ icon:card, interactive:false, zIndexOffset:400 }).addTo(map);
+        L.marker([st.lat,st.lng],{ icon:pin, zIndexOffset:500 })
+          .on("click", (e)=>{ if (e.originalEvent) L.DomEvent.stopPropagation(e); setSelected(st); })
+          .addTo(map);
       });
 
       if (destination) {
-        const dIcon = L.divIcon({ html:`<div style="width:26px;height:26px;border-radius:50%;background:${T.red};border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:12px;">🏁</div>`, className:"", iconSize:[26,26] });
-        L.marker([destination.lat,destination.lng],{ icon:dIcon,zIndexOffset:600 }).addTo(map);
+        const dIcon = L.divIcon({ html:`<div style="width:28px;height:28px;border-radius:50%;background:${T.red};border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#fff;"></div></div>`, className:"", iconSize:[28,28], iconAnchor:[14,14] });
+        L.marker([destination.lat,destination.lng],{ icon:dIcon, zIndexOffset:600, interactive:false }).addTo(map);
       }
     });
     return ()=>{ cancelled = true; if (mapInst.current) { mapInst.current.remove(); mapInst.current=null; } };
@@ -683,7 +682,33 @@ function RouteMap({ T, route, stops, currentPos, destination, origin }) {
     }
   }, [currentPos]);
 
-  return <div ref={mapRef} style={{ width:"100%",height:"100%" }}/>;
+  const hasBays = selected && Number.isFinite(selected.open) && Number.isFinite(selected.bays) && selected.bays > 0;
+  const navUrl = selected ? `https://www.google.com/maps/dir/?api=1&destination=${selected.lat},${selected.lng}` : "#";
+
+  return (
+    <div style={{ position:"relative",width:"100%",height:"100%" }}>
+      <div ref={mapRef} style={{ width:"100%",height:"100%" }}/>
+      {selected && (
+        <div style={{ position:"absolute",left:10,right:10,bottom:10,zIndex:1000,background:"#fff",borderRadius:18,padding:"12px 12px 12px 14px",boxShadow:"0 10px 28px rgba(0,0,0,0.28)",display:"flex",alignItems:"center",gap:12 }}>
+          <div style={{ width:40,height:40,borderRadius:12,background:`${MAP_BLUE}14`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill={MAP_BLUE}><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
+          </div>
+          <div style={{ flex:1,minWidth:0 }}>
+            <div style={{ fontWeight:800,fontSize:14,color:"#0f172a",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{selected.name}</div>
+            <div style={{ fontSize:11,color:"#64748b",marginTop:3,lineHeight:1.5 }}>
+              {Number.isFinite(selected.powerKw) ? `${selected.powerKw} kW` : "Power not listed"}
+              {hasBays ? ` · ${selected.open}/${selected.bays} bays free` : ""}
+              {Number.isFinite(selected.chargeMinutes) ? ` · ~${selected.chargeMinutes} min charge (est.)` : ""}
+            </div>
+          </div>
+          <a href={navUrl} target="_blank" rel="noopener noreferrer" aria-label="Navigate"
+            style={{ width:42,height:42,borderRadius:"50%",background:MAP_BLUE,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,textDecoration:"none" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M3 11 21 3l-8 18-2-8z"/></svg>
+          </a>
+        </div>
+      )}
+    </div>
+  );
 }
 // ── SEARCH INPUT (Nominatim autocomplete) ──────────────────────
 function PlaceSearchInput({ T, label, icon, value, onSelect, placeholder }) {
@@ -1254,7 +1279,7 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
                 </div>
               </GlassCard>
 
-              <div style={{ height:220,borderRadius:18,overflow:"hidden",marginBottom:14,border:`1px solid ${T.border}` }}>
+              <div style={{ height:320,borderRadius:18,overflow:"hidden",marginBottom:14,border:`1px solid ${T.border}` }}>
                 <RouteMap T={T} route={trip.route} stops={trip.stops} destination={toPlace} origin={fromPlace}/>
               </div>
 
@@ -1479,7 +1504,7 @@ function TripPlannerFlow({ go, onBack, user, stations, T, getToken, SUPABASE_URL
           <button onClick={endTrip} className="tap" style={{ background:"none",border:`1px solid ${T.red}`,borderRadius:10,padding:"7px 14px",fontSize:12,fontWeight:700,color:T.red,cursor:"pointer",fontFamily:"inherit" }}>End Trip</button>
         </div>
 
-        <div style={{ height:260,flexShrink:0 }}>
+        <div style={{ height:340,flexShrink:0 }}>
           <RouteMap T={T} route={trip.route} stops={trip.stops} currentPos={currentPos} destination={toPlace}/>
         </div>
 
