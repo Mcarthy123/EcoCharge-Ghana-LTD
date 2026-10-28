@@ -629,7 +629,7 @@ function RouteMap({ T, route, stops, currentPos, destination, origin }) {
       if (cancelled || !mapRef.current || mapInst.current) return;
       const L = window.L;
       const map = L.map(mapRef.current, { attributionControl:false, zoomControl:false });
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{ maxZoom:19 }).addTo(map);
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{ maxZoom:19 }).addTo(map);
       L.control.zoom({ position:"topright" }).addTo(map);
       L.control.attribution({ position:"bottomleft", prefix:false }).addAttribution("© OpenStreetMap · © CARTO").addTo(map);
       mapInst.current = map;
