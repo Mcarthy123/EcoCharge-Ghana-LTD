@@ -263,7 +263,7 @@ const BookingService = {
       vehicle: vehicle?.vehicle_type || vehicle?.type || "Fleet Vehicle",
       vehicleImageUrl: vehicle?.image_url || null,
       vehicle_id: vehicle?.id || null,
-      slot_time: arrivalTime.toISOString(), duration_min: durationMin, amount: estimatedCost,
+      slot_time: arrivalTime.toISOString(), duration_min: durationMin, amount: Math.round(estimatedCost),
       name: driverName || user?.name || "", phone: driverPhone || "", email: user?.email || "",
       user_id: user?.id || null, pay_method: "wallet", status: "confirmed",
       grace_expires_at: graceExpires.toISOString(), grace_period_min: graceMin,
